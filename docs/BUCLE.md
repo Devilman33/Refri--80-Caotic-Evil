@@ -138,6 +138,8 @@ en vez de como el dueño del token.
 - **Pedirle algo a Claude en un PR:** escribe `@claude ...` en la conversación del PR. Los
   comentarios en línea (de review) ya no lo invocan.
 - **Relanzar a mano:** *Actions → (workflow del bucle) → Run workflow → número del PR*.
+- **Modelo:** los tres workflows de Claude usan `--model claude-sonnet-5` en `claude_args`
+  (más barato para la suscripción). Cámbialo ahí si quieres otro.
 - **Ajustar el límite:** cambia `MAX_ITERACIONES` al inicio de cada workflow. En el Bucle B,
   `AL_LIMITE` decide si al llegar al límite se mergea (`mergear`) o se detiene (`detener`).
 - **Sacar un PR del bucle A:** quita la etiqueta `bucle` o cierra el PR.

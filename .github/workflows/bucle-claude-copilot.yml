@@ -258,6 +258,7 @@ jobs:
             5. Corre los tests afectados (hay un Postgres listo en DATABASE_URL).
             6. Haz commit con git add + git commit (mensaje en español). NO hagas push: lo hace el workflow.
           claude_args: |
+            --model claude-sonnet-5
             --max-turns 40
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api repos/${{ github.repository }}/pulls/*),Bash(git add:*),Bash(git commit:*),Bash(git diff:*),Bash(git log:*),Bash(git status:*),Bash(ls:*),Bash(cd:*),Bash(npm ci:*),Bash(npm install:*),Bash(npm run:*),Bash(npm test:*),Bash(npx:*),Bash(pip install:*),Bash(python:*),Bash(python -m pytest:*),Bash(pytest:*),Bash(alembic:*)"
             --json-schema '{"type":"object","properties":{"resumen":{"type":"string"},"descartados":{"type":"array","items":{"type":"string"}}},"required":["resumen","descartados"]}'

@@ -154,6 +154,7 @@ jobs:
             - Si es la última iteración y solo quedan detalles menores, aprueba.
             Escribe el resumen y los cambios en español.
           claude_args: |
+            --model claude-sonnet-5
             --max-turns 40
             --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(git status:*),Bash(ls:*),Bash(cd:*),Bash(npm ci:*),Bash(npm install:*),Bash(npm run:*),Bash(npm test:*),Bash(npx:*),Bash(pip install:*),Bash(python:*),Bash(python -m pytest:*),Bash(pytest:*),Bash(alembic:*)"
             --json-schema '{"type":"object","properties":{"veredicto":{"type":"string","enum":["aprobar","cambios"]},"resumen":{"type":"string"},"cambios_requeridos":{"type":"array","items":{"type":"string"}}},"required":["veredicto","resumen","cambios_requeridos"]}'

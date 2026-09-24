@@ -66,5 +66,6 @@ jobs:
           additional_permissions: |
             actions: read
           claude_args: |
+            --model claude-sonnet-5
             --max-turns 100
             --allowedTools "Edit,Write,Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(ls:*),Bash(cd:*),Bash(npm ci:*),Bash(npm install:*),Bash(npm run:*),Bash(npm test:*),Bash(npx:*),Bash(pip install:*),Bash(python -m pytest:*),Bash(pytest:*),Bash(python:*),Bash(alembic:*)"
