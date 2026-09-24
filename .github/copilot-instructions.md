@@ -7,12 +7,14 @@ de verdad funcional**; si algo aquí lo contradice, manda `requirements.md`.
 ## Qué es
 
 Sistema de inventario para un freezer de -80 °C donde se almacenan muestras.
-Jerarquía física: **sección (I–IV) → rack (A–H) → caja → posición**. Hay cajas de cartón de
-9×9 (posiciones `1A`…`9I`) y plásticas de 10×10 (`1`…`100`).
+Jerarquía física: **sección (I–IV, estantes) → rack (A–H, 2 por sección: centro y derecha) →
+caja/subcaja → posición**. La "subcaja" de `requirements.md` es la cajita que en el Excel se
+llama "Caja": de cartón 9×9 (posiciones `1A`…`9I`) o plástica 10×10 (`1`…`100`).
 
-- `demo.html`: visor 3D del refrigerador que a los usuarios les encantó. **Hay que reutilizarlo**
-  (portar su lógica 3D al frontend sin reescribirla desde cero ni cambiar su estética). Su geometría
-  debe generarse a partir de la base de datos (ver `docs/DATOS.md`).
+- `demo.html`: visor 3D del refrigerador que a los usuarios les encantó. **Hay que reutilizar** su
+  estética e interacciones, pero **no sus números**: el refri real solo tiene los racks del centro y
+  de la derecha de cada estante. La distribución sale de los datos (ver "Modelo físico" en `docs/DATOS.md`).
+  Ante cualquier duda, **mandan el Excel y el formulario, no el demo**.
 - **`docs/FORMULARIO.md`**: el formulario de la página debe ser **idéntico** al Google Form que
   el laboratorio ya usa (mismos campos, orden y opciones). Cada envío es un movimiento.
 - **`docs/DATOS.md`**: estructura del Excel de origen, reglas de limpieza e importador.

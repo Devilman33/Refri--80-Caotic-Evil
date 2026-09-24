@@ -53,14 +53,25 @@ También hay líneas celulares (p. ej. `PC3`) y prefijos como `MC Co1241` (medio
 - Crea automáticamente usuarios (por iniciales), secciones, racks y cajas que encuentre.
   El tipo de caja (cartón 81 / plástica 100) se infiere del formato de las posiciones.
 
-## Modelo físico: visor vs. datos reales
+## Modelo físico del freezer (confirmado con el laboratorio)
 
-`demo.html` modela 4 estantes × 3 racks × 5 pisos × 4 cajas (240 cajas de 9×9). Los datos reales
-tienen racks con letras `A`–`H` repartidos en las secciones `I`–`IV`, hasta 30 cajas por rack y
-cajas plásticas de 100 posiciones. Por eso **la geometría del visor se genera a partir de la base de
-datos** (secciones, racks, cajas y su tipo) y no está fija en el código. Se mantienen la estética y
-las interacciones del demo.
+**La fuente de verdad son el Excel y el formulario, no los números de `demo.html`.** Del demo se
+reutilizan la estética, el gabinete, los estantes y las interacciones. La cantidad y distribución de
+racks y cajas sale de los datos.
 
-Pendiente de definir con el laboratorio: qué es exactamente una **"subcaja"** en `requirements.md`.
-Mientras tanto, el % de uso se calcula por **sección, rack y caja**. Si "subcaja" resulta ser otro
-nivel, se agrega sin romper el resto.
+| Nivel | Qué es | Valores |
+|---|---|---|
+| **Sección** | Estante del freezer | `I`, `II`, `III`, `IV` (4 estantes, como en el demo) |
+| **Rack** | Rack que se extrae del estante | `A`–`H`: **8 racks, 2 por sección**. En cada estante solo existen los racks **del centro y de la derecha**; la posición izquierda del demo **no existe** en el refri real y no se dibuja |
+| **Caja** (subcaja) | La "cajita" que va dentro del rack. En `requirements.md` se llama **subcaja** | Número dentro del rack (en los datos, hasta 30). Cartón **9×9** (posiciones `1A`…`9I`) o plástica **10×10** (`1`…`100`) |
+| **Posición** | Hueco para un tubo dentro de la subcaja | Según el tipo de caja |
+
+- **% de uso** (`requirements.md`): por **rack**, por **subcaja** y también por sección y por el freezer completo.
+- **Qué rack va en qué sección y en qué posición (centro o derecha):** se configura en un archivo
+  editable de siembra (`backend/app/seed/layout.yaml` o similar), no en el código. La columna Sección
+  del Excel es inconsistente (por ejemplo, el mismo rack aparece en varias secciones). El importador
+  debe **reportar** esas filas en vez de crear racks duplicados.
+- **Capacidad de cada rack** (cuántas subcajas caben y cómo se apilan): configurable en el mismo
+  archivo. Por defecto usa el mayor número de caja encontrado en los datos para ese rack.
+- **El visor genera la geometría** a partir de esa configuración y de la base de datos:
+  4 estantes × 2 racks (centro y derecha) × N subcajas, cada una con su grilla 9×9 o 10×10.
