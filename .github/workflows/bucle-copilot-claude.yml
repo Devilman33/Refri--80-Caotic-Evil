@@ -1,0 +1,176 @@
+# Bucle A: Copilot implementa -> Claude revisa -> Copilot corrige -> ...
+#
+# 1. Copilot coding agent abre un PR y, al terminar, pide revisión (review_requested).
+# 2. El job `despachar` relanza este workflow como workflow_dispatch usando BUCLE_PAT,
+#    así la revisión corre con un actor humano (claude-code-action no acepta bots por defecto).
+# 3. Claude revisa el PR contra requirements.md y devuelve un veredicto estructurado.
+# 4. Si pide cambios, se comenta "@copilot ..." con BUCLE_PAT (Copilot solo responde a
+#    usuarios con acceso de escritura) y Copilot vuelve a trabajar -> vuelve al paso 1.
+# 5. Se detiene al aprobar o al llegar a MAX_ITERACIONES (etiqueta bucle:requiere-humano).
+name: "Bucle A · Copilot implementa → Claude revisa"
+
+on:
+  pull_request:
+    types: [review_requested, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Número del PR a revisar"
+        required: true
+        type: number
+
+env:
+  MAX_ITERACIONES: "5"
+  MARCA: "<!-- bucle-a:revision-claude"
+
+jobs:
+  despachar:
+    if: >-
+      github.event_name == 'pull_request' &&
+      (github.event.pull_request.user.login == 'Copilot' ||
+       github.event.pull_request.user.login == 'copilot-swe-agent[bot]' ||
+       contains(github.event.pull_request.labels.*.name, 'bucle'))
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Lanzar revisión de Claude
+        env:
+          GH_TOKEN: ${{ secrets.BUCLE_PAT }}
+          PR: ${{ github.event.pull_request.number }}
+          RAMA_BASE: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Falta el secret BUCLE_PAT (ver docs/BUCLE.md)"
+            exit 1
+          fi
+          gh workflow run bucle-copilot-claude.yml -R "$GITHUB_REPOSITORY" --ref "$RAMA_BASE" -f pr_number="$PR"
+
+  revisar:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: bucle-a-pr-${{ inputs.pr_number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Contexto e iteraciones
+        id: ctx
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          read -r estado sha < <(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json state,headRefOid -q '.state + " " + .headRefOid')
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "$estado" != "OPEN" ]; then
+            echo "El PR #$PR está $estado; no se revisa."
+            echo "correr=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          cuerpos=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" | jq -s '[.[][] | .body]')
+          iter=$(jq --arg m "$MARCA" '[.[] | select(contains($m))] | length' <<<"$cuerpos")
+          ya_revisado=$(jq --arg m "$MARCA sha=$sha" '[.[] | select(contains($m))] | length' <<<"$cuerpos")
+          echo "iter=$iter" >> "$GITHUB_OUTPUT"
+
+          if [ "$ya_revisado" -gt 0 ]; then
+            echo "El commit $sha ya fue revisado; se omite."
+            echo "correr=false" >> "$GITHUB_OUTPUT"
+          elif [ "$iter" -ge "$MAX_ITERACIONES" ]; then
+            gh label create "bucle:requiere-humano" -R "$GITHUB_REPOSITORY" --color d73a4a --description "El bucle agente se detuvo" --force
+            gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:requiere-humano"
+            gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Bucle detenido: se alcanzó el máximo de $MAX_ITERACIONES revisiones de Claude. Requiere revisión humana."
+            echo "correr=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "correr=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.ctx.outputs.correr == 'true'
+        with:
+          ref: refs/pull/${{ inputs.pr_number }}/head
+          fetch-depth: 0
+
+      - name: Revisión de Claude
+        id: claude
+        if: steps.ctx.outputs.correr == 'true'
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          prompt: |
+            Eres el revisor del PR #${{ inputs.pr_number }} del repositorio ${{ github.repository }},
+            implementado por GitHub Copilot. Esta es la iteración ${{ steps.ctx.outputs.iter }} (máximo ${{ env.MAX_ITERACIONES }}).
+
+            1. Lee CLAUDE.md y requirements.md: son la fuente de verdad del proyecto.
+            2. Lee la descripción del PR y el issue vinculado (`gh pr view ${{ inputs.pr_number }}`)
+               y el diff (`gh pr diff ${{ inputs.pr_number }}`). El código del PR ya está en el directorio de trabajo.
+            3. Si hay tests o build, ejecútalos.
+            4. Verifica: que cumpla lo que pide el issue, bugs, pérdida de trazabilidad (las muestras
+               retiradas NUNCA se borran), seguridad, tests faltantes y coherencia con el stack de CLAUDE.md.
+
+            Veredicto:
+            - "aprobar" si el PR cumple su objetivo y no tiene errores que bloqueen. No bloquees por estilo.
+            - "cambios" si hay algo que corregir. Cada elemento de cambios_requeridos debe ser una
+              instrucción concreta y accionable para Copilot (archivo, problema y cómo arreglarlo).
+            Escribe el resumen y los cambios en español.
+          claude_args: |
+            --max-turns 60
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(git status:*),Bash(ls:*),Bash(npm ci:*),Bash(npm install:*),Bash(npm run:*),Bash(npm test:*),Bash(npx:*),Bash(pip install:*),Bash(python -m pytest:*),Bash(pytest:*)"
+            --json-schema '{"type":"object","properties":{"veredicto":{"type":"string","enum":["aprobar","cambios"]},"resumen":{"type":"string"},"cambios_requeridos":{"type":"array","items":{"type":"string"}}},"required":["veredicto","resumen","cambios_requeridos"]}'
+
+      - name: Publicar resultado
+        if: always() && steps.ctx.outputs.correr == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUCLE_PAT: ${{ secrets.BUCLE_PAT }}
+          RESULTADO: ${{ steps.claude.outputs.structured_output }}
+          PR: ${{ inputs.pr_number }}
+          SHA: ${{ steps.ctx.outputs.sha }}
+          ITER: ${{ steps.ctx.outputs.iter }}
+        run: |
+          set -euo pipefail
+          gh label create "bucle:aprobado" -R "$GITHUB_REPOSITORY" --color 2ea44f --description "Claude aprobó el PR" --force
+          gh label create "bucle:requiere-humano" -R "$GITHUB_REPOSITORY" --color d73a4a --description "El bucle agente se detuvo" --force
+
+          if [ -z "$RESULTADO" ]; then RESULTADO='{}'; fi
+          veredicto=$(jq -r '.veredicto // empty' <<<"$RESULTADO")
+          resumen=$(jq -r '.resumen // ""' <<<"$RESULTADO")
+          marca="$MARCA sha=$SHA -->"
+          n=$((ITER + 1))
+
+          case "$veredicto" in
+            aprobar)
+              printf '%s\n### ✅ Claude aprueba este PR (revisión %s/%s)\n\n%s\n\nListo para revisión humana y merge.\n' \
+                "$marca" "$n" "$MAX_ITERACIONES" "$resumen" > cuerpo.md
+              gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body-file cuerpo.md
+              gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:aprobado"
+              ;;
+            cambios)
+              if [ -z "$BUCLE_PAT" ]; then
+                echo "::error::Falta el secret BUCLE_PAT: no se puede pedir cambios a Copilot"
+                exit 1
+              fi
+              {
+                printf '@copilot Revisión automática de Claude (%s/%s). Corrige lo siguiente en este mismo PR:\n\n' "$n" "$MAX_ITERACIONES"
+                jq -r '.cambios_requeridos | to_entries[] | "\(.key + 1). \(.value)"' <<<"$RESULTADO"
+                printf '\n**Resumen:** %s\n\n%s\n' "$resumen" "$marca"
+              } > cuerpo.md
+              # Evita que el comentario (publicado como usuario) dispare también claude.yml
+              sed -i 's/@claude/Claude/Ig' cuerpo.md
+              GH_TOKEN="$BUCLE_PAT" gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body-file cuerpo.md
+              ;;
+            *)
+              gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:requiere-humano"
+              gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "La revisión de Claude falló o no entregó un veredicto. Revisa el run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+              exit 1
+              ;;
+          esac

@@ -1,0 +1,34 @@
+# Prepara el entorno donde trabaja Copilot coding agent antes de que empiece.
+# El job DEBE llamarse copilot-setup-steps.
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/copilot-setup-steps.yml]
+  pull_request:
+    paths: [.github/workflows/copilot-setup-steps.yml]
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Instalar dependencias existentes
+        run: |
+          if [ -f backend/requirements-dev.txt ]; then pip install -r backend/requirements-dev.txt
+          elif [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt
+          elif [ -f backend/pyproject.toml ]; then pip install -e "backend[dev]"; fi
+          if [ -f frontend/package-lock.json ]; then npm ci --prefix frontend
+          elif [ -f frontend/package.json ]; then npm install --prefix frontend; fi

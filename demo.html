@@ -1,0 +1,811 @@
+<title>Mapa 3D DW-86L388J</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#E6EBEE; --panel:#F7F9FA; --ink:#14202A; --muted:#5A6873; --line:#D1DAE0;
+  --chip:#ECF0F2; --chip-hover:#E0E7EB;
+  --accent:#0A7C96; --accent-ink:#FFFFFF; --accent-soft:#D4EAF0;
+  --scene:#DBE2E7; --grid:#C3CED5; --warn:#B4531A;
+  --box:#D6C29C; --box-edge:#B49E76; --slot:#F7F1E4; --slot-line:#A8936B;
+  --display:"Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --sans:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0D1317; --panel:#131B21; --ink:#E2E9ED; --muted:#8D9BA6; --line:#25313A;
+    --chip:#1B252C; --chip-hover:#223039;
+    --accent:#3CB3CD; --accent-ink:#06161B; --accent-soft:#15323A;
+    --scene:#0B1115; --grid:#1E2A32; --warn:#E08A4F;
+    --box:#4A3F2E; --box-edge:#6B5B42; --slot:#241E16; --slot-line:#8A7652;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0D1317; --panel:#131B21; --ink:#E2E9ED; --muted:#8D9BA6; --line:#25313A;
+  --chip:#1B252C; --chip-hover:#223039;
+  --accent:#3CB3CD; --accent-ink:#06161B; --accent-soft:#15323A;
+  --scene:#0B1115; --grid:#1E2A32; --warn:#E08A4F;
+    --box:#4A3F2E; --box-edge:#6B5B42; --slot:#241E16; --slot-line:#8A7652;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans)}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 360px}
+.stage{position:relative;min-height:0;background:var(--scene);overflow:hidden}
+#view{position:absolute;inset:0}
+#view canvas{display:block;width:100%;height:100%;touch-action:none}
+
+.hud{position:absolute;top:14px;left:16px;right:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;pointer-events:none}
+.hud > *{pointer-events:auto}
+.seg{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:3px;gap:2px;box-shadow:0 1px 2px rgb(0 0 0 / .06)}
+.seg button{border:0;background:transparent;padding:6px 11px;border-radius:5px;font-size:13px;font-weight:500;color:var(--muted)}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:var(--accent);color:var(--accent-ink)}
+.tools{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 6px;box-shadow:0 1px 2px rgb(0 0 0 / .06)}
+.tog{display:inline-flex;gap:6px;align-items:center;font-size:13px;padding:4px 6px;color:var(--muted);cursor:pointer;user-select:none}
+.tog input{accent-color:var(--accent);margin:0}
+.ghost{border:0;background:transparent;font-size:13px;padding:4px 8px;border-radius:5px;color:var(--muted)}
+.ghost:hover{background:var(--chip);color:var(--ink)}
+.hint{position:absolute;left:16px;bottom:12px;right:16px;margin:0;font-size:12px;color:var(--muted);pointer-events:none}
+#tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px;white-space:nowrap;box-shadow:0 4px 14px rgb(0 0 0 / .12);transform:translate(12px,12px)}
+#tip b{font-family:var(--mono);font-weight:600}
+#tip span{color:var(--muted)}
+
+.panel{overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding-block:22px 28px;padding-inline:22px;display:flex;flex-direction:column;gap:24px}
+.eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 4px}
+h1{font-family:var(--display);font-weight:700;font-size:30px;line-height:1.05;margin:0;letter-spacing:.01em;text-wrap:balance}
+h2{font-family:var(--display);font-weight:600;font-size:17px;margin:0 0 10px;letter-spacing:.02em;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+h2 small{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--muted)}
+.stats{display:flex;gap:18px;margin-top:12px;font-variant-numeric:tabular-nums}
+.stats div{display:flex;flex-direction:column}
+.stats b{font-family:var(--mono);font-size:20px;font-weight:600;line-height:1.1}
+.stats span{font-size:12px;color:var(--muted)}
+
+.search{display:flex;gap:6px}
+.search input{flex:1;min-width:0;background:var(--chip);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-family:var(--mono);font-size:13px;text-transform:uppercase}
+.search input::placeholder{text-transform:none;color:var(--muted)}
+.search button{border:0;background:var(--accent);color:var(--accent-ink);border-radius:6px;padding:8px 14px;font-weight:600;font-size:13px}
+.msg{font-size:12px;color:var(--warn);margin:6px 0 0;min-height:1em}
+
+.est{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.est:last-child{border-bottom:1px solid var(--line)}
+.est-name{border:0;background:transparent;font-family:var(--mono);font-weight:600;font-size:14px;padding:4px 6px;border-radius:5px}
+.est-name:hover{background:var(--chip)}
+.est.on .est-name{color:var(--accent)}
+.est-sub{font-size:12px;color:var(--muted);line-height:1.3}
+.rk{display:flex;gap:4px}
+.rk button{border:1px solid var(--line);background:var(--chip);border-radius:5px;font-family:var(--mono);font-size:12px;font-weight:500;padding:5px 8px}
+.rk button:hover{background:var(--chip-hover)}
+.rk button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+
+.cells{display:grid;grid-template-columns:28px repeat(4,1fr);gap:4px;font-variant-numeric:tabular-nums}
+.cells .ax{font-size:11px;color:var(--muted);display:flex;align-items:center;justify-content:center;font-family:var(--mono)}
+.cells button{height:36px;border:1px solid var(--line);background:var(--chip);border-radius:5px;font-family:var(--mono);font-size:13px;font-weight:500;padding:0}
+.cells button:hover{background:var(--chip-hover)}
+.cells button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.axis-note{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin:6px 0 0 32px}
+
+dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 14px}
+dt{color:var(--muted);font-size:13px}
+dd{margin:0;font-size:13px}
+.code{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:.02em;color:var(--accent);margin:0 0 10px}
+.empty{font-size:13px;color:var(--muted);margin:0}
+.note{font-size:12px;color:var(--muted);line-height:1.5;margin:0;max-width:65ch}
+
+/* Vista de caja 9×9 */
+.boxview{position:absolute;top:66px;right:16px;width:360px;max-width:calc(100% - 32px);max-height:calc(100% - 82px);overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgb(0 0 0 / .16);padding:16px;display:flex;flex-direction:column;gap:14px}
+.bv-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.bv-code{font-family:var(--mono);font-size:21px;font-weight:600;margin:0;color:var(--accent);letter-spacing:.02em}
+.bv-sub{margin:2px 0 0;font-size:12px;color:var(--muted)}
+.bv-close{border:1px solid var(--line);background:var(--chip);border-radius:6px;width:30px;height:30px;font-size:15px;line-height:1;color:var(--muted);flex:none}
+.bv-close:hover{color:var(--ink);background:var(--chip-hover)}
+.bv-box{background:var(--box);border:1px solid var(--box-edge);padding:8px 10px 10px 8px;clip-path:polygon(22px 0,100% 0,100% 100%,0 100%,0 22px);border-radius:0 6px 6px 6px}
+.bv-grid{display:grid;grid-template-columns:18px repeat(9,1fr);gap:3px;font-variant-numeric:tabular-nums}
+.bv-ax{font-family:var(--mono);font-size:10px;color:var(--ink);opacity:.7;display:flex;align-items:center;justify-content:center}
+.bv-grid button{aspect-ratio:1/1;max-width:100%;padding:0;border-radius:50%;border:1.5px solid var(--slot-line);background:var(--slot);font-family:var(--mono);font-size:8.5px;color:var(--muted);display:flex;align-items:center;justify-content:center;transition:transform .12s}
+.bv-grid button:hover{transform:scale(1.12);color:var(--ink)}
+.bv-grid button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.bv-legend{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px}
+.bv-foot{border-top:1px solid var(--line);padding-top:12px;font-size:13px;display:flex;flex-direction:column;gap:6px}
+.bv-foot b{font-family:var(--mono);font-weight:600}
+.bv-foot .later{font-size:12px;color:var(--muted);margin:0}
+.btn{border:0;background:var(--accent);color:var(--accent-ink);border-radius:6px;padding:8px 12px;font-weight:600;font-size:13px;margin-top:12px}
+
+@media (max-width:820px){
+  .boxview{top:auto;bottom:12px;left:16px;right:16px;width:auto;max-height:calc(100% - 100px)}
+  html,body{height:auto}
+  .app{grid-template-columns:1fr;grid-template-rows:62vh auto;height:auto}
+  .panel{border-left:0;border-top:1px solid var(--line);overflow:visible;padding-inline:16px}
+  .hint{display:none}
+}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+</style>
+
+<div class="app">
+  <section class="stage" aria-label="Vista 3D del congelador">
+    <div id="view"></div>
+    <div class="hud">
+      <div class="seg" role="group" aria-label="Estado de las puertas">
+        <button id="d0" type="button">Cerrado</button>
+        <button id="d1" type="button">Puerta abierta</button>
+        <button id="d2" type="button" class="on">Todo abierto</button>
+      </div>
+      <div class="tools">
+        <label class="tog"><input type="checkbox" id="xray"> Gabinete transparente</label>
+        <label class="tog"><input type="checkbox" id="extract" checked> Sacar rack y caja</label>
+        <button id="reset" class="ghost" type="button">Reiniciar vista</button>
+      </div>
+    </div>
+    <p class="hint">Arrastra para girar · rueda para acercar · clic derecho para desplazar · clic en una caja o puerta</p>
+    <div id="tip" hidden></div>
+    <div class="boxview" id="boxView" role="dialog" aria-labelledby="bvTitle" hidden>
+      <div class="bv-head">
+        <div>
+          <p class="eyebrow">Caja 9 × 9 · 81 posiciones</p>
+          <h3 class="bv-code" id="bvTitle"></h3>
+          <p class="bv-sub" id="bvSub"></p>
+        </div>
+        <button class="bv-close" id="bvClose" type="button" aria-label="Cerrar vista de caja">✕</button>
+      </div>
+      <div>
+        <div class="bv-box"><div class="bv-grid" id="bvGrid"></div></div>
+        <div class="bv-legend"><span>Esquina biselada = A1</span><span>Vista superior</span></div>
+      </div>
+      <div class="bv-foot" id="bvFoot"></div>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <header>
+      <p class="eyebrow">Congelador ULT vertical · −86 °C · 388 L</p>
+      <h1>Haier DW-86L388J</h1>
+      <div class="stats">
+        <div><b>4</b><span>estantes</span></div>
+        <div><b>12</b><span>racks</span></div>
+        <div><b>240</b><span>cajas de 2 in</span></div>
+      </div>
+    </header>
+
+    <section>
+      <h2>Buscar posición</h2>
+      <form class="search" id="searchForm">
+        <input id="q" type="text" placeholder="Ej: E2-R3-C05 o E2-R3-C05-A1" autocomplete="off" aria-label="Código de caja">
+        <button type="submit">Ir</button>
+      </form>
+      <p class="msg" id="msg"></p>
+    </section>
+
+    <section>
+      <h2>Estructura <small>estante · rack</small></h2>
+      <div id="tree"></div>
+    </section>
+
+    <section id="rackSec">
+      <h2>Rack <small id="rackTitle"></small></h2>
+      <div class="cells" id="cells"></div>
+      <div class="axis-note"><span>Frente</span><span>Fondo →</span></div>
+    </section>
+
+    <section>
+      <h2>Caja seleccionada</h2>
+      <div id="info"></div>
+    </section>
+
+    <section>
+      <h2>Supuestos del modelo</h2>
+      <p class="note">Medidas exteriores (830 × 980 × 1980 mm), cámara interior (465 × 630 × 1310 mm), 2 puertas interiores y 3 bandejas de 451 × 597 mm según la ficha técnica. Racks de 5 pisos × 4 cajas (12 racks, 240 cajas) según la tabla de racks del manual serie J. Cada caja de 2 in tiene 81 posiciones (9 × 9): filas A–I y columnas 1–9.</p>
+    </section>
+  </aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+/* ---------- Configuración (mm) ---------- */
+const C = {
+  ext:{w:830, d:980, h:1980},
+  ch:{w:465, d:630, h:1310, y0:470},     // cámara interior
+  frontZ:370,                              // plano frontal del gabinete
+  shelfT:12, shelfW:451, shelfD:597,
+  estantes:4, racks:3, pisos:5, fondo:4,
+  box:{w:133, h:52, d:133},
+  rackW:141, rackD:542, pisoPitch:56, rackPitchX:146, rackFrontZ:318,
+  extractBy:680,                           // el rack sale completo de la cámara
+  boxSlide:165,                            // la caja sale por el costado del rack
+  grid:9                                   // caja 9 × 9 = 81 posiciones
+};
+const ROWS = 'ABCDEFGHI';
+const compH = (C.ch.h - (C.estantes-1)*C.shelfT) / C.estantes;
+const rackH = 3 + C.pisos*C.pisoPitch + 1;
+const pad2 = n => String(n).padStart(2,'0');
+const codeOf = (e,r,n) => `E${e}-R${r}-C${pad2(n)}`;
+const rackKey = (e,r) => `E${e}-R${r}`;
+
+/* ---------- Escena ---------- */
+const host = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+host.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(34, 1, 10, 40000);
+const HOME = {pos:new THREE.Vector3(1650,1750,3050), target:new THREE.Vector3(-80,1040,150)};
+camera.position.copy(HOME.pos);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.copy(HOME.target);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.maxPolarAngle = Math.PI*0.495;
+controls.minDistance = 300;
+controls.maxDistance = 8000;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a98a4, 0.72));
+const sun = new THREE.DirectionalLight(0xffffff, 0.62);
+sun.position.set(1600, 3200, 2400);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera, {left:-1600,right:1600,top:1600,bottom:-1600,near:100,far:8000});
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xdfe9ff, 0.28);
+fill.position.set(-2200, 1200, 1800);
+scene.add(fill);
+const lamp = new THREE.PointLight(0xf4fbff, 0.55, 2600, 1);
+lamp.position.set(0, 1700, 250);
+scene.add(lamp);
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(12000,12000), new THREE.ShadowMaterial({opacity:0.16}));
+floor.rotation.x = -Math.PI/2;
+floor.receiveShadow = true;
+scene.add(floor);
+let grid = null;
+
+/* ---------- Materiales ---------- */
+const std = (color, o={}) => new THREE.MeshStandardMaterial(Object.assign({color, roughness:0.6, metalness:0.05}, o));
+const mShell   = std(0xEEF1F3, {roughness:0.5});
+const mDoor    = std(0xF1F3F5, {roughness:0.45});
+const mTrim    = std(0x2C353C, {roughness:0.7});
+const mSlat    = std(0x49545C, {roughness:0.6});
+const mGasket  = std(0x3B454C, {roughness:0.9});
+const mLiner   = std(0xC6D0D6, {roughness:0.35, metalness:0.25, side:THREE.BackSide});
+const mPlug    = std(0xD9E0E4, {roughness:0.5});
+const mInner   = std(0xF5F7F8, {roughness:0.85});
+const mHandle  = std(0xA9B3BA, {roughness:0.3, metalness:0.55});
+const mShelf   = std(0xB3BDC4, {roughness:0.35, metalness:0.45});
+const mSteel   = std(0xB9C2C8, {roughness:0.38, metalness:0.4});
+const mSteelOn = std(0x7FC7D8, {roughness:0.38, metalness:0.3, emissive:0x0b3e4a, emissiveIntensity:0.35});
+const mWheel   = std(0x23292e, {roughness:0.8});
+const mBox     = std(0xCDB690, {roughness:0.85});
+const mBoxHov  = std(0xE3CFA6, {roughness:0.8, emissive:0x3a2a10, emissiveIntensity:0.25});
+const mBoxOn   = std(0x14A3C2, {roughness:0.5, emissive:0x0d6b80, emissiveIntensity:0.55});
+const mEdge    = new THREE.LineBasicMaterial({color:0x7d6a4a, transparent:true, opacity:0.55});
+const xrayMats = [mShell, mDoor, mTrim, mSlat, mGasket, mPlug];
+
+const occluders = [], doorMeshes = [], boxMeshes = [], rackParts = [];
+function slab(x0,x1,y0,y1,z0,z1,mat,parent=scene,opts={}){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(x1-x0, y1-y0, z1-z0), mat);
+  m.position.set((x0+x1)/2, (y0+y1)/2, (z0+z1)/2);
+  if (opts.cast !== false) m.castShadow = true;
+  parent.add(m);
+  return m;
+}
+
+/* ---------- Texturas de texto ---------- */
+const labels = [];
+function textTexture(w, h, draw){
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = 4;
+  const item = {cv, tex, draw};
+  labels.push(item); redraw(item);
+  return tex;
+}
+function redraw(it){ const g = it.cv.getContext('2d'); g.clearRect(0,0,it.cv.width,it.cv.height); it.draw(g, it.cv.width, it.cv.height); it.tex.needsUpdate = true; }
+
+/* Tapa 9×9 de la caja seleccionada (se redibuja al elegir una posición) */
+let lidSlot = null;
+const lidTex = textTexture(512, 512, (g,w,h)=>{
+  g.fillStyle = '#1B9BB8'; g.fillRect(0,0,w,h);
+  g.fillStyle = '#12788F'; g.beginPath(); g.moveTo(0,0); g.lineTo(54,0); g.lineTo(0,54); g.closePath(); g.fill();
+  const n = C.grid, m = 34, step = (w - 2*m)/n, r = step*0.36;
+  for (let i=0;i<n;i++) for (let j=0;j<n;j++){
+    const x = m + step*(j+0.5), y = m + step*(i+0.5), id = ROWS[i] + (j+1);
+    g.beginPath(); g.arc(x,y,r,0,Math.PI*2);
+    g.fillStyle = id === lidSlot ? '#FFB347' : '#0C4F5E'; g.fill();
+    g.lineWidth = id === lidSlot ? 5 : 2; g.strokeStyle = id === lidSlot ? '#FFFFFF' : '#5CC6DD'; g.stroke();
+  }
+});
+const lidItem = labels[labels.length-1];
+const mLid = new THREE.MeshStandardMaterial({map:lidTex, roughness:0.55, emissive:0x0d6b80, emissiveIntensity:0.25});
+const mBoxOnArr = [mBoxOn, mBoxOn, mLid, mBoxOn, mBoxOn, mBoxOn];
+function setLidSlot(s){ lidSlot = s; redraw(lidItem); }
+
+/* ---------- Gabinete ---------- */
+const X0 = -C.ext.w/2, X1 = C.ext.w/2, ZB = -490, ZF = C.frontZ;
+const cx0 = -C.ch.w/2, cx1 = C.ch.w/2, cy0 = C.ch.y0, cy1 = C.ch.y0 + C.ch.h, cz1 = ZF, cz0 = ZF - C.ch.d;
+[
+  [X0,cx0, 80,1980, ZB,ZF],   // pared izquierda
+  [cx1,X1, 80,1980, ZB,ZF],   // pared derecha
+  [cx0,cx1, cy1,1980, ZB,ZF], // techo
+  [cx0,cx1, 80,cy0, ZB,ZF],   // base / compresor
+  [cx0,cx1, cy0,cy1, ZB,cz0], // fondo
+].forEach(a => occluders.push(slab(...a, mShell)));
+occluders.push(slab(X0+10, X1-10, 40, 80, ZB+10, ZF-10, mTrim));
+// rejilla de ventilación
+occluders.push(slab(-360,360, 110,400, ZF,ZF+3, mTrim));
+for (let i=0;i<10;i++) slab(-348,348, 122+i*27, 132+i*27, ZF+3, ZF+7, mSlat, scene, {cast:false});
+// ruedas
+[[-350,-420],[350,-420],[-350,300],[350,300]].forEach(([x,z])=>{
+  const w = new THREE.Mesh(new THREE.CylinderGeometry(24,24,20,20), mWheel);
+  w.rotation.z = Math.PI/2; w.position.set(x,24,z); w.castShadow = true; scene.add(w);
+  slab(x-16,x+16, 36,44, z-20,z+20, mTrim);
+});
+// junta frontal alrededor de la abertura
+[[cx0-18,cx1+18, cy1,cy1+17],[cx0-18,cx1+18, cy0-17,cy0],[cx0-18,cx0, cy0,cy1],[cx1,cx1+18, cy0,cy1]]
+  .forEach(([a,b,c,d]) => slab(a,b,c,d, ZF,ZF+4, mGasket, scene, {cast:false}));
+// revestimiento interior
+const liner = new THREE.Mesh(new THREE.BoxGeometry(C.ch.w-2, C.ch.h-2, C.ch.d-2), mLiner);
+liner.position.set(0, cy0 + C.ch.h/2, (cz0+cz1)/2);
+liner.receiveShadow = true;
+scene.add(liner);
+
+/* ---------- Puerta exterior ---------- */
+const outer = new THREE.Group();
+outer.position.set(X0, 0, ZF+4);
+scene.add(outer);
+const ox = x => x - X0; // x mundo → x local
+[
+  slab(0, C.ext.w, 440, 1960, 0, 120, mDoor, outer),
+  slab(ox(cx0)+8, ox(cx1)-8, cy0+8, cy1-8, -18, 0, mPlug, outer),
+  slab(ox(cx0)-20, ox(cx1)+20, cy0-20, cy1+20, -2, 0, mGasket, outer),
+  slab(776,790, 1010,1040, 120,150, mHandle, outer),
+  slab(776,790, 1330,1360, 120,150, mHandle, outer),
+  slab(768,798, 990,1380, 150,172, mHandle, outer),
+  slab(250,580, 1812,1918, 120,123, mTrim, outer),
+].forEach(m => { m.userData.door = 'outer'; doorMeshes.push(m); });
+const dispTex = textTexture(512, 160, (g,w,h)=>{
+  g.fillStyle = '#0B1216'; g.fillRect(0,0,w,h);
+  g.fillStyle = '#76E0F4'; g.font = '600 78px "IBM Plex Mono", monospace'; g.textBaseline='middle';
+  g.fillText('−80°C', 26, h/2+4);
+  g.fillStyle = '#5E7580'; g.font = '500 22px "IBM Plex Mono", monospace';
+  g.fillText('SET −80', 360, 52); g.fillText('ALARM OK', 360, 112);
+});
+const disp = new THREE.Mesh(new THREE.PlaneGeometry(310, 94), new THREE.MeshBasicMaterial({map:dispTex}));
+disp.position.set(415, 1865, 123.6);
+disp.userData.door = 'outer'; doorMeshes.push(disp);
+outer.add(disp);
+
+/* ---------- Puertas interiores (2) ---------- */
+const mid = cy0 + C.ch.h/2;
+const inner = [[mid, cy1], [cy0, mid]].map(([y0,y1], i) => {
+  const g = new THREE.Group();
+  g.position.set(cx0, 0, 352);
+  scene.add(g);
+  const a = slab(2, C.ch.w-2, y0+3, y1-3, -16, 0, mInner, g);
+  const k = slab(C.ch.w-44, C.ch.w-22, (y0+y1)/2-45, (y0+y1)/2+45, 0, 22, mHandle, g);
+  [a,k].forEach(m => { m.userData.door = 'inner'; doorMeshes.push(m); });
+  return g;
+});
+
+/* ---------- Bandejas, racks y cajas ---------- */
+const racks = {};                  // key → {group, parts, e, r, y0, xc}
+const boxesByCode = {};
+const boxGeo = new THREE.BoxGeometry(C.box.w-2, C.box.h-2, C.box.d-2);
+const edgeGeo = new THREE.EdgesGeometry(boxGeo);
+const estY0 = {};
+
+for (let k = 0; k < C.estantes; k++) {          // k = 0 abajo
+  const e = C.estantes - k;                      // E1 = arriba
+  const y0 = cy0 + k*(compH + C.shelfT);
+  estY0[e] = y0;
+  if (k > 0) {
+    const ys = y0 - C.shelfT;
+    const s = slab(-C.shelfW/2, C.shelfW/2, ys, y0, cz1-24, cz1-24-C.shelfD, mShelf);
+    s.receiveShadow = true; occluders.push(s);
+    slab(cx0, cx0+7, ys-10, ys, cz0+8, cz1-30, mShelf, scene, {cast:false});
+    slab(cx1-7, cx1, ys-10, ys, cz0+8, cz1-30, mShelf, scene, {cast:false});
+  }
+  for (let r = 1; r <= C.racks; r++) {
+    const xc = (r - (C.racks+1)/2) * C.rackPitchX;
+    const g = new THREE.Group();
+    g.position.set(xc, y0, C.rackFrontZ);
+    scene.add(g);
+    const hw = C.rackW/2, D = C.rackD, parts = [];
+    const add = m => { m.userData.rack = rackKey(e,r); parts.push(m); rackParts.push(m); };
+    add(slab(-hw,hw, 0,3, -D,0, mSteel, g));
+    for (let l=1; l<C.pisos; l++){ const yb = 3 + l*C.pisoPitch; add(slab(-hw,hw, yb-2,yb, -D+3,-3, mSteel, g)); }
+    add(slab(-hw,hw, rackH-3,rackH, -D,0, mSteel, g));
+    add(slab(-hw,hw, 0,rackH, -3,0, mSteel, g));
+    add(slab(-hw,hw, 0,rackH, -D,-D+3, mSteel, g));
+    for (let l=0; l<=C.pisos; l++){                 // pestañas laterales
+      const yb = Math.min(3 + l*C.pisoPitch, rackH-3);
+      add(slab(-hw,-hw+2, yb-1,yb+8, -D+3,-3, mSteel, g, {cast:false}));
+      add(slab(hw-2,hw, yb-1,yb+8, -D+3,-3, mSteel, g, {cast:false}));
+    }
+    add(slab(-38,-30, rackH-42,rackH-28, 0,22, mHandle, g));
+    add(slab(30,38, rackH-42,rackH-28, 0,22, mHandle, g));
+    add(slab(-38,38, rackH-42,rackH-28, 22,30, mHandle, g));
+    const lblTex = textTexture(256, 96, (c,w,h)=>{
+      c.fillStyle = '#E8EDF0'; c.fillRect(0,0,w,h);
+      c.strokeStyle = '#9AA6AE'; c.lineWidth = 4; c.strokeRect(2,2,w-4,h-4);
+      c.fillStyle = '#17232C'; c.font = '600 50px "IBM Plex Mono", monospace';
+      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(`E${e}·R${r}`, w/2, h/2+3);
+    });
+    const lbl = new THREE.Mesh(new THREE.PlaneGeometry(104, 39), new THREE.MeshBasicMaterial({map:lblTex}));
+    lbl.position.set(0, rackH*0.52, 0.8); add(lbl); g.add(lbl);
+
+    for (let l=0; l<C.pisos; l++){
+      const piso = C.pisos - l;                     // P1 = piso superior
+      for (let p=0; p<C.fondo; p++){
+        const f = p + 1;                            // F1 = frente
+        const n = (piso-1)*C.fondo + f;
+        const m = new THREE.Mesh(boxGeo, mBox);
+        m.position.set(0, 3 + l*C.pisoPitch + C.box.h/2, -3 - 1 - p*(C.box.d+1) - C.box.d/2);
+        m.castShadow = true; m.receiveShadow = true;
+        m.add(new THREE.LineSegments(edgeGeo, mEdge));
+        const code = codeOf(e,r,n);
+        m.userData.box = {e, r, n, piso, fondo:f, code};
+        g.add(m); boxMeshes.push(m); boxesByCode[code] = m;
+      }
+    }
+    racks[rackKey(e,r)] = {group:g, parts, e, r, y0, xc, z:C.rackFrontZ};
+  }
+}
+
+/* ---------- Estado ---------- */
+const S = {door:2, xray:false, extract:true, est:null, rack:null, box:null, hover:null, slot:null, boxView:false};
+const ang = {outer:0, inner:0};
+const OUTER_OPEN = -1.92, INNER_OPEN = -1.72;
+
+function applyMaterials(){
+  for (const m of boxMeshes){
+    const c = m.userData.box.code;
+    m.material = c === S.box ? mBoxOnArr : (c === S.hover ? mBoxHov : mBox);
+  }
+  for (const k in racks){
+    const on = k === S.rack;
+    racks[k].parts.forEach(p => { if (p.material === mSteel || p.material === mSteelOn) p.material = on ? mSteelOn : mSteel; });
+  }
+}
+function setXray(v){
+  S.xray = v;
+  xrayMats.forEach(m => { m.transparent = v; m.opacity = v ? 0.12 : 1; m.depthWrite = !v; m.needsUpdate = true; });
+  disp.visible = !v;
+}
+
+/* ---------- Cámara ---------- */
+let fly = null;
+function flyTo(target, pos, dur=750){
+  fly = {t0:performance.now(), dur, fT:controls.target.clone(), tT:target.clone(), fP:camera.position.clone(), tP:pos.clone()};
+}
+controls.addEventListener('start', () => { fly = null; });
+const extActive = () => S.extract && S.door === 2;
+function rackCenter(k){
+  const R = racks[k], ext = extActive() ? C.extractBy : 0;
+  return new THREE.Vector3(R.xc, R.y0 + rackH/2, R.z + ext - C.rackD/2);
+}
+function focusRack(k){
+  const c = rackCenter(k);
+  flyTo(c, c.clone().add(new THREE.Vector3(720, 430, 1050)));
+}
+function boxWorld(code){
+  const m = boxesByCode[code], b = m.userData.box, R = racks[rackKey(b.e,b.r)];
+  const ext = extActive() ? C.extractBy : 0, slide = extActive() ? C.boxSlide : 0;
+  return new THREE.Vector3(R.xc + slide, R.y0 + m.position.y, R.z + ext + m.position.z);
+}
+function focusBox(code){
+  const c = boxWorld(code);
+  flyTo(c, c.clone().add(new THREE.Vector3(680, 700, 1000)));
+}
+function focusEst(e){
+  const c = new THREE.Vector3(0, estY0[e] + compH/2, 80);
+  flyTo(c, c.clone().add(new THREE.Vector3(950, 520, 1550)));
+}
+
+/* ---------- Selección ---------- */
+function setDoor(v){
+  S.door = v;
+  ['d0','d1','d2'].forEach((id,i) => document.getElementById(id).classList.toggle('on', i===v));
+}
+function selectEst(e, fly=true){
+  S.est = e; S.rack = null; S.box = null; S.slot = null; S.boxView = false;
+  if (S.door < 2) setDoor(2);
+  applyMaterials(); renderPanel(); renderBoxView();
+  if (fly) focusEst(e);
+}
+function selectRack(e, r, fly=true){
+  S.est = e; S.rack = rackKey(e,r);
+  if (S.box && !S.box.startsWith(S.rack + '-')){ S.box = null; S.slot = null; S.boxView = false; }
+  if (S.door < 2) setDoor(2);
+  applyMaterials(); renderPanel(); renderBoxView();
+  if (fly) focusRack(S.rack);
+}
+function selectBox(code, fly=true, slot=null){
+  const m = boxesByCode[code]; if (!m) return;
+  const b = m.userData.box;
+  if (S.box !== code) S.slot = null;
+  if (slot) S.slot = slot;
+  S.est = b.e; S.rack = rackKey(b.e,b.r); S.box = code; S.boxView = true;
+  if (S.door < 2) setDoor(2);
+  setLidSlot(S.slot);
+  applyMaterials(); renderPanel(); renderBoxView();
+  if (fly) focusBox(code);
+}
+function selectSlot(id){
+  S.slot = S.slot === id ? null : id;
+  setLidSlot(S.slot); renderBoxView(); renderPanel();
+}
+function closeBoxView(){ S.boxView = false; renderBoxView(); }
+function clearSel(){ S.est = S.rack = S.box = S.slot = null; S.boxView = false; applyMaterials(); renderPanel(); renderBoxView(); }
+
+/* ---------- Panel ---------- */
+const tree = document.getElementById('tree');
+const estDesc = {1:'Arriba · puerta interior superior', 2:'Puerta interior superior', 3:'Puerta interior inferior', 4:'Abajo · puerta interior inferior'};
+for (let e=1; e<=C.estantes; e++){
+  const row = document.createElement('div'); row.className = 'est'; row.dataset.e = e;
+  const nb = document.createElement('button'); nb.type='button'; nb.className='est-name'; nb.textContent = `E${e}`;
+  nb.addEventListener('click', () => selectEst(e));
+  const sub = document.createElement('span'); sub.className='est-sub'; sub.textContent = estDesc[e] || '';
+  const rk = document.createElement('div'); rk.className='rk';
+  for (let r=1; r<=C.racks; r++){
+    const b = document.createElement('button'); b.type='button'; b.textContent = `R${r}`; b.dataset.k = rackKey(e,r);
+    b.setAttribute('aria-label', `Estante ${e}, rack ${r}`);
+    b.addEventListener('click', () => selectRack(e, r));
+    rk.appendChild(b);
+  }
+  row.append(nb, sub, rk); tree.appendChild(row);
+}
+const cells = document.getElementById('cells');
+function renderPanel(){
+  tree.querySelectorAll('.est').forEach(el => el.classList.toggle('on', +el.dataset.e === S.est));
+  tree.querySelectorAll('.rk button').forEach(b => b.classList.toggle('on', b.dataset.k === S.rack));
+
+  const sec = document.getElementById('rackSec');
+  sec.hidden = !S.rack;
+  if (S.rack){
+    const R = racks[S.rack];
+    document.getElementById('rackTitle').textContent = S.rack;
+    cells.innerHTML = '';
+    for (let piso=1; piso<=C.pisos; piso++){
+      const ax = document.createElement('div'); ax.className='ax'; ax.textContent = `P${piso}`; cells.appendChild(ax);
+      for (let f=1; f<=C.fondo; f++){
+        const n = (piso-1)*C.fondo + f, code = codeOf(R.e,R.r,n);
+        const b = document.createElement('button'); b.type='button'; b.textContent = pad2(n);
+        b.title = code; b.setAttribute('aria-label', `Caja ${code}`);
+        if (code === S.box) b.classList.add('on');
+        b.addEventListener('click', () => selectBox(code));
+        b.addEventListener('mouseenter', () => { S.hover = code; applyMaterials(); });
+        b.addEventListener('mouseleave', () => { S.hover = null; applyMaterials(); });
+        cells.appendChild(b);
+      }
+    }
+  }
+
+  const info = document.getElementById('info');
+  if (!S.box){
+    info.innerHTML = '<p class="empty">Haz clic en una caja del modelo o en la grilla del rack.</p>';
+    return;
+  }
+  const b = boxesByCode[S.box].userData.box;
+  info.innerHTML = `
+    <p class="code">${b.code}</p>
+    <dl>
+      <dt>Estante</dt><dd>E${b.e} de ${C.estantes} (desde arriba) · ${b.e <= 2 ? 'puerta interior superior' : 'puerta interior inferior'}</dd>
+      <dt>Rack</dt><dd>R${b.r} de ${C.racks} (izquierda → derecha)</dd>
+      <dt>Piso</dt><dd>P${b.piso} de ${C.pisos} (desde arriba)</dd>
+      <dt>Fondo</dt><dd>F${b.fondo} de ${C.fondo} (desde el frente)</dd>
+      <dt>Caja</dt><dd>N.º ${pad2(b.n)} de ${C.pisos*C.fondo} en el rack</dd>
+      <dt>Formato</dt><dd>2 in · 133 × 133 × 52 mm · 9 × 9</dd>
+      ${S.slot ? `<dt>Posición</dt><dd>${S.slot} (${slotIndex(S.slot)} de 81)</dd>` : ''}
+    </dl>
+    ${S.boxView ? '' : '<button class="btn" type="button" id="openBv">Abrir caja 9 × 9</button>'}`;
+  const ob = document.getElementById('openBv');
+  if (ob) ob.addEventListener('click', () => { S.boxView = true; renderBoxView(); renderPanel(); });
+}
+
+/* ---------- Vista de caja 9×9 ---------- */
+const slotIndex = id => ROWS.indexOf(id[0])*C.grid + (+id.slice(1));
+const bvEl = document.getElementById('boxView'), bvGrid = document.getElementById('bvGrid');
+(function buildGrid(){
+  bvGrid.appendChild(Object.assign(document.createElement('div'), {className:'bv-ax'}));
+  for (let j=1;j<=C.grid;j++) bvGrid.appendChild(Object.assign(document.createElement('div'), {className:'bv-ax', textContent:j}));
+  for (let i=0;i<C.grid;i++){
+    bvGrid.appendChild(Object.assign(document.createElement('div'), {className:'bv-ax', textContent:ROWS[i]}));
+    for (let j=1;j<=C.grid;j++){
+      const id = ROWS[i] + j;
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.slot = id; b.textContent = id;
+      b.setAttribute('aria-label', `Posición ${id}`);
+      b.addEventListener('click', () => selectSlot(id));
+      bvGrid.appendChild(b);
+    }
+  }
+})();
+function renderBoxView(){
+  bvEl.hidden = !(S.box && S.boxView);
+  if (bvEl.hidden) return;
+  const b = boxesByCode[S.box].userData.box;
+  document.getElementById('bvTitle').textContent = b.code;
+  document.getElementById('bvSub').textContent = `Estante E${b.e} · Rack R${b.r} · Piso P${b.piso} · Fondo F${b.fondo}`;
+  bvGrid.querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.slot === S.slot));
+  document.getElementById('bvFoot').innerHTML = S.slot
+    ? `<div><b>${b.code}-${S.slot}</b> · posición ${slotIndex(S.slot)} de 81</div>
+       <div>Sin muestra registrada</div>
+       <p class="later">El registro de datos de cada muestra se agrega en la siguiente etapa.</p>`
+    : `<p class="later">Toca una posición para ver su código. Aquí se anotará la información de cada muestra.</p>`;
+}
+document.getElementById('bvClose').addEventListener('click', () => { closeBoxView(); renderPanel(); });
+
+/* ---------- Búsqueda ---------- */
+document.getElementById('searchForm').addEventListener('submit', ev => {
+  ev.preventDefault();
+  const q = document.getElementById('q').value.trim();
+  const msg = document.getElementById('msg');
+  const m = q.match(/^\s*E?\s*(\d+)\s*[-\s·.\/]*\s*R?\s*(\d+)\s*(?:[-\s·.\/]*\s*C?\s*(\d{1,2})(?:\s*[-\s·.\/]*\s*([A-Ia-i])\s*(\d))?)?\s*$/i);
+  if (!m){ msg.textContent = 'Usa el formato E2-R3-C05 (estante, rack, caja), E2-R3-C05-A1 para una posición o E2-R3 para un rack.'; return; }
+  const e = +m[1], r = +m[2], n = m[3] ? +m[3] : null;
+  const slot = m[4] ? m[4].toUpperCase() + m[5] : null;
+  if (e<1 || e>C.estantes || r<1 || r>C.racks){ msg.textContent = `Hay estantes E1–E${C.estantes} y racks R1–R${C.racks}.`; return; }
+  if (n !== null && (n<1 || n>C.pisos*C.fondo)){ msg.textContent = `Cada rack tiene cajas C01–C${pad2(C.pisos*C.fondo)}.`; return; }
+  if (slot && (+m[5] < 1 || +m[5] > C.grid)){ msg.textContent = 'Las posiciones van de A1 a I9.'; return; }
+  msg.textContent = '';
+  if (n === null) selectRack(e, r); else selectBox(codeOf(e,r,n), true, slot);
+});
+
+/* ---------- Controles HUD ---------- */
+['d0','d1','d2'].forEach((id,i) => document.getElementById(id).addEventListener('click', () => setDoor(i)));
+document.getElementById('xray').addEventListener('change', e => setXray(e.target.checked));
+document.getElementById('extract').addEventListener('change', e => { S.extract = e.target.checked; });
+document.getElementById('reset').addEventListener('click', () => flyTo(HOME.target, HOME.pos, 900));
+window.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (S.boxView){ closeBoxView(); renderPanel(); } else clearSel();
+});
+
+/* ---------- Picking ---------- */
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+const pickables = [...boxMeshes, ...rackParts, ...doorMeshes, ...occluders];
+function pick(cx, cy){
+  const rect = renderer.domElement.getBoundingClientRect();
+  ndc.set(((cx-rect.left)/rect.width)*2-1, -((cy-rect.top)/rect.height)*2+1);
+  ray.setFromCamera(ndc, camera);
+  for (const h of ray.intersectObjects(pickables, false)){
+    const u = h.object.userData;
+    if (S.xray && (u.door || occluders.includes(h.object))) continue;
+    return h.object;
+  }
+  return null;
+}
+const tip = document.getElementById('tip');
+let down = null, moveQueued = null;
+renderer.domElement.addEventListener('pointerdown', e => { down = {x:e.clientX, y:e.clientY}; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!down) return;
+  const moved = Math.hypot(e.clientX-down.x, e.clientY-down.y); down = null;
+  if (moved > 5 || e.button !== 0) return;
+  const o = pick(e.clientX, e.clientY);
+  if (!o){ return; }
+  const u = o.userData;
+  if (u.box) selectBox(u.box.code);
+  else if (u.rack){ const R = racks[u.rack]; selectRack(R.e, R.r); }
+  else if (u.door === 'outer') setDoor(S.door === 0 ? 1 : 0);
+  else if (u.door === 'inner') setDoor(2);
+});
+renderer.domElement.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch') return;
+  moveQueued = {x:e.clientX, y:e.clientY};
+});
+renderer.domElement.addEventListener('pointerleave', () => { moveQueued = null; tip.hidden = true; if (S.hover){ S.hover = null; applyMaterials(); } });
+function handleHover(){
+  if (!moveQueued) return;
+  const {x,y} = moveQueued; moveQueued = null;
+  const o = pick(x, y);
+  const u = o ? o.userData : {};
+  const rect = host.getBoundingClientRect();
+  let hov = null;
+  if (u.box){ hov = u.box.code; tip.innerHTML = `<b>${u.box.code}</b> <span>· P${u.box.piso} · F${u.box.fondo}</span>`; }
+  else if (u.rack){ tip.innerHTML = `<b>${u.rack}</b> <span>· rack</span>`; }
+  else if (u.door){ tip.innerHTML = `<span>${u.door==='outer' ? (S.door===0?'Abrir puerta':'Cerrar puerta') : 'Abrir puertas interiores'}</span>`; }
+  const show = !!(u.box || u.rack || u.door);
+  tip.hidden = !show;
+  if (show){ tip.style.left = (x-rect.left)+'px'; tip.style.top = (y-rect.top)+'px'; }
+  renderer.domElement.style.cursor = show ? 'pointer' : 'grab';
+  if (hov !== S.hover){ S.hover = hov; applyMaterials(); }
+}
+
+/* ---------- Tema ---------- */
+function applyTheme(){
+  const cs = getComputedStyle(document.documentElement);
+  scene.background = new THREE.Color(cs.getPropertyValue('--scene').trim() || '#DBE2E7');
+  const gc = cs.getPropertyValue('--grid').trim() || '#C3CED5';
+  if (grid){ scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+  grid = new THREE.GridHelper(8000, 40, gc, gc);
+  grid.position.y = 0.5;
+  scene.add(grid);
+}
+applyTheme();
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme); } catch(_){}
+new MutationObserver(applyTheme).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => labels.forEach(redraw));
+
+/* ---------- Tamaño y bucle ---------- */
+function resize(){
+  const w = host.clientWidth || 1, h = host.clientHeight || 1;
+  renderer.setSize(w, h, false);
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(host);
+resize();
+const narrow = matchMedia('(max-width:820px)');
+let viewOff = 0;
+
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let last = performance.now();
+function tick(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  const k = reduce ? 1 : 1 - Math.exp(-dt*7);
+  const tOuter = S.door >= 1 ? OUTER_OPEN : 0;
+  const tInner = S.door >= 2 ? INNER_OPEN : 0;
+  // la puerta interior cierra antes; la exterior espera a que cierre
+  ang.inner += (tInner - ang.inner)*k;
+  const innerClosed = Math.abs(ang.inner) < 0.15;
+  const outerGoal = (tOuter === 0 && !innerClosed) ? ang.outer : tOuter;
+  ang.outer += (outerGoal - ang.outer)*k;
+  outer.rotation.y = ang.outer;
+  inner.forEach(g => g.rotation.y = ang.inner);
+
+  // 1) la caja seleccionada sale por el costado cuando el rack ya está afuera;
+  //    un rack no vuelve a entrar mientras tenga una caja afuera
+  for (const key in racks) racks[key].holdOut = false;
+  for (const m of boxMeshes){
+    const b = m.userData.box, R = racks[rackKey(b.e,b.r)];
+    const rackOut = R.group.position.z > R.z + C.extractBy*0.92;
+    const wantX = (b.code === S.box && extActive() && rackOut) ? C.boxSlide : 0;
+    if (wantX || m.position.x !== 0){
+      m.position.x += (wantX - m.position.x)*k;
+      if (!wantX && Math.abs(m.position.x) < 0.5) m.position.x = 0;
+    }
+    if (Math.abs(m.position.x) > 4) R.holdOut = true;
+  }
+  // 2) el rack seleccionado sale completo de la cámara
+  const doorsOpen = ang.inner < INNER_OPEN*0.7;
+  for (const key in racks){
+    const R = racks[key];
+    const out = (extActive() && doorsOpen && key === S.rack) || R.holdOut;
+    const want = R.z + (out ? C.extractBy : 0);
+    R.group.position.z += (want - R.group.position.z)*k;
+  }
+  // 3) con la vista 9×9 abierta, el modelo se corre a la izquierda para no quedar tapado
+  const wantOff = (!bvEl.hidden && !narrow.matches) ? 190 : 0;
+  viewOff += (wantOff - viewOff)*k;
+  if (viewOff > 0.5){
+    const w = host.clientWidth || 1, h = host.clientHeight || 1;
+    camera.setViewOffset(w, h, viewOff, 0, w, h);
+  } else if (camera.view && camera.view.enabled){ camera.clearViewOffset(); }
+
+  if (fly){
+    const t = Math.min(1, (now - fly.t0)/fly.dur), e = reduce ? 1 : 1 - Math.pow(1-t, 3);
+    controls.target.lerpVectors(fly.fT, fly.tT, e);
+    camera.position.lerpVectors(fly.fP, fly.tP, e);
+    if (t >= 1) fly = null;
+  }
+  handleHover();
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+/* Estado inicial de ejemplo: una caja seleccionada para mostrar el flujo */
+selectBox('E2-R3-C05', true);
+requestAnimationFrame(tick);
+})();
+</script>

@@ -1,0 +1,90 @@
+# CI que se adapta a lo que exista: backend Python y/o frontend Node.
+# Los pasos se activan solos cuando los agentes crean los archivos del stack.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: refri
+          POSTGRES_PASSWORD: refri
+          POSTGRES_DB: refri_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U refri"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://refri:refri@localhost:5432/refri_test
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Detectar backend
+        id: det
+        run: |
+          if [ -f backend/pyproject.toml ] || [ -f backend/requirements.txt ]; then
+            echo "existe=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "existe=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Todavía no hay backend; se omite."
+          fi
+
+      - uses: actions/setup-python@v6
+        if: steps.det.outputs.existe == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        if: steps.det.outputs.existe == 'true'
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt
+          elif [ -f requirements.txt ]; then pip install -r requirements.txt pytest
+          else pip install -e ".[dev]"; fi
+
+      - name: Tests
+        if: steps.det.outputs.existe == 'true'
+        working-directory: backend
+        run: python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Detectar frontend
+        id: det
+        run: |
+          if [ -f frontend/package.json ]; then
+            echo "existe=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "existe=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Todavía no hay frontend; se omite."
+          fi
+
+      - uses: actions/setup-node@v5
+        if: steps.det.outputs.existe == 'true'
+        with:
+          node-version: "22"
+
+      - name: Instalar, build y tests
+        if: steps.det.outputs.existe == 'true'
+        working-directory: frontend
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npm run build
+          npm test --if-present
