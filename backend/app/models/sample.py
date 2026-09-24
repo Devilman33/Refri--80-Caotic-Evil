@@ -63,7 +63,7 @@ class Sample(Base):
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     type: Mapped[str] = mapped_column(String(30), nullable=False)
     type_other: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     passage: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_core: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=SampleStatus.ACTIVE.value)
@@ -75,7 +75,7 @@ class Sample(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    owner: Mapped["User | None"] = relationship(foreign_keys=[owner_id])
+    owner: Mapped["User"] = relationship(foreign_keys=[owner_id])
     box: Mapped["Box"] = relationship(back_populates="samples")
     movements: Mapped[list["Movement"]] = relationship(back_populates="sample")
 

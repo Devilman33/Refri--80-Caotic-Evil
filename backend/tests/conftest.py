@@ -17,18 +17,28 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 
 _TABLES = "movements, samples, boxes, racks, sections, users"
 
+# Nombre exacto documentado en README.md y .github/workflows/ci.yml. Un simple
+# substring ("test" in nombre) también aceptaría bases como "contest" o
+# "latest-test"; exigimos el nombre exacto (o el opt-in explícito de abajo)
+# porque este fixture borra el schema "public" completo.
+_TEST_DATABASE_NAME = "refri_test"
+
 
 def _check_is_test_database(database_url: str) -> None:
-    """Corta si `DATABASE_URL` no apunta a una base de test: este fixture
-    borra el schema `public` entero y no debe correr contra la base de
+    """Corta si `DATABASE_URL` no apunta a la base de test documentada: este
+    fixture borra el schema `public` entero y no debe correr contra la base de
     desarrollo/Docker (ver docs/DATOS.md y README, que usan `refri_test`)."""
     database_name = make_url(database_url).database or ""
-    if "test" not in database_name.lower():
-        raise RuntimeError(
-            f"DATABASE_URL apunta a '{database_name}', que no parece una base de test "
-            "(el nombre no contiene 'test'). Los tests borran el schema 'public' completo; "
-            "usá una base separada como 'refri_test' para no perder datos reales."
-        )
+    if database_name == _TEST_DATABASE_NAME:
+        return
+    if os.environ.get("REFRI_ALLOW_DESTRUCTIVE_TESTS") == database_name:
+        return
+    raise RuntimeError(
+        f"DATABASE_URL apunta a '{database_name}', que no es la base de test documentada "
+        f"('{_TEST_DATABASE_NAME}'). Los tests borran el schema 'public' completo; usá "
+        f"'{_TEST_DATABASE_NAME}' o, si es intencional, exportá "
+        f"REFRI_ALLOW_DESTRUCTIVE_TESTS='{database_name}' para confirmarlo explícitamente."
+    )
 
 
 def _alembic_config() -> Config:

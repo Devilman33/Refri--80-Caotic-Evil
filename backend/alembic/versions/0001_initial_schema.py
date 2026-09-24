@@ -68,7 +68,7 @@ def upgrade() -> None:
         sa.Column("description", sa.String(length=255), nullable=True),
         sa.Column("type", sa.String(length=30), nullable=False),
         sa.Column("type_other", sa.String(length=120), nullable=True),
-        sa.Column("owner_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=True),
+        sa.Column("owner_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("passage", sa.Integer(), nullable=True),
         sa.Column("is_core", sa.Boolean(), nullable=True),
         sa.Column("status", sa.String(length=20), nullable=False, server_default="active"),
