@@ -126,6 +126,17 @@ jobs:
             echo "correr=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # El parser de las reviews de Copilot vive en main; se copia fuera del workspace porque
+      # el checkout de la rama del PR (más abajo) limpia el directorio de trabajo.
+      - uses: actions/checkout@v5
+        if: steps.ctx.outputs.correr == 'true'
+        with:
+          path: _bucle
+          sparse-checkout: .github/scripts
+      - name: Preparar parser de reviews
+        if: steps.ctx.outputs.correr == 'true'
+        run: cp _bucle/.github/scripts/hallazgos_copilot.py "$RUNNER_TEMP/hallazgos_copilot.py"
+
       - name: Esperar la review de Copilot sobre el último commit
         id: espera
         if: steps.ctx.outputs.correr == 'true'
@@ -174,38 +185,10 @@ jobs:
           ITER: ${{ steps.ctx.outputs.iter }}
         run: |
           set -euo pipefail
-          # Escribe pendientes.md (solo High) y abiertos.md (todo lo abierto, con enlace), e
-          # imprime "<high> <otros>". -1 = formato de review desconocido.
-          read -r high otros < <(python3 - "$RUNNER_TEMP/review.md" "$RUNNER_TEMP/pendientes.md" \
-                                   "$RUNNER_TEMP/abiertos.md" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pull/$PR" <<'PY'
-          import re, sys
-          cuerpo = open(sys.argv[1], encoding="utf-8").read()
-          url_pr = sys.argv[4]
-          graves, todos = [], []
-          bloque = re.search(r"<summary><strong>Open \(\d+\)</strong></summary>(.*?)</details>", cuerpo, re.S)
-          if bloque:
-              for linea in bloque.group(1).splitlines():
-                  linea = linea.strip()
-                  if not linea.startswith("- "):
-                      continue
-                  sev = re.search(r'alt="(\w+) severity"', linea)
-                  sev = sev.group(1) if sev else "?"
-                  enlace = re.search(r"\]\((#[^)]*)\)", linea)
-                  texto = re.sub(r"<[^>]+>", "", linea[2:])
-                  texto = re.sub(r"\]\(#[^)]*\)", "]", texto).replace("· New", "").strip()
-                  item = f"**{sev}** {texto}" + (f" ({url_pr}{enlace.group(1)})" if enlace else "")
-                  todos.append(item)
-                  if sev in ("High", "Critical"):
-                      graves.append(item)
-              print(len(graves), len(todos) - len(graves))
-          elif "ccr-overview" in cuerpo:
-              print(0, 0)   # resumen de Copilot sin hallazgos abiertos
-          else:
-              print(-1, 0)  # formato desconocido: se decide por los comentarios en línea
-          open(sys.argv[2], "w", encoding="utf-8").writelines(f"- {g}\n" for g in graves)
-          open(sys.argv[3], "w", encoding="utf-8").writelines(f"- {t}\n" for t in todos)
-          PY
-          )
+          # Cuenta los hallazgos abiertos de la última review ("Open" y "Previously missed").
+          read -r high otros < <(python3 "$RUNNER_TEMP/hallazgos_copilot.py" ultima "$RUNNER_TEMP/review.md" \
+                                   "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pull/$PR" \
+                                   "$RUNNER_TEMP/pendientes.md" "$RUNNER_TEMP/abiertos.md")
           if [ "$high" -lt 0 ]; then
             en_linea=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews/$REVIEW_ID/comments" --jq length)
             if [ "$en_linea" -eq 0 ]; then high=0; fi
@@ -316,15 +299,20 @@ jobs:
           # workflows) y se neutraliza cualquier "@claude" para que no lance nada.
           anotar_revision_final() {
             local abiertos diferidos cierra
-            abiertos=$(cat "$RUNNER_TEMP/abiertos.md" 2>/dev/null || true)
+            # Todo lo que Copilot reportó en cualquier review del PR y nunca marcó como resuelto.
+            gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews" \
+              | jq -s '[.[][] | select(.user.login | test("copilot"; "i"))]' > "$RUNNER_TEMP/reviews.json"
+            python3 "$RUNNER_TEMP/hallazgos_copilot.py" acumulado "$RUNNER_TEMP/reviews.json" \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pull/$PR" "$RUNNER_TEMP/acumulado.md"
+            abiertos=$(cat "$RUNNER_TEMP/acumulado.md")
             diferidos=$(jq -r '.diferidos // [] | .[] | "- \(.)"' <<<"$RESULTADO")
             [ -z "$abiertos$diferidos" ] && return 0
             cierra=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json closingIssuesReferences -q '[.closingIssuesReferences[].number | tostring] | join(" ")')
             if [[ " $cierra " == *" $ISSUE_REVISION_FINAL "* ]]; then return 0; fi
             {
               printf '### Pendientes del PR #%s para la revisión final\n\n' "$PR"
-              printf 'Hallazgos de Copilot que quedaron sin arreglar al mergear. Al implementar este issue, revisa cada uno y corrige los que sigan vigentes.\n\n'
-              if [ -n "$abiertos" ]; then printf '**Abiertos en la última review de Copilot:**\n%s\n\n' "$abiertos"; fi
+              printf 'Hallazgos de Copilot que quedaron sin arreglar al mergear. Al implementar este issue, revisa cada uno y corrige los que sigan vigentes (algunos pueden haberse arreglado sin que Copilot lo marcara).\n\n'
+              if [ -n "$abiertos" ]; then printf '**Reportados por Copilot y no marcados como resueltos:**\n%s\n\n' "$abiertos"; fi
               if [ -n "$diferidos" ]; then printf '**Diferidos por Claude (con su motivo):**\n%s\n' "$diferidos"; fi
             } | sed 's/@claude/Claude/Ig; s/@copilot/Copilot/Ig' > "$RUNNER_TEMP/revision_final.md"
             gh issue comment "$ISSUE_REVISION_FINAL" -R "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/revision_final.md" \

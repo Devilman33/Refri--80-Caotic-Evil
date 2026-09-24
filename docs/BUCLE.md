@@ -35,8 +35,10 @@ La decisión se toma **sin llamar a Claude**: el workflow lee el resumen de la r
 | CI en rojo | Nunca se mergea: `bucle:requiere-humano` y la cadena se detiene | No |
 
 **Nada se pierde:** al mergear, el workflow comenta en el issue de revisión final
-(`ISSUE_REVISION_FINAL`, por defecto el **#8**) la lista de hallazgos que siguen abiertos en la
-última review de Copilot, con enlace a cada uno, más los que Claude difirió y su motivo. Cuando la
+(`ISSUE_REVISION_FINAL`, por defecto el **#8**) todo lo que Copilot reportó en **cualquier**
+review del PR y nunca marcó como resuelto (secciones *Open* y *Previously missed*), con enlace o
+archivo:línea, más lo que Claude difirió y su motivo. El parser está en
+`.github/scripts/hallazgos_copilot.py`. Cuando la
 cadena llega al #8, Claude los ve en los comentarios del issue y los resuelve en esa revisión final.
 Esto no gasta tokens: lo publica el propio workflow.
 
