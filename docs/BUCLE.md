@@ -1,7 +1,7 @@
 # Bucle Copilot ⇄ Claude
 
 Dos agentes trabajan en bucle sobre los issues del proyecto. Uno implementa y el otro revisa,
-hasta que el PR queda aprobado o se alcanza el límite de iteraciones (5 por defecto).
+hasta que el PR queda aprobado o se alcanza el límite de iteraciones (3 por defecto).
 
 | Bucle | Implementa | Revisa | Cómo se inicia |
 |---|---|---|---|
@@ -13,11 +13,27 @@ Bucle A:  issue ─► Copilot abre PR ─► Claude revisa ─┬─ aprueba �
                         ▲                            └─ pide cambios ─► comenta "@copilot ..." ─┐
                         └───────────────────────────────────────────────────────────────────────┘
 
-Bucle B:  issue ─► @claude abre PR ─► Copilot revisa ─► Claude corrige y hace push ─┐
-                                          ▲                                          │
-                                          └──────────────────────────────────────────┘
-          (termina cuando Claude no necesita cambiar nada ─► bucle:aprobado)
+Bucle B:  issue ─► @claude abre PR ─► Copilot revisa ─┬─ sin High ─────────────► CI verde ─► merge
+                                          ▲             ├─ con High (ronda < 3) ─► Claude corrige y hace push ─┐
+                                          │             └─ con High (ronda = 3) ─► merge + bucle:revisar-despues
+                                          └────────────────────────────────────────────────────────────────────┘
 ```
+
+### Cuándo para el Bucle B (para no gastar la suscripción de Claude)
+
+La decisión se toma **sin llamar a Claude**: el workflow lee el resumen de la review de Copilot
+("Open (N)") y cuenta los hallazgos abiertos de severidad **High o Critical**.
+
+| Review de Copilot | Qué pasa | ¿Gasta Claude? |
+|---|---|---|
+| Sin High/Critical abiertos (solo Medium, Low o nada) | Espera la CI y mergea | No |
+| Con High y quedan rondas (`MAX_ITERACIONES`, 3) | Claude corrige **solo** los High (y Medium de pocas líneas), máx. 40 turnos | Sí, una ronda |
+| Claude concluye que los High son falsos positivos | No hace commits: se mergea | — |
+| Con High tras 3 rondas | `AL_LIMITE: mergear` → mergea y etiqueta `bucle:revisar-despues` con la lista de pendientes. `AL_LIMITE: detener` → se detiene con `bucle:requiere-humano` | No |
+| CI en rojo | Nunca se mergea: `bucle:requiere-humano` y la cadena se detiene | No |
+
+En el peor caso, un issue cuesta 1 implementación + 3 rondas de corrección. Las reviews las hace
+Copilot (se cobran de sus premium requests, no de Claude).
 
 El Bucle B **no** escucha el evento de la review de Copilot: GitHub deja esas ejecuciones en
 *action_required* (hay que pulsar *Approve and run* a mano) porque las dispara un bot. En su lugar,
@@ -26,8 +42,12 @@ Copilot publique su review sobre ese commit y recién ahí llama a Claude. Solo 
 `claude/*` que cierren algún issue (`Closes #N`).
 
 Etiquetas:
-- `bucle:aprobado`: el revisor ya no pide cambios.
-- `bucle:requiere-humano`: se alcanzó el límite de iteraciones o algo falló.
+- `bucle:aprobado`: el revisor ya no pide cambios (o no quedan hallazgos graves).
+- `bucle:revisar-despues`: se mergeó al llegar al límite con hallazgos High abiertos; revísalos cuando puedas.
+- `bucle:requiere-humano`: la CI falló, algo se rompió o (Bucle A) se alcanzó el límite.
+
+En el Bucle A, Claude solo pide cambios por problemas graves (bugs, tests rotos, trazabilidad,
+seguridad) y aprueba lo demás; en la última revisión aprueba si solo quedan detalles.
 
 ## Cadena automática (`cadena.yml`)
 
@@ -118,7 +138,8 @@ en vez de como el dueño del token.
 - **Pedirle algo a Claude en un PR:** escribe `@claude ...` en la conversación del PR. Los
   comentarios en línea (de review) ya no lo invocan.
 - **Relanzar a mano:** *Actions → (workflow del bucle) → Run workflow → número del PR*.
-- **Ajustar el límite:** cambia `MAX_ITERACIONES` al inicio de cada workflow.
+- **Ajustar el límite:** cambia `MAX_ITERACIONES` al inicio de cada workflow. En el Bucle B,
+  `AL_LIMITE` decide si al llegar al límite se mergea (`mergear`) o se detiene (`detener`).
 - **Sacar un PR del bucle A:** quita la etiqueta `bucle` o cierra el PR.
   Un PR que no sea de Copilot entra al bucle A si le pones la etiqueta `bucle`.
 

@@ -5,10 +5,15 @@
 # 3. Cada vez que el PR se abre o recibe un push, `despachar` relanza este workflow con BUCLE_PAT.
 #    No se escucha `pull_request_review`: los eventos que genera el bot de Copilot quedan en
 #    "action_required" (esperando que alguien pulse *Approve and run*) y el bucle se trababa.
-# 4. `corregir` espera a que Copilot publique su review sobre el último commit, Claude atiende
-#    los comentarios y se hace push con BUCLE_PAT (un push con GITHUB_TOKEN no dispararía ni
-#    la CI ni este mismo workflow).
-# 5. Se detiene cuando Claude no necesita cambiar nada o al llegar a MAX_ITERACIONES.
+# 4. `corregir` espera a que Copilot publique su review sobre el último commit y decide SIN gastar
+#    tokens de Claude:
+#    - sin hallazgos High/Critical abiertos  -> espera la CI y mergea;
+#    - con hallazgos High y rondas disponibles -> Claude corrige solo eso y hace push con BUCLE_PAT
+#      (un push con GITHUB_TOKEN no dispararía ni la CI ni este mismo workflow);
+#    - con hallazgos High y sin rondas         -> según AL_LIMITE, mergea con la etiqueta
+#      bucle:revisar-despues o se detiene con bucle:requiere-humano.
+#    Si Claude revisa los High y concluye que no hay nada que cambiar, también se mergea.
+# 5. El CI en rojo nunca se mergea: el PR queda con bucle:requiere-humano y la cadena se detiene.
 name: "Bucle B · Claude implementa → Copilot revisa"
 
 on:
@@ -22,7 +27,12 @@ on:
         type: number
 
 env:
-  MAX_ITERACIONES: "5"
+  # Rondas de corrección de Claude por PR. Cada ronda consume tokens de la suscripción.
+  MAX_ITERACIONES: "3"
+  # Qué hacer si tras MAX_ITERACIONES siguen abiertos hallazgos High:
+  #   mergear  -> mergea igual (si la CI está en verde) y etiqueta bucle:revisar-despues
+  #   detener  -> no mergea y etiqueta bucle:requiere-humano (la cadena se detiene)
+  AL_LIMITE: "mergear"
   MARCA: "<!-- bucle-b:correccion-claude"
   # Minutos que se espera la review de Copilot antes de pedir ayuda humana.
   ESPERA_REVIEW_MIN: "30"
@@ -109,11 +119,6 @@ jobs:
           if [ "$ya_atendido" -gt 0 ]; then
             echo "La review del commit $sha ya fue atendida; se omite."
             echo "correr=false" >> "$GITHUB_OUTPUT"
-          elif [ "$iter" -ge "$MAX_ITERACIONES" ]; then
-            gh label create "bucle:requiere-humano" -R "$GITHUB_REPOSITORY" --color d73a4a --description "El bucle agente se detuvo" --force
-            gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:requiere-humano"
-            gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Bucle detenido: se alcanzó el máximo de $MAX_ITERACIONES rondas de corrección. Requiere revisión humana."
-            echo "correr=false" >> "$GITHUB_OUTPUT"
           else
             echo "correr=true" >> "$GITHUB_OUTPUT"
           fi
@@ -135,10 +140,12 @@ jobs:
               echo "listo=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            n=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews" \
-                  | jq -s --arg s "$SHA" '[.[][] | select((.user.login | test("copilot"; "i")) and .commit_id == $s)] | length')
-            if [ "$n" -gt 0 ]; then
+            review=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews" \
+                       | jq -s --arg s "$SHA" '[.[][] | select((.user.login | test("copilot"; "i")) and .commit_id == $s)] | last // empty')
+            if [ -n "$review" ]; then
               echo "Copilot ya revisó $SHA."
+              jq -r '.body // ""' <<<"$review" > "$RUNNER_TEMP/review.md"
+              echo "review_id=$(jq -r .id <<<"$review")" >> "$GITHUB_OUTPUT"
               echo "listo=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -152,29 +159,82 @@ jobs:
             sleep 30
           done
 
-      - uses: actions/checkout@v5
+      # Decide sin llamar a Claude. Lee el resumen que Copilot pone en su review
+      # ("Open (N)" con la severidad de cada hallazgo abierto) y cuenta los High/Critical.
+      - name: Evaluar severidad de la review
+        id: eval
         if: steps.espera.outputs.listo == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr_number }}
+          REVIEW_ID: ${{ steps.espera.outputs.review_id }}
+          ITER: ${{ steps.ctx.outputs.iter }}
+        run: |
+          set -euo pipefail
+          high=$(python3 - "$RUNNER_TEMP/review.md" "$RUNNER_TEMP/pendientes.md" <<'PY'
+          import re, sys
+          cuerpo = open(sys.argv[1], encoding="utf-8").read()
+          graves = []
+          bloque = re.search(r"<summary><strong>Open \(\d+\)</strong></summary>(.*?)</details>", cuerpo, re.S)
+          if bloque:
+              for linea in bloque.group(1).splitlines():
+                  linea = linea.strip()
+                  if linea.startswith("- ") and re.search(r'alt="(High|Critical) severity"', linea):
+                      texto = re.sub(r"<[^>]+>", "", linea[2:])
+                      texto = re.sub(r"\]\(#[^)]*\)", "]", texto).strip()
+                      graves.append(texto)
+              print(len(graves))
+          elif "ccr-overview" in cuerpo:
+              print(0)   # resumen de Copilot sin hallazgos abiertos
+          else:
+              print(-1)  # formato desconocido: se decide por los comentarios en línea
+          with open(sys.argv[2], "w", encoding="utf-8") as f:
+              f.writelines(f"- {g}\n" for g in graves)
+          PY
+          )
+          if [ "$high" -lt 0 ]; then
+            en_linea=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews/$REVIEW_ID/comments" --jq length)
+            if [ "$en_linea" -eq 0 ]; then high=0; fi
+            echo "Formato de review no reconocido; comentarios en línea: $en_linea"
+          fi
+          echo "Hallazgos High/Critical abiertos: $high (ronda $ITER de $MAX_ITERACIONES)"
+          echo "high=$high" >> "$GITHUB_OUTPUT"
+
+          if [ "$high" -eq 0 ]; then
+            accion=mergear
+          elif [ "$ITER" -lt "$MAX_ITERACIONES" ]; then
+            accion=corregir
+          elif [ "$AL_LIMITE" = "mergear" ]; then
+            accion=mergear_con_pendientes
+          else
+            accion=detener
+          fi
+          echo "Acción: $accion"
+          echo "accion=$accion" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v5
+        if: steps.eval.outputs.accion == 'corregir'
         with:
           ref: ${{ steps.ctx.outputs.rama }}
           fetch-depth: 0
 
       - uses: actions/setup-python@v6
-        if: steps.espera.outputs.listo == 'true'
+        if: steps.eval.outputs.accion == 'corregir'
         with:
           python-version: "3.12"
 
       - uses: actions/setup-node@v5
-        if: steps.espera.outputs.listo == 'true'
+        if: steps.eval.outputs.accion == 'corregir'
         with:
           node-version: "22"
 
       - name: Commit inicial
-        if: steps.espera.outputs.listo == 'true'
+        if: steps.eval.outputs.accion == 'corregir'
         run: git rev-parse HEAD > "$RUNNER_TEMP/sha_inicial"
 
-      - name: Claude atiende la revisión de Copilot
+      - name: Claude corrige los hallazgos graves
         id: claude
-        if: steps.espera.outputs.listo == 'true'
+        if: steps.eval.outputs.accion == 'corregir'
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ github.token }}
@@ -184,29 +244,31 @@ jobs:
           github_token: ${{ github.token }}
           prompt: |
             Eres el autor del PR #${{ inputs.pr_number }} en ${{ github.repository }} (rama ${{ steps.ctx.outputs.rama }}).
-            GitHub Copilot lo revisó. Esta es la ronda ${{ steps.ctx.outputs.iter }} (máximo ${{ env.MAX_ITERACIONES }}).
+            GitHub Copilot lo revisó y dejó ${{ steps.eval.outputs.high }} hallazgo(s) de severidad High/Critical.
+            Ronda ${{ steps.ctx.outputs.iter }} de un máximo de ${{ env.MAX_ITERACIONES }}. Sé eficiente: cada ronda consume presupuesto.
 
             1. Lee CLAUDE.md y requirements.md.
-            2. Lee las reviews y los comentarios en línea de Copilot:
-               `gh api repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}/reviews`
+            2. Lee la review del commit ${{ steps.ctx.outputs.sha }} y sus comentarios en línea:
+               `gh api repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}/reviews/${{ steps.espera.outputs.review_id }}`
                `gh api repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}/comments`
-               Céntrate en la review del commit ${{ steps.ctx.outputs.sha }}.
-            3. Aplica las sugerencias correctas. Descarta las incorrectas o que contradigan
-               requirements.md y explica por qué en el resumen.
-            4. Ejecuta los tests o el build si existen. Hay un Postgres listo en DATABASE_URL.
-            5. Haz commit de tus cambios con git add + git commit (mensaje en español). NO hagas push:
-               el workflow lo hace después.
-            Si no hay nada que corregir, no hagas commits.
+            3. Corrige SOLO los hallazgos High/Critical que sean reales. Un Medium solo si el arreglo es
+               de pocas líneas. Ignora Low, nits, estilo y refactors: no son motivo para otra ronda.
+            4. Si un High es un falso positivo o contradice requirements.md, NO lo cambies: explícalo en
+               `descartados`. Si todos lo son, no hagas commits y el PR se mergeará.
+            5. Corre los tests afectados (hay un Postgres listo en DATABASE_URL).
+            6. Haz commit con git add + git commit (mensaje en español). NO hagas push: lo hace el workflow.
           claude_args: |
-            --max-turns 80
+            --max-turns 40
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api repos/${{ github.repository }}/pulls/*),Bash(git add:*),Bash(git commit:*),Bash(git diff:*),Bash(git log:*),Bash(git status:*),Bash(ls:*),Bash(cd:*),Bash(npm ci:*),Bash(npm install:*),Bash(npm run:*),Bash(npm test:*),Bash(npx:*),Bash(pip install:*),Bash(python:*),Bash(python -m pytest:*),Bash(pytest:*),Bash(alembic:*)"
             --json-schema '{"type":"object","properties":{"resumen":{"type":"string"},"descartados":{"type":"array","items":{"type":"string"}}},"required":["resumen","descartados"]}'
 
-      - name: Push y resumen
-        if: always() && steps.espera.outputs.listo == 'true'
+      - name: Push, merge y resumen
+        if: always() && steps.eval.outputs.accion != ''
         env:
           GH_TOKEN: ${{ github.token }}
           BUCLE_PAT: ${{ secrets.BUCLE_PAT }}
+          ACCION: ${{ steps.eval.outputs.accion }}
+          HIGH: ${{ steps.eval.outputs.high }}
           RESULTADO: ${{ steps.claude.outputs.structured_output }}
           RESULTADO_CLAUDE: ${{ steps.claude.outcome }}
           PR: ${{ inputs.pr_number }}
@@ -216,55 +278,79 @@ jobs:
         run: |
           set -euo pipefail
           n=$((ITER + 1))
-          gh label create "bucle:aprobado" -R "$GITHUB_REPOSITORY" --color 2ea44f --description "Claude aprobó el PR" --force
+          gh label create "bucle:aprobado" -R "$GITHUB_REPOSITORY" --color 2ea44f --description "El bucle terminó sin hallazgos graves" --force
           gh label create "bucle:requiere-humano" -R "$GITHUB_REPOSITORY" --color d73a4a --description "El bucle agente se detuvo" --force
-
-          if [ "$RESULTADO_CLAUDE" != "success" ]; then
-            gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:requiere-humano"
-            gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Claude falló al atender la revisión de Copilot. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            exit 1
-          fi
-
+          gh label create "bucle:revisar-despues" -R "$GITHUB_REPOSITORY" --color fbca04 --description "Mergeado con hallazgos High sin resolver" --force
           if [ -z "$RESULTADO" ]; then RESULTADO='{}'; fi
-          resumen=$(jq -r '.resumen // "(sin resumen)"' <<<"$RESULTADO")
+          resumen=""
+          pendientes=$(cat "$RUNNER_TEMP/pendientes.md" 2>/dev/null || true)
 
-          if [ "$(git rev-parse HEAD)" != "$(cat "$RUNNER_TEMP/sha_inicial")" ]; then
-            if [ -z "${BUCLE_PAT:-}" ]; then
-              echo "::error::Falta el secret BUCLE_PAT: sin él el push no dispara la CI ni la siguiente ronda."
-              exit 1
-            fi
-            # claude-code-action deja el remoto `origin` autenticado con GITHUB_TOKEN, y un push
-            # con ese token no dispara workflows. Por eso se empuja explícitamente con BUCLE_PAT.
-            git push "https://x-access-token:${BUCLE_PAT}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$RAMA"
-            titulo="### 🔁 Claude atendió la revisión de Copilot (ronda $n/$MAX_ITERACIONES)"
-          else
-            gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:aprobado"
-            titulo="### ✅ Sin cambios pendientes tras la revisión de Copilot: bucle terminado"
-
-            # Merge automático. Se hace con BUCLE_PAT y no con GITHUB_TOKEN porque los
-            # eventos generados por GITHUB_TOKEN no disparan workflows nuevos, y cadena.yml
-            # escucha justamente el `closed` de este merge.
+          # Merge automático con BUCLE_PAT (no GITHUB_TOKEN): cadena.yml escucha el `closed`
+          # de este merge y los eventos de GITHUB_TOKEN no disparan workflows.
+          mergear() {
             if [ -z "${BUCLE_PAT:-}" ]; then
               echo "::warning::Sin BUCLE_PAT no se puede mergear automáticamente."
-            elif GH_TOKEN="$BUCLE_PAT" gh pr checks "$PR" -R "$GITHUB_REPOSITORY" --watch --fail-fast; then
-              GH_TOKEN="$BUCLE_PAT" gh pr ready "$PR" -R "$GITHUB_REPOSITORY" || true
-              if GH_TOKEN="$BUCLE_PAT" gh pr merge "$PR" -R "$GITHUB_REPOSITORY" --squash --delete-branch; then
-                titulo="### ✅ Aprobado y mergeado automáticamente"
-              else
-                gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:requiere-humano"
-                titulo="### ⚠️ Aprobado por el bucle, pero GitHub rechazó el merge (¿el ruleset exige aprobaciones?). Revisa el log del run."
-              fi
+              titulo="### ⚠️ $1, pero falta BUCLE_PAT para mergear"
+              return
+            fi
+            if ! GH_TOKEN="$BUCLE_PAT" gh pr checks "$PR" -R "$GITHUB_REPOSITORY" --watch --fail-fast; then
+              gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:requiere-humano"
+              titulo="### ⚠️ $1, pero el CI quedó en rojo: no se mergeó"
+              return
+            fi
+            GH_TOKEN="$BUCLE_PAT" gh pr ready "$PR" -R "$GITHUB_REPOSITORY" || true
+            if GH_TOKEN="$BUCLE_PAT" gh pr merge "$PR" -R "$GITHUB_REPOSITORY" --squash --delete-branch; then
+              titulo="### ✅ $1: mergeado automáticamente"
             else
               gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:requiere-humano"
-              titulo="### ⚠️ Aprobado por el bucle, pero el CI quedó en rojo: no se mergeó"
+              titulo="### ⚠️ $1, pero GitHub rechazó el merge (¿el ruleset exige aprobaciones?). Revisa el log del run."
             fi
-          fi
+          }
+
+          case "$ACCION" in
+            corregir)
+              if [ "$RESULTADO_CLAUDE" != "success" ]; then
+                gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:requiere-humano"
+                gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Claude falló al atender la revisión de Copilot. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+                exit 1
+              fi
+              resumen=$(jq -r '.resumen // "(sin resumen)"' <<<"$RESULTADO")
+              if [ "$(git rev-parse HEAD)" != "$(cat "$RUNNER_TEMP/sha_inicial")" ]; then
+                if [ -z "${BUCLE_PAT:-}" ]; then
+                  echo "::error::Falta el secret BUCLE_PAT: sin él el push no dispara la CI ni la siguiente ronda."
+                  exit 1
+                fi
+                # claude-code-action deja `origin` autenticado con GITHUB_TOKEN, y un push con ese
+                # token no dispara workflows. Por eso se empuja explícitamente con BUCLE_PAT.
+                git push "https://x-access-token:${BUCLE_PAT}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$RAMA"
+                titulo="### 🔁 Claude corrigió $HIGH hallazgo(s) High de Copilot (ronda $n/$MAX_ITERACIONES)"
+              else
+                gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:aprobado"
+                mergear "Claude revisó los hallazgos High y no requieren cambios"
+              fi
+              ;;
+            mergear)
+              gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:aprobado"
+              resumen="La review de Copilot no tiene hallazgos High/Critical abiertos; lo menor queda como sugerencia."
+              mergear "Sin hallazgos graves"
+              ;;
+            mergear_con_pendientes)
+              gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:revisar-despues"
+              resumen=$(printf 'Se alcanzó el máximo de %s rondas y siguen abiertos estos hallazgos High (revísalos después):\n\n%s' "$MAX_ITERACIONES" "$pendientes")
+              mergear "Límite de rondas alcanzado"
+              ;;
+            detener)
+              gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:requiere-humano"
+              resumen=$(printf 'Siguen abiertos estos hallazgos High:\n\n%s' "$pendientes")
+              titulo="### 🛑 Bucle detenido: $MAX_ITERACIONES rondas sin resolver los hallazgos High. Requiere revisión humana."
+              ;;
+          esac
 
           {
             printf '%s sha=%s ronda=%s -->\n%s\n\n%s\n' "$MARCA" "$SHA" "$n" "$titulo" "$resumen"
             if [ "$(jq '.descartados // [] | length' <<<"$RESULTADO")" -gt 0 ]; then
-              printf '\n**Sugerencias descartadas:**\n'
+              printf '\n**Hallazgos descartados por Claude:**\n'
               jq -r '.descartados[] | "- \(.)"' <<<"$RESULTADO"
             fi
-          } > cuerpo.md
-          gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body-file cuerpo.md
+          } > "$RUNNER_TEMP/cuerpo.md"
+          gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/cuerpo.md"

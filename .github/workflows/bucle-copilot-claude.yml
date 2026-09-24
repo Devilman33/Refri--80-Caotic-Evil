@@ -20,7 +20,8 @@ on:
         type: number
 
 env:
-  MAX_ITERACIONES: "5"
+  # Revisiones de Claude por PR. Cada una consume tokens de la suscripción.
+  MAX_ITERACIONES: "3"
   MARCA: "<!-- bucle-a:revision-claude"
 
 jobs:
@@ -143,13 +144,17 @@ jobs:
             4. Verifica: que cumpla lo que pide el issue, bugs, pérdida de trazabilidad (las muestras
                retiradas NUNCA se borran), seguridad, tests faltantes y coherencia con el stack de CLAUDE.md.
 
-            Veredicto:
-            - "aprobar" si el PR cumple su objetivo y no tiene errores que bloqueen. No bloquees por estilo.
-            - "cambios" si hay algo que corregir. Cada elemento de cambios_requeridos debe ser una
-              instrucción concreta y accionable para Copilot (archivo, problema y cómo arreglarlo).
+            Veredicto (sé eficiente: cada revisión consume presupuesto):
+            - "cambios" SOLO si hay problemas graves: bugs que rompen lo que pide el issue, tests o build
+              que fallan, pérdida de trazabilidad, borrado de muestras o fallas de seguridad.
+              Cada elemento de cambios_requeridos debe ser una instrucción concreta y accionable para
+              Copilot (archivo, problema y cómo arreglarlo). No incluyas mejoras menores.
+            - "aprobar" en cualquier otro caso. Estilo, nombres, refactors y mejoras opcionales NO bloquean:
+              menciónalos en el resumen como sugerencias.
+            - Si es la última iteración y solo quedan detalles menores, aprueba.
             Escribe el resumen y los cambios en español.
           claude_args: |
-            --max-turns 60
+            --max-turns 40
             --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(git status:*),Bash(ls:*),Bash(cd:*),Bash(npm ci:*),Bash(npm install:*),Bash(npm run:*),Bash(npm test:*),Bash(npx:*),Bash(pip install:*),Bash(python:*),Bash(python -m pytest:*),Bash(pytest:*),Bash(alembic:*)"
             --json-schema '{"type":"object","properties":{"veredicto":{"type":"string","enum":["aprobar","cambios"]},"resumen":{"type":"string"},"cambios_requeridos":{"type":"array","items":{"type":"string"}}},"required":["veredicto","resumen","cambios_requeridos"]}'
 
