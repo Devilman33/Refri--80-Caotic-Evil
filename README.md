@@ -18,7 +18,17 @@ siguen ambos están en [`.github/copilot-instructions.md`](.github/copilot-instr
 ## Datos reales
 
 El Excel del laboratorio **no se versiona**. Déjalo en `Data/` (carpeta ignorada por git) y
-cárgalo con el importador cuando exista (ver `docs/DATOS.md`).
+cárgalo con el importador (ver `docs/DATOS.md`):
+
+```bash
+cd backend
+python -m app.importer "../Data/Inventario Freezer -80 Environ (Nucleo).xlsx" --dry-run  # simula, sin escribir
+python -m app.importer "../Data/Inventario Freezer -80 Environ (Nucleo).xlsx"             # importa de verdad
+```
+
+Es idempotente (reimportar el mismo archivo no duplica) y nunca aborta por una fila mala: al
+terminar deja un reporte de anomalías en `<ruta>.anomalias.csv` (fila, columna, valor original,
+motivo) para que el laboratorio las corrija.
 
 ## Cómo levantar el proyecto
 

@@ -61,6 +61,9 @@ class Sample(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     environ_id: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Número de fila del Excel de origen cuando la muestra viene del importador
+    # (docs/DATOS.md). Permite reimportar el mismo archivo sin duplicar (issue #2).
+    source_row: Mapped[int | None] = mapped_column(Integer, nullable=True, unique=True)
     type: Mapped[str] = mapped_column(String(30), nullable=False)
     type_other: Mapped[str | None] = mapped_column(String(120), nullable=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
