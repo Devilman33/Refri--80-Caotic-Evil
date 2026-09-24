@@ -1,0 +1,82 @@
+# Cadena secuencial: cuando un PR se mergea, cierra su issue y lanza el siguiente.
+#
+# Se dispara con el evento `closed` del PR. Para que llegue hasta aquí, el merge
+# tiene que hacerlo una persona o BUCLE_PAT: los eventos generados con GITHUB_TOKEN
+# no disparan workflows nuevos.
+#
+# Cada issue lanzado queda marcado con MARCA en su comentario, así la cadena nunca
+# vuelve a lanzar el mismo issue aunque su PR se mergee sin cerrarlo.
+name: "Cadena · siguiente issue"
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions: {}
+
+concurrency:
+  group: cadena
+  cancel-in-progress: false
+
+env:
+  MARCA: "<!-- cadena:lanzado -->"
+
+jobs:
+  siguiente:
+    # Solo avanzan la cadena los PR de implementación de Claude. Así un PR de
+    # configuración o un hotfix mergeado a mano no lanza el siguiente issue.
+    if: >-
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'claude/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Cerrar el issue implementado y lanzar el siguiente
+        env:
+          GH_TOKEN: ${{ secrets.BUCLE_PAT }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::Falta el secret BUCLE_PAT (ver docs/BUCLE.md)"
+            exit 1
+          fi
+
+          # 1. Cerrar los issues que el PR declaró resolver.
+          cerrados=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" \
+                       --json closingIssuesReferences \
+                       --jq '.closingIssuesReferences[].number' || true)
+          for i in $cerrados; do
+            echo "Cerrando issue #$i (resuelto por el PR #$PR)"
+            gh issue close "$i" -R "$GITHUB_REPOSITORY" \
+              --comment "Implementado y mergeado en el PR #$PR." || true
+          done
+
+          # 2. Siguiente issue de la serie [n/m] que la cadena no haya lanzado aún.
+          pendientes=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --limit 100 \
+                         --json number,title \
+                         --jq '[.[] | select(.title | test("^\[[0-9]+/[0-9]+\]"))]
+                               | sort_by(.number) | .[].number')
+
+          siguiente=""
+          for n in $pendientes; do
+            cuerpos=$(gh issue view "$n" -R "$GITHUB_REPOSITORY" \
+                        --json comments --jq '.comments[].body' || true)
+            if printf '%s' "$cuerpos" | grep -qF "$MARCA"; then
+              echo "Issue #$n ya fue lanzado por la cadena; se omite."
+              continue
+            fi
+            siguiente="$n"
+            break
+          done
+
+          if [ -z "$siguiente" ]; then
+            echo "::notice::No quedan issues pendientes. Cadena terminada."
+            exit 0
+          fi
+
+          # 3. Lanzar Claude sobre el siguiente issue.
+          echo "Lanzando el issue #$siguiente"
+          gh issue comment "$siguiente" -R "$GITHUB_REPOSITORY" \
+            --body "$(printf '@claude implementa este issue\n\n%s\n' "$MARCA")"

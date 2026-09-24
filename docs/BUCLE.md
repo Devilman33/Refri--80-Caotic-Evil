@@ -19,9 +19,40 @@ Bucle B:  issue ─► @claude abre PR ─► Copilot revisa ─► Claude corri
           (termina cuando Claude no necesita cambiar nada ─► bucle:aprobado)
 ```
 
-El merge a `main` **siempre lo hace una persona**. Etiquetas:
+Etiquetas:
 - `bucle:aprobado`: el revisor ya no pide cambios.
 - `bucle:requiere-humano`: se alcanzó el límite de iteraciones o algo falló.
+
+## Cadena automática (`cadena.yml`)
+
+> **Ojo:** esto cambia la regla original de que *el merge a `main` siempre lo hace una
+> persona*. Ahora el Bucle B mergea solo. Para volver al modo manual, borra el bloque
+> de merge automático del final de `bucle-claude-copilot.yml`.
+
+Con la cadena activa los 8 issues se implementan seguidos sin intervención:
+
+```
+issue ─► @claude implementa ─► PR ─► Copilot revisa ─► Claude corrige ─► bucle:aprobado
+                                                                              │
+              ┌───────────────────────────────────────────────────────────────┘
+              ▼
+        ¿CI en verde? ──no──► bucle:requiere-humano (se detiene, lo ves tú)
+              │
+             sí
+              ▼
+        merge --squash ─► cadena.yml cierra el issue y lanza el siguiente
+```
+
+Dos detalles de implementación que no son obvios:
+
+- **El merge se hace con `BUCLE_PAT`, no con `GITHUB_TOKEN`.** GitHub no dispara workflows
+  nuevos a partir de eventos generados por `GITHUB_TOKEN`; si el merge lo hiciera el token
+  por defecto, `cadena.yml` no se enteraría nunca y la cadena se cortaría en el primer PR.
+- **Cada issue lanzado queda marcado** con `<!-- cadena:lanzado -->` en su comentario. Así
+  la cadena no puede relanzar el mismo issue en bucle si su PR se mergea sin cerrarlo.
+
+**Para cortar la cadena:** deshabilita `cadena.yml` en *Actions*, o cierra los issues que
+falten. El CI en rojo también la detiene sola.
 
 ## Configuración (una sola vez, la hace el dueño del repo)
 
