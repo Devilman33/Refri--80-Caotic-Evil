@@ -68,4 +68,13 @@ jobs:
           claude_args: |
             --model claude-sonnet-5
             --max-turns 120
-            --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(mkdir:*),Bash(touch:*),Bash(cp:*),Bash(mv:*),Bash(rm:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(git mv:*),Bash(git restore:*),Bash(git stash:*),Bash(gh pr create:*),Bash(git checkout:*),Bash(git switch:*),Bash(git branch:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh api repos/${{ github.repository }}/*),Bash(ls:*),Bash(cd:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(find:*),Bash(grep:*),Bash(rg:*),Bash(sed:*),Bash(awk:*),Bash(sort:*),Bash(uniq:*),Bash(diff:*),Bash(echo:*),Bash(printf:*),Bash(tree:*),Bash(which:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(pip3:*),Bash(pytest:*),Bash(alembic:*),Bash(psql:*),Bash(npm:*),Bash(npx:*),Bash(node:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(mkdir:*),Bash(touch:*),Bash(cp:*),Bash(mv:*),Bash(rm:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(git mv:*),Bash(git restore:*),Bash(git stash:*),Bash(gh pr create:*),Bash(git checkout:*),Bash(git switch:*),Bash(git branch:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh api repos/${{ github.repository }}/*),Bash(jq:*),Bash(cut:*),Bash(tr:*),Bash(xargs:*),Bash(basename:*),Bash(dirname:*),Bash(true:*),Bash(test:*),Bash(timeout:*),Bash(env:*),Bash(ls:*),Bash(cd:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(find:*),Bash(grep:*),Bash(rg:*),Bash(sed:*),Bash(awk:*),Bash(sort:*),Bash(uniq:*),Bash(diff:*),Bash(echo:*),Bash(printf:*),Bash(tree:*),Bash(which:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(pip3:*),Bash(pytest:*),Bash(alembic:*),Bash(psql:*),Bash(npm:*),Bash(npx:*),Bash(node:*)"
+
+      - name: Guardar el log de Claude
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-log-${{ github.run_id }}
+          path: ${{ runner.temp }}/claude-execution-output.json
+          if-no-files-found: ignore
+          retention-days: 7
