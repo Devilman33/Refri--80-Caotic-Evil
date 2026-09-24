@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -28,6 +28,7 @@ class Box(Base):
     box_type: Mapped[str] = mapped_column(String(20), nullable=False)
     label: Mapped[str | None] = mapped_column(String(120), nullable=True)
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    is_full: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     rack: Mapped["Rack"] = relationship(back_populates="boxes")
     owner: Mapped["User | None"] = relationship(foreign_keys=[owner_id])

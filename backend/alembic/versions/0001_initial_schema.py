@@ -56,6 +56,7 @@ def upgrade() -> None:
         sa.Column("box_type", sa.String(length=20), nullable=False),
         sa.Column("label", sa.String(length=120), nullable=True),
         sa.Column("owner_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=True),
+        sa.Column("is_full", sa.Boolean(), nullable=True),
         sa.UniqueConstraint("rack_id", "number", name="uq_boxes_rack_number"),
         sa.CheckConstraint("box_type in ('carton_81', 'plastic_100')", name="ck_boxes_box_type"),
     )

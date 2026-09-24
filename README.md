@@ -53,11 +53,15 @@ uvicorn app.main:app --reload
 ### Tests
 
 Los tests corren contra un Postgres real (no mocks: la restricción de posición única vive en
-la base de datos). Con Docker ya tenés uno disponible en `docker compose up db`; luego:
+la base de datos) y **borran el schema `public` entero** antes de correr, así que necesitan una
+base separada de la que usa `docker compose up` (que tiene el inventario real). Con Docker ya
+tenés un Postgres disponible en `docker compose up db`; creá una base de test aparte y usala:
 
 ```bash
+docker compose exec db createdb -U refri refri_test   # una sola vez
 cd backend
-DATABASE_URL=postgresql+psycopg://refri:refri@localhost:5432/refri pytest
+DATABASE_URL=postgresql+psycopg://refri:refri@localhost:5432/refri_test pytest
 ```
 
-CI (`.github/workflows/ci.yml`) hace lo mismo contra un servicio Postgres efímero.
+CI (`.github/workflows/ci.yml`) hace lo mismo contra un servicio Postgres efímero con la base
+`refri_test`.
