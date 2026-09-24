@@ -65,8 +65,11 @@ class Sample(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     environ_id: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # Nombre del Excel de origen y número de fila cuando la muestra viene del
-    # importador (docs/DATOS.md). Permite reimportar el mismo archivo sin duplicar.
+    # Identidad del Excel de origen (hash sha256 del contenido, ver
+    # `_source_file_identity` en app/importer/core.py) y número de fila cuando la
+    # muestra viene del importador (docs/DATOS.md). Permite reimportar el mismo
+    # archivo (incluso renombrado) sin duplicar, y evita colisiones entre
+    # workbooks distintos que comparten nombre.
     source_file: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_row: Mapped[int | None] = mapped_column(Integer, nullable=True)
     type: Mapped[str] = mapped_column(String(30), nullable=False)

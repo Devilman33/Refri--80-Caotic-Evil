@@ -8,6 +8,7 @@ reporta como anomalía y sigue con la siguiente.
 
 from __future__ import annotations
 
+import hashlib
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
@@ -114,9 +115,19 @@ def _find_oversized_field(
     return None
 
 
+def _source_file_identity(path: Path) -> str:
+    """Identidad estable del archivo de origen: hash del contenido, no el nombre.
+
+    Dos workbooks distintos con el mismo nombre no deben compartir idempotencia,
+    y el mismo workbook renombrado sigue siendo el mismo origen (ver revisión de
+    PR #14: `Path(path).name` colisionaba entre workbooks distintos)."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def import_inventory(path: str | Path, session: Session, *, dry_run: bool = False) -> ImportResult:
-    source_file = Path(path).name
-    workbook = load_workbook(Path(path), data_only=True, read_only=True)
+    path = Path(path)
+    source_file = _source_file_identity(path)
+    workbook = load_workbook(path, data_only=True, read_only=True)
     if SHEET_NAME not in workbook.sheetnames:
         raise ValueError(f"La hoja '{SHEET_NAME}' no existe en {path}")
     sheet = workbook[SHEET_NAME]

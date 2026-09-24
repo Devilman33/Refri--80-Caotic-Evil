@@ -196,6 +196,40 @@ def test_import_is_idempotent(db_session, tmp_path):
     assert db_session.query(Sample).count() == 2
 
 
+def test_import_same_basename_different_content_both_import(db_session, tmp_path):
+    _seed(db_session)
+    first_dir = tmp_path / "a"
+    second_dir = tmp_path / "b"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first_path = write_workbook(first_dir / "inventario.xlsx", [make_row(**{"ID Environ": "BP001"})])
+    second_path = write_workbook(
+        second_dir / "inventario.xlsx", [make_row(**{"ID Environ": "BP002", "Posición": "2A"})]
+    )
+
+    first = import_inventory(first_path, db_session)
+    second = import_inventory(second_path, db_session)
+
+    assert first.summary.imported == 1
+    assert second.summary.imported == 1
+    assert db_session.query(Sample).count() == 2
+
+
+def test_import_is_idempotent_after_rename(db_session, tmp_path):
+    _seed(db_session)
+    rows = [make_row(**{"ID Environ": "BP001"})]
+    original_path = write_workbook(tmp_path / "inventario.xlsx", rows)
+
+    first = import_inventory(original_path, db_session)
+    renamed_path = original_path.rename(tmp_path / "inventario_renombrado.xlsx")
+    second = import_inventory(renamed_path, db_session)
+
+    assert first.summary.imported == 1
+    assert second.summary.imported == 0
+    assert second.summary.skipped_already_imported == 1
+    assert db_session.query(Sample).count() == 1
+
+
 def test_import_dry_run_does_not_write_to_database(db_session, tmp_path):
     _seed(db_session)
     rows = [make_row()]
