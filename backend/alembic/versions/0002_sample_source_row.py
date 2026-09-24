@@ -20,10 +20,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    op.add_column("samples", sa.Column("source_file", sa.String(length=255), nullable=True))
     op.add_column("samples", sa.Column("source_row", sa.Integer(), nullable=True))
-    op.create_unique_constraint("uq_samples_source_row", "samples", ["source_row"])
+    op.create_unique_constraint(
+        "uq_samples_source_file_row", "samples", ["source_file", "source_row"]
+    )
 
 
 def downgrade() -> None:
-    op.drop_constraint("uq_samples_source_row", "samples", type_="unique")
+    op.drop_constraint("uq_samples_source_file_row", "samples", type_="unique")
     op.drop_column("samples", "source_row")
+    op.drop_column("samples", "source_file")

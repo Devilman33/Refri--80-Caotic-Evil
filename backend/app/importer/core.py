@@ -106,6 +106,7 @@ def _raw_str(value: object) -> str:
 
 
 def import_inventory(path: str | Path, session: Session, *, dry_run: bool = False) -> ImportResult:
+    source_file = Path(path).name
     workbook = load_workbook(Path(path), data_only=True, read_only=True)
     if SHEET_NAME not in workbook.sheetnames:
         raise ValueError(f"La hoja '{SHEET_NAME}' no existe en {path}")
@@ -128,7 +129,10 @@ def import_inventory(path: str | Path, session: Session, *, dry_run: bool = Fals
         (box.rack_id, box.number): box for box in session.query(Box).all()
     }
     existing_source_rows = {
-        row[0] for row in session.query(Sample.source_row).filter(Sample.source_row.isnot(None))
+        row[0]
+        for row in session.query(Sample.source_row).filter(
+            Sample.source_file == source_file, Sample.source_row.isnot(None)
+        )
     }
 
     def get_or_create_user(initials: str) -> User:
@@ -209,6 +213,7 @@ def import_inventory(path: str | Path, session: Session, *, dry_run: bool = Fals
             box_id=record.box_id,
             position=record.position,
             notes=record.notes,
+            source_file=source_file,
             source_row=record.row_num,
         )
         session.add(sample)
