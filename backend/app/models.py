@@ -24,6 +24,7 @@ class SampleStatus(str, enum.Enum):
 class MovementAction(str, enum.Enum):
     FREEZE = "freeze"
     THAW = "thaw"
+    TRANSFER = "transfer"
 
 
 class User(Base):

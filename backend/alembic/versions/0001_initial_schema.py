@@ -17,7 +17,7 @@ depends_on = None
 
 box_type = sa.Enum("carton_81", "plastic_100", name="box_type")
 sample_status = sa.Enum("active", "withdrawn", name="sample_status")
-movement_action = sa.Enum("freeze", "thaw", name="movement_action")
+movement_action = sa.Enum("freeze", "thaw", "transfer", name="movement_action")
 
 
 def upgrade() -> None:
