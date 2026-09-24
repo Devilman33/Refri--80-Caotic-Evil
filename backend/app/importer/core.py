@@ -127,14 +127,20 @@ def _source_file_identity(path: Path) -> str:
 def import_inventory(path: str | Path, session: Session, *, dry_run: bool = False) -> ImportResult:
     path = Path(path)
     source_file = _source_file_identity(path)
+    # En modo read_only openpyxl mantiene el archivo abierto hasta close(): se leen las
+    # filas a memoria y se cierra, o en Windows el Excel queda bloqueado.
     workbook = load_workbook(path, data_only=True, read_only=True)
-    if SHEET_NAME not in workbook.sheetnames:
-        raise ValueError(f"La hoja '{SHEET_NAME}' no existe en {path}")
-    sheet = workbook[SHEET_NAME]
+    try:
+        if SHEET_NAME not in workbook.sheetnames:
+            raise ValueError(f"La hoja '{SHEET_NAME}' no existe en {path}")
+        sheet = workbook[SHEET_NAME]
+        header_values = next(sheet.iter_rows(min_row=HEADER_ROW, max_row=HEADER_ROW, values_only=True))
+        data_rows = list(sheet.iter_rows(min_row=DATA_START_ROW, values_only=True))
+    finally:
+        workbook.close()
 
-    header_cells = next(sheet.iter_rows(min_row=HEADER_ROW, max_row=HEADER_ROW))
     column_index = {
-        str(cell.value).strip(): idx for idx, cell in enumerate(header_cells) if cell.value is not None
+        str(value).strip(): idx for idx, value in enumerate(header_values) if value is not None
     }
     missing = [column for column in COLUMNS if column not in column_index]
     if missing:
@@ -165,8 +171,10 @@ def import_inventory(path: str | Path, session: Session, *, dry_run: bool = Fals
         return user
 
     records: list[_RowRecord] = []
-    for row_num, row_cells in enumerate(sheet.iter_rows(min_row=DATA_START_ROW), start=DATA_START_ROW):
-        values = {name: row_cells[idx].value for name, idx in column_index.items()}
+    for row_num, row_values in enumerate(data_rows, start=DATA_START_ROW):
+        values = {
+            name: row_values[idx] if idx < len(row_values) else None for name, idx in column_index.items()
+        }
         if all(value is None for value in values.values()):
             continue
 
