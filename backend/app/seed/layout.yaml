@@ -1,0 +1,44 @@
+# Distribución física del freezer: qué rack va en qué sección y en qué posición
+# del estante (centro o derecha), y cuántas subcajas caben en cada uno.
+#
+# Editable a mano sin tocar código. El importador (docs/DATOS.md) reporta en vez de
+# crear racks duplicados cuando el Excel trae una sección inconsistente para un rack
+# que ya está acá.
+#
+# `capacity` es la cantidad de subcajas que caben en el rack. Por defecto usamos 30
+# (el máximo número de caja que menciona docs/DATOS.md); ajustar cuando se confirme
+# la capacidad real de cada rack con el laboratorio.
+
+racks:
+  - letter: A
+    section: I
+    slot: center
+    capacity: 30
+  - letter: B
+    section: I
+    slot: right
+    capacity: 30
+  - letter: C
+    section: II
+    slot: center
+    capacity: 30
+  - letter: D
+    section: II
+    slot: right
+    capacity: 30
+  - letter: E
+    section: III
+    slot: center
+    capacity: 30
+  - letter: F
+    section: III
+    slot: right
+    capacity: 30
+  - letter: G
+    section: IV
+    slot: center
+    capacity: 30
+  - letter: H
+    section: IV
+    slot: right
+    capacity: 30
