@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy.exc import IntegrityError
 
@@ -24,11 +24,13 @@ def test_only_one_active_sample_per_box_position(db_session) -> None:
     db_session.add(
         Sample(
             environ_id="ENV-1",
+            origin_id="ORI-1",
             description="first",
             type="RNA",
             owner=owner,
             passage=1,
             is_core=True,
+            date=date(2026, 9, 24),
             box=box,
             position="1A",
         )
@@ -38,11 +40,13 @@ def test_only_one_active_sample_per_box_position(db_session) -> None:
     db_session.add(
         Sample(
             environ_id="ENV-2",
+            origin_id="ORI-2",
             description="second",
             type="RNA",
             owner=owner,
             passage=2,
             is_core=False,
+            date=date(2026, 9, 25),
             box=box,
             position="1A",
         )
@@ -61,11 +65,13 @@ def test_withdrawing_sample_releases_position_without_deleting_history(db_sessio
     owner, operator, box, _ = seed_storage(db_session)
     sample = Sample(
         environ_id="ENV-1",
+        origin_id="ORI-1",
         description="first",
         type="Vial de Células",
         owner=owner,
         passage=1,
         is_core=True,
+        date=date(2026, 9, 24),
         box=box,
         position="1A",
     )
@@ -85,6 +91,8 @@ def test_withdrawing_sample_releases_position_without_deleting_history(db_sessio
     db_session.commit()
 
     sample.status = SampleStatus.WITHDRAWN
+    sample.box = None
+    sample.position = None
     db_session.add(
         Movement(
             sample=sample,
@@ -100,11 +108,13 @@ def test_withdrawing_sample_releases_position_without_deleting_history(db_sessio
 
     replacement = Sample(
         environ_id="ENV-2",
+        origin_id="ORI-2",
         description="replacement",
         type="Vial de Células",
         owner=owner,
         passage=1,
         is_core=False,
+        date=date(2026, 9, 25),
         box=box,
         position="1A",
     )
@@ -114,19 +124,30 @@ def test_withdrawing_sample_releases_position_without_deleting_history(db_sessio
     persisted = db_session.get(Sample, sample.id)
     assert persisted is not None
     assert persisted.status == SampleStatus.WITHDRAWN
+    assert persisted.box_id is None
+    assert persisted.position is None
     assert replacement.id is not None
     assert len(persisted.movements) == 2
+    thaw_movement = persisted.movements[-1]
+    assert thaw_movement.action == MovementAction.THAW
+    assert thaw_movement.operator_id == operator.id
+    assert thaw_movement.date == datetime(2026, 9, 25, tzinfo=timezone.utc)
+    assert thaw_movement.note == "Retiro para análisis"
+    assert thaw_movement.box_id == box.id
+    assert thaw_movement.position == "1A"
 
 
 def test_transferring_sample_records_history_and_frees_previous_position(db_session) -> None:
     owner, operator, box, second_box = seed_storage(db_session)
     sample = Sample(
         environ_id="ENV-3",
+        origin_id="ORI-3",
         description="movable",
         type="RNA",
         owner=owner,
         passage=3,
         is_core=True,
+        date=date(2026, 9, 24),
         box=box,
         position="2A",
     )
@@ -162,11 +183,13 @@ def test_transferring_sample_records_history_and_frees_previous_position(db_sess
 
     replacement = Sample(
         environ_id="ENV-4",
+        origin_id="ORI-4",
         description="replacement after transfer",
         type="RNA",
         owner=owner,
         passage=4,
         is_core=False,
+        date=date(2026, 9, 26),
         box=box,
         position="2A",
     )

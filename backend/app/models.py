@@ -1,7 +1,19 @@
 import enum
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -87,20 +99,22 @@ class Sample(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     environ_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    origin_id: Mapped[str | None] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(String(255))
     type: Mapped[str] = mapped_column(String(100), nullable=False)
     type_other: Mapped[str | None] = mapped_column(String(255))
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     passage: Mapped[int | None] = mapped_column(Integer)
     is_core: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    date: Mapped[date | None] = mapped_column(Date)
     status: Mapped[SampleStatus] = mapped_column(
         Enum(SampleStatus, name="sample_status", values_callable=enum_values),
         default=SampleStatus.ACTIVE,
         nullable=False,
         server_default=SampleStatus.ACTIVE.value,
     )
-    box_id: Mapped[int] = mapped_column(ForeignKey("boxes.id", ondelete="RESTRICT"), nullable=False)
-    position: Mapped[str] = mapped_column(String(8), nullable=False)
+    box_id: Mapped[int | None] = mapped_column(ForeignKey("boxes.id", ondelete="RESTRICT"))
+    position: Mapped[str | None] = mapped_column(String(8))
     notes: Mapped[str | None] = mapped_column(Text)
 
     owner: Mapped[User] = relationship(back_populates="owned_samples", foreign_keys=[owner_id])
