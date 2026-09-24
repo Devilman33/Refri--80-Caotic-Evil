@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -56,11 +57,21 @@ class Sample(Base):
             unique=True,
             postgresql_where=text("status = 'active'"),
         ),
+        # La idempotencia del importador se define por archivo + fila: dos archivos
+        # de origen distintos pueden reutilizar el mismo número de fila (issue #2).
+        UniqueConstraint("source_file", "source_row", name="uq_samples_source_file_row"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     environ_id: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Identidad del Excel de origen (hash sha256 del contenido, ver
+    # `_source_file_identity` en app/importer/core.py) y número de fila cuando la
+    # muestra viene del importador (docs/DATOS.md). Permite reimportar el mismo
+    # archivo (incluso renombrado) sin duplicar, y evita colisiones entre
+    # workbooks distintos que comparten nombre.
+    source_file: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_row: Mapped[int | None] = mapped_column(Integer, nullable=True)
     type: Mapped[str] = mapped_column(String(30), nullable=False)
     type_other: Mapped[str | None] = mapped_column(String(120), nullable=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
