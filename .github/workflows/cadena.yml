@@ -63,7 +63,7 @@ jobs:
           # 2. Siguiente issue de la serie [n/m] que la cadena no haya lanzado aún.
           pendientes=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --limit 100 \
                          --json number,title \
-                         --jq '[.[] | select(.title | test("^\[[0-9]+/[0-9]+\]"))]
+                         --jq '[.[] | select(.title | test("^\\[[0-9]+/[0-9]+\\]"))]
                                | sort_by(.number) | .[].number')
 
           siguiente=""
