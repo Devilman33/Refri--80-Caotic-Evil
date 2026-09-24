@@ -176,7 +176,7 @@ def parse_encargado(raw: object) -> tuple[str, str | None, str | None]:
     """Devuelve (iniciales, motivo, valor_original_combinado)."""
     text = clean_text(raw)
     if text is None:
-        return "SIN_ASIGNAR", None, None
+        return "SIN_ASIG", None, None
     parts = text.split()
     first = parts[0].upper()
     if len(parts) > 1:

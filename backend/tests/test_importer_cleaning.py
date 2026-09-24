@@ -150,8 +150,8 @@ def test_parse_encargado_combined_keeps_first_and_reports_original():
 
 
 def test_parse_encargado_empty_is_sin_asignar():
-    assert parse_encargado(None) == ("SIN_ASIGNAR", None, None)
-    assert parse_encargado("-") == ("SIN_ASIGNAR", None, None)
+    assert parse_encargado(None) == ("SIN_ASIG", None, None)
+    assert parse_encargado("-") == ("SIN_ASIG", None, None)
 
 
 def test_clean_environ_id_empty_is_reported():
