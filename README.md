@@ -43,7 +43,8 @@ Servicios expuestos:
 - Healthcheck: `http://localhost:8000/health`
 - PostgreSQL 16: `localhost:5432`
 
-`docker compose up` ejecuta un servicio `migrate` de una sola vez antes de levantar el backend.
+`docker compose up` sobre el stack completo ejecuta un servicio `migrate` de una sola vez antes de
+levantar el backend.
 
 ### Ejecutar migraciones manualmente
 

@@ -101,6 +101,10 @@ class Sample(Base):
             "status != 'active' OR (box_id IS NOT NULL AND position IS NOT NULL)",
             name="ck_samples_active_requires_location",
         ),
+        CheckConstraint(
+            "(type = 'Otros' AND type_other IS NOT NULL) OR (type != 'Otros' AND type_other IS NULL)",
+            name="ck_samples_type_other_consistency",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -85,6 +85,10 @@ def upgrade() -> None:
             "status != 'active' OR (box_id IS NOT NULL AND position IS NOT NULL)",
             name="ck_samples_active_requires_location",
         ),
+        sa.CheckConstraint(
+            "(type = 'Otros' AND type_other IS NOT NULL) OR (type != 'Otros' AND type_other IS NULL)",
+            name="ck_samples_type_other_consistency",
+        ),
         sa.ForeignKeyConstraint(["box_id"], ["boxes.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="RESTRICT"),
     )

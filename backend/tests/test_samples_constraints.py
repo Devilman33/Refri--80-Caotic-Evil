@@ -3,6 +3,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy.exc import IntegrityError
 
 from app.models import Box, BoxType, Movement, MovementAction, Rack, Sample, SampleStatus, Section, User
+from app.services.samples import register_frozen_sample
 
 
 
@@ -20,20 +21,21 @@ def seed_storage(db_session):
 
 
 def test_only_one_active_sample_per_box_position(db_session) -> None:
-    owner, _, box, _ = seed_storage(db_session)
-    db_session.add(
-        Sample(
-            environ_id="ENV-1",
-            origin_id="ORI-1",
-            description="first",
-            type="RNA",
-            owner=owner,
-            passage=1,
-            is_core=True,
-            date=date(2026, 9, 24),
-            box=box,
-            position="1A",
-        )
+    owner, operator, box, _ = seed_storage(db_session)
+    register_frozen_sample(
+        db_session,
+        environ_id="ENV-1",
+        origin_id="ORI-1",
+        description="first",
+        sample_type="RNA",
+        owner=owner,
+        operator=operator,
+        passage=1,
+        is_core=True,
+        sample_date=date(2026, 9, 24),
+        movement_date=datetime(2026, 9, 24, tzinfo=timezone.utc),
+        box=box,
+        position="1A",
     )
     db_session.commit()
 
@@ -59,6 +61,34 @@ def test_only_one_active_sample_per_box_position(db_session) -> None:
     else:
         raise AssertionError("Expected a unique constraint violation for an occupied active position")
 
+
+def test_register_frozen_sample_creates_initial_movement(db_session) -> None:
+    owner, operator, box, _ = seed_storage(db_session)
+
+    sample = register_frozen_sample(
+        db_session,
+        environ_id="ENV-INIT",
+        origin_id="ORI-INIT",
+        description="created with movement",
+        sample_type="RNA",
+        owner=owner,
+        operator=operator,
+        passage=7,
+        is_core=True,
+        sample_date=date(2026, 9, 23),
+        movement_date=datetime(2026, 9, 23, tzinfo=timezone.utc),
+        box=box,
+        position="4A",
+        movement_note="Alta inicial",
+    )
+    db_session.commit()
+
+    assert len(sample.movements) == 1
+    movement = sample.movements[0]
+    assert movement.action == MovementAction.FREEZE
+    assert movement.destination_box_id == box.id
+    assert movement.destination_position == "4A"
+    assert movement.note == "Alta inicial"
 
 
 def test_withdrawing_sample_releases_position_without_deleting_history(db_session) -> None:
