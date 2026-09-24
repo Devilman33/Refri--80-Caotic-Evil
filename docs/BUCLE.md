@@ -27,7 +27,7 @@ La decisión se toma **sin llamar a Claude**: el workflow lee el resumen de la r
 | Review de Copilot | Qué pasa | ¿Gasta Claude? |
 |---|---|---|
 | Sin High/Critical abiertos (solo Medium, Low o nada) | Espera la CI y mergea | No |
-| Con High y quedan rondas (`MAX_ITERACIONES`, 3) | Claude corrige **solo** los High (y Medium de pocas líneas), máx. 40 turnos | Sí, una ronda |
+| Con High y quedan rondas (`MAX_ITERACIONES`, 3) | Claude corrige **solo** los High (y Medium de pocas líneas), máx. 60 turnos; si se acaba, se sube lo ya commiteado | Sí, una ronda |
 | Claude concluye que los High son falsos positivos | No hace commits: se mergea | — |
 | Con High tras 3 rondas | `AL_LIMITE: mergear` → mergea y etiqueta `bucle:revisar-despues` con la lista de pendientes. `AL_LIMITE: detener` → se detiene con `bucle:requiere-humano` | No |
 | CI en rojo | Nunca se mergea: `bucle:requiere-humano` y la cadena se detiene | No |
