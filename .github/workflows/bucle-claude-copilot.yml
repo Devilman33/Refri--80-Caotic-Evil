@@ -88,7 +88,7 @@ jobs:
           POSTGRES_DB: refri_test
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U refri"
+          --health-cmd "pg_isready -U refri -d refri_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -235,6 +235,8 @@ jobs:
       - name: Claude corrige los hallazgos graves
         id: claude
         if: steps.eval.outputs.accion == 'corregir'
+        # Si se queda sin turnos, el paso siguiente sube lo que alcanzó a commitear.
+        continue-on-error: true
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ github.token }}
@@ -255,12 +257,13 @@ jobs:
                de pocas líneas. Ignora Low, nits, estilo y refactors: no son motivo para otra ronda.
             4. Si un High es un falso positivo o contradice requirements.md, NO lo cambies: explícalo en
                `descartados`. Si todos lo son, no hagas commits y el PR se mergeará.
-            5. Corre los tests afectados (hay un Postgres listo en DATABASE_URL).
-            6. Haz commit con git add + git commit (mensaje en español). NO hagas push: lo hace el workflow.
+            5. Haz commit (git add + git commit, mensaje en español) apenas termines CADA hallazgo, no todo
+               al final: si se acaba el presupuesto de turnos, lo ya commiteado se sube igual.
+            6. Corre solo los tests afectados (hay un Postgres listo en DATABASE_URL). NO hagas push.
           claude_args: |
             --model claude-sonnet-5
-            --max-turns 40
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api repos/${{ github.repository }}/pulls/*),Bash(git add:*),Bash(git commit:*),Bash(git diff:*),Bash(git log:*),Bash(git status:*),Bash(ls:*),Bash(cd:*),Bash(npm ci:*),Bash(npm install:*),Bash(npm run:*),Bash(npm test:*),Bash(npx:*),Bash(pip install:*),Bash(python:*),Bash(python -m pytest:*),Bash(pytest:*),Bash(alembic:*)"
+            --max-turns 60
+            --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(mkdir:*),Bash(touch:*),Bash(cp:*),Bash(mv:*),Bash(rm:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(git mv:*),Bash(git restore:*),Bash(git stash:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh api repos/${{ github.repository }}/*),Bash(ls:*),Bash(cd:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(find:*),Bash(grep:*),Bash(rg:*),Bash(sed:*),Bash(awk:*),Bash(sort:*),Bash(uniq:*),Bash(diff:*),Bash(echo:*),Bash(printf:*),Bash(tree:*),Bash(which:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(pip3:*),Bash(pytest:*),Bash(alembic:*),Bash(psql:*),Bash(npm:*),Bash(npx:*),Bash(node:*)"
             --json-schema '{"type":"object","properties":{"resumen":{"type":"string"},"descartados":{"type":"array","items":{"type":"string"}}},"required":["resumen","descartados"]}'
 
       - name: Push, merge y resumen
@@ -310,13 +313,19 @@ jobs:
 
           case "$ACCION" in
             corregir)
-              if [ "$RESULTADO_CLAUDE" != "success" ]; then
+              hay_commits=false
+              if [ "$(git rev-parse HEAD)" != "$(cat "$RUNNER_TEMP/sha_inicial")" ]; then hay_commits=true; fi
+              if [ "$RESULTADO_CLAUDE" != "success" ] && [ "$hay_commits" = false ]; then
                 gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:requiere-humano"
-                gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Claude falló al atender la revisión de Copilot. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+                gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Claude falló al atender la revisión de Copilot sin dejar commits. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
                 exit 1
               fi
-              resumen=$(jq -r '.resumen // "(sin resumen)"' <<<"$RESULTADO")
-              if [ "$(git rev-parse HEAD)" != "$(cat "$RUNNER_TEMP/sha_inicial")" ]; then
+              if [ "$RESULTADO_CLAUDE" != "success" ]; then
+                resumen="Claude se quedó sin turnos en esta ronda; se sube lo que alcanzó a corregir y Copilot vuelve a revisar."
+              else
+                resumen=$(jq -r '.resumen // "(sin resumen)"' <<<"$RESULTADO")
+              fi
+              if [ "$hay_commits" = true ]; then
                 if [ -z "${BUCLE_PAT:-}" ]; then
                   echo "::error::Falta el secret BUCLE_PAT: sin él el push no dispara la CI ni la siguiente ronda."
                   exit 1

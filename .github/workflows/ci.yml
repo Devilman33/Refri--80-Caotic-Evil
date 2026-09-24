@@ -23,7 +23,7 @@ jobs:
           POSTGRES_DB: refri_test
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U refri"
+          --health-cmd "pg_isready -U refri -d refri_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
