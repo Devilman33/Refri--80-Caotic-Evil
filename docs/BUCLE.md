@@ -26,11 +26,19 @@ La decisión se toma **sin llamar a Claude**: el workflow lee el resumen de la r
 
 | Review de Copilot | Qué pasa | ¿Gasta Claude? |
 |---|---|---|
-| Sin High/Critical abiertos (solo Medium, Low o nada) | Espera la CI y mergea | No |
-| Con High y quedan rondas (`MAX_ITERACIONES`, 3) | Claude corrige **solo** los High (y Medium de pocas líneas), máx. 60 turnos; si se acaba, se sube lo ya commiteado | Sí, una ronda |
-| Claude concluye que los High son falsos positivos | No hace commits: se mergea | — |
-| Con High tras 3 rondas | `AL_LIMITE: mergear` → mergea y etiqueta `bucle:revisar-despues` con la lista de pendientes. `AL_LIMITE: detener` → se detiene con `bucle:requiere-humano` | No |
+| Sin hallazgos abiertos | Espera la CI y mergea | No |
+| Primera review con High **o** Medium/Low | Claude corrige todos los High reales y, de los Medium/Low, **los que considere necesarios** (bugs, datos, trazabilidad, seguridad, arreglos cortos). El resto lo marca como *diferido*. Máx. 60 turnos; si se acaba, se sube lo ya commiteado | Sí, una ronda |
+| Reviews siguientes sin High | Mergea. Los Medium/Low se triagean una sola vez por PR | No |
+| Reviews siguientes con High, quedan rondas (`MAX_ITERACIONES`, 3) | Otra ronda de Claude | Sí |
+| Claude concluye que no hay nada que cambiar | No hace commits: se mergea | — |
+| Con High tras 3 rondas | `AL_LIMITE: mergear` → mergea y etiqueta `bucle:revisar-despues`. `AL_LIMITE: detener` → se detiene con `bucle:requiere-humano` | No |
 | CI en rojo | Nunca se mergea: `bucle:requiere-humano` y la cadena se detiene | No |
+
+**Nada se pierde:** al mergear, el workflow comenta en el issue de revisión final
+(`ISSUE_REVISION_FINAL`, por defecto el **#8**) la lista de hallazgos que siguen abiertos en la
+última review de Copilot, con enlace a cada uno, más los que Claude difirió y su motivo. Cuando la
+cadena llega al #8, Claude los ve en los comentarios del issue y los resuelve en esa revisión final.
+Esto no gasta tokens: lo publica el propio workflow.
 
 En el peor caso, un issue cuesta 1 implementación + 3 rondas de corrección. Las reviews las hace
 Copilot (se cobran de sus premium requests, no de Claude).
