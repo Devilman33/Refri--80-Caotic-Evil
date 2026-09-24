@@ -43,7 +43,7 @@ Servicios expuestos:
 - Healthcheck: `http://localhost:8000/health`
 - PostgreSQL 16: `localhost:5432`
 
-El contenedor del backend ejecuta `alembic upgrade head` antes de iniciar `uvicorn`.
+`docker compose up` ejecuta un servicio `migrate` de una sola vez antes de levantar el backend.
 
 ### Ejecutar migraciones manualmente
 

@@ -118,7 +118,7 @@ class Sample(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     owner: Mapped[User] = relationship(back_populates="owned_samples", foreign_keys=[owner_id])
-    box: Mapped[Box] = relationship(back_populates="samples")
+    box: Mapped[Box | None] = relationship(back_populates="samples")
     movements: Mapped[list["Movement"]] = relationship(
         back_populates="sample", cascade="all, delete-orphan"
     )

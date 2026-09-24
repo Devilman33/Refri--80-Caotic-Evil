@@ -23,8 +23,20 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+
+  migrate:
+    build:
+      context: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-refri}:${POSTGRES_PASSWORD:-refri}@db:5432/${POSTGRES_DB:-refri}
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   postgres_data:
