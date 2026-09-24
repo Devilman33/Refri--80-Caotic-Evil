@@ -131,6 +131,7 @@ jobs:
         if: always() && steps.ctx.outputs.correr == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          BUCLE_PAT: ${{ secrets.BUCLE_PAT }}
           RESULTADO: ${{ steps.claude.outputs.structured_output }}
           RESULTADO_CLAUDE: ${{ steps.claude.outcome }}
           PR: ${{ inputs.pr_number }}
@@ -157,6 +158,21 @@ jobs:
             gh label create "bucle:aprobado" -R "$GITHUB_REPOSITORY" --color 2ea44f --description "Claude aprobó el PR" --force
             gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:aprobado"
             titulo="### ✅ Sin cambios pendientes tras la revisión de Copilot: bucle terminado"
+
+            # Merge automático. Se hace con BUCLE_PAT y no con GITHUB_TOKEN porque los
+            # eventos generados por GITHUB_TOKEN no disparan workflows nuevos, y cadena.yml
+            # escucha justamente el `closed` de este merge.
+            if [ -z "${BUCLE_PAT:-}" ]; then
+              echo "::warning::Sin BUCLE_PAT no se puede mergear automáticamente."
+            elif GH_TOKEN="$BUCLE_PAT" gh pr checks "$PR" -R "$GITHUB_REPOSITORY" --watch --fail-fast; then
+              GH_TOKEN="$BUCLE_PAT" gh pr ready "$PR" -R "$GITHUB_REPOSITORY" || true
+              GH_TOKEN="$BUCLE_PAT" gh pr merge "$PR" -R "$GITHUB_REPOSITORY" --squash --delete-branch
+              titulo="### ✅ Aprobado y mergeado automáticamente"
+            else
+              gh label create "bucle:requiere-humano" -R "$GITHUB_REPOSITORY" --color d73a4a --description "El bucle agente se detuvo" --force
+              gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:requiere-humano"
+              titulo="### ⚠️ Aprobado por el bucle, pero el CI quedó en rojo: no se mergeó"
+            fi
           fi
 
           {
