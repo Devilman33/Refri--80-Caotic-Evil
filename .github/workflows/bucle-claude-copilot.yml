@@ -253,8 +253,9 @@ jobs:
             2. Lee la review del commit ${{ steps.ctx.outputs.sha }} y sus comentarios en línea:
                `gh api repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}/reviews/${{ steps.espera.outputs.review_id }}`
                `gh api repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}/comments`
-            3. Corrige TODOS los hallazgos High/Critical que sean reales.
-            4. De los Medium/Low, corrige los que consideres necesarios: bugs, integridad o pérdida de datos,
+            3. PRIMERO corrige todos los High/Critical que sean reales, uno por uno, con un commit por cada uno.
+               No explores el repo entero: ve directo a los archivos que cita cada hallazgo.
+            4. DESPUÉS, de los Medium/Low (en orden de importancia), corrige los que consideres necesarios: bugs, integridad o pérdida de datos,
                trazabilidad, seguridad, tests faltantes para lógica crítica, o arreglos de pocas líneas.
                NO toques estilo, nombres, refactors grandes ni mejoras opcionales: ponlos en `diferidos`
                con una frase de por qué; se revisarán al final en el issue #${{ env.ISSUE_REVISION_FINAL }}.
@@ -265,9 +266,18 @@ jobs:
             7. Corre solo los tests afectados (hay un Postgres listo en DATABASE_URL). NO hagas push.
           claude_args: |
             --model claude-sonnet-5
-            --max-turns 60
-            --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(mkdir:*),Bash(touch:*),Bash(cp:*),Bash(mv:*),Bash(rm:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(git mv:*),Bash(git restore:*),Bash(git stash:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh api repos/${{ github.repository }}/*),Bash(ls:*),Bash(cd:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(find:*),Bash(grep:*),Bash(rg:*),Bash(sed:*),Bash(awk:*),Bash(sort:*),Bash(uniq:*),Bash(diff:*),Bash(echo:*),Bash(printf:*),Bash(tree:*),Bash(which:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(pip3:*),Bash(pytest:*),Bash(alembic:*),Bash(psql:*),Bash(npm:*),Bash(npx:*),Bash(node:*)"
+            --max-turns 80
+            --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(mkdir:*),Bash(touch:*),Bash(cp:*),Bash(mv:*),Bash(rm:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(git mv:*),Bash(git restore:*),Bash(git stash:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh api repos/${{ github.repository }}/*),Bash(jq:*),Bash(cut:*),Bash(tr:*),Bash(xargs:*),Bash(basename:*),Bash(dirname:*),Bash(true:*),Bash(test:*),Bash(timeout:*),Bash(env:*),Bash(ls:*),Bash(cd:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(find:*),Bash(grep:*),Bash(rg:*),Bash(sed:*),Bash(awk:*),Bash(sort:*),Bash(uniq:*),Bash(diff:*),Bash(echo:*),Bash(printf:*),Bash(tree:*),Bash(which:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(pip3:*),Bash(pytest:*),Bash(alembic:*),Bash(psql:*),Bash(npm:*),Bash(npx:*),Bash(node:*)"
             --json-schema '{"type":"object","properties":{"resumen":{"type":"string"},"descartados":{"type":"array","items":{"type":"string"}},"diferidos":{"type":"array","items":{"type":"string"}}},"required":["resumen","descartados","diferidos"]}'
+
+      - name: Guardar el log de Claude
+        if: always() && steps.eval.outputs.accion == 'corregir'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-log-pr${{ inputs.pr_number }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/claude-execution-output.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Push, merge y resumen
         if: always() && steps.eval.outputs.accion != ''
@@ -342,6 +352,13 @@ jobs:
 
           case "$ACCION" in
             corregir)
+              # Si Claude se quedó sin turnos con cambios sin commitear, se commitean igual:
+              # la CI y la siguiente review de Copilot los validan.
+              if [ "$RESULTADO_CLAUDE" != "success" ] && [ -n "$(git status --porcelain)" ]; then
+                git add -A
+                git -c user.name="claude[bot]" -c user.email="41898282+claude[bot]@users.noreply.github.com" \
+                  commit -q -m "Avance parcial de la corrección (Claude se quedó sin turnos)"
+              fi
               hay_commits=false
               if [ "$(git rev-parse HEAD)" != "$(cat "$RUNNER_TEMP/sha_inicial")" ]; then hay_commits=true; fi
               if [ "$RESULTADO_CLAUDE" != "success" ] && [ "$hay_commits" = false ]; then
