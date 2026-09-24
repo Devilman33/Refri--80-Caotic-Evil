@@ -3,6 +3,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Enum,
@@ -95,6 +96,12 @@ class Box(Base):
 
 class Sample(Base):
     __tablename__ = "samples"
+    __table_args__ = (
+        CheckConstraint(
+            "status != 'active' OR (box_id IS NOT NULL AND position IS NOT NULL)",
+            name="ck_samples_active_requires_location",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     environ_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -118,9 +125,7 @@ class Sample(Base):
 
     owner: Mapped[User] = relationship(back_populates="owned_samples", foreign_keys=[owner_id])
     box: Mapped[Box | None] = relationship(back_populates="samples")
-    movements: Mapped[list["Movement"]] = relationship(
-        back_populates="sample", cascade="all, delete-orphan"
-    )
+    movements: Mapped[list["Movement"]] = relationship(back_populates="sample")
 
 
 Index(

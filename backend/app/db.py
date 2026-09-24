@@ -12,7 +12,7 @@ class Base(DeclarativeBase):
 
 @lru_cache
 def get_engine():
-    return create_engine(get_settings().database_url, future=True)
+    return create_engine(get_settings().resolved_database_url, future=True)
 
 
 @lru_cache

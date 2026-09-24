@@ -7,6 +7,7 @@ Create Date: 2026-09-24 00:00:00
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision = "0001_initial_schema"
@@ -15,12 +16,17 @@ branch_labels = None
 depends_on = None
 
 
-box_type = sa.Enum("carton_81", "plastic_100", name="box_type")
-sample_status = sa.Enum("active", "withdrawn", name="sample_status")
-movement_action = sa.Enum("freeze", "thaw", "transfer", name="movement_action")
+box_type = postgresql.ENUM("carton_81", "plastic_100", name="box_type", create_type=False)
+sample_status = postgresql.ENUM("active", "withdrawn", name="sample_status", create_type=False)
+movement_action = postgresql.ENUM("freeze", "thaw", "transfer", name="movement_action", create_type=False)
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    box_type.create(bind, checkfirst=True)
+    sample_status.create(bind, checkfirst=True)
+    movement_action.create(bind, checkfirst=True)
+
     op.create_table(
         "users",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -75,6 +81,10 @@ def upgrade() -> None:
         sa.Column("box_id", sa.Integer(), nullable=True),
         sa.Column("position", sa.String(length=8), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
+        sa.CheckConstraint(
+            "status != 'active' OR (box_id IS NOT NULL AND position IS NOT NULL)",
+            name="ck_samples_active_requires_location",
+        ),
         sa.ForeignKeyConstraint(["box_id"], ["boxes.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="RESTRICT"),
     )
