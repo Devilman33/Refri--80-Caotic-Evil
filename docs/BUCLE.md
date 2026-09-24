@@ -45,10 +45,10 @@ Personal access tokens → Fine-grained tokens*. Limítalo a este repo con estos
 tiene que ser un token **classic** con los scopes `repo` y `workflow` (los fine-grained no alcanzan
 repos personales ajenos).
 
-### 2. Claude GitHub App (para `@claude`)
-Instala https://github.com/apps/claude en el repo. También puedes ejecutar `/install-github-app`
-dentro de Claude Code, que además configura el secret. Solo la necesita `claude.yml`; los bucles
-funcionan sin ella.
+### 2. Claude GitHub App (opcional)
+`claude.yml` usa `BUCLE_PAT`, así que la app no es necesaria. Si la instalas
+(https://github.com/apps/claude) y dejas `BUCLE_PAT` vacío, `@claude` responderá como `claude[bot]`
+en vez de como el dueño del token.
 
 ### 3. Copilot coding agent (Bucle A)
 - La cuenta dueña necesita **Copilot Pro, Pro+, Business o Enterprise**.
