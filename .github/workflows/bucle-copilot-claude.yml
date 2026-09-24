@@ -57,6 +57,22 @@ jobs:
       pull-requests: write
       issues: write
       id-token: write
+    # Postgres para que Claude pueda correr los tests del backend igual que la CI.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: refri
+          POSTGRES_PASSWORD: refri
+          POSTGRES_DB: refri_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U refri"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://refri:refri@localhost:5432/refri_test
     steps:
       - name: Contexto e iteraciones
         id: ctx
@@ -96,6 +112,16 @@ jobs:
           ref: refs/pull/${{ inputs.pr_number }}/head
           fetch-depth: 0
 
+      - uses: actions/setup-python@v6
+        if: steps.ctx.outputs.correr == 'true'
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v5
+        if: steps.ctx.outputs.correr == 'true'
+        with:
+          node-version: "22"
+
       - name: Revisión de Claude
         id: claude
         if: steps.ctx.outputs.correr == 'true'
@@ -113,7 +139,7 @@ jobs:
             1. Lee CLAUDE.md y requirements.md: son la fuente de verdad del proyecto.
             2. Lee la descripción del PR y el issue vinculado (`gh pr view ${{ inputs.pr_number }}`)
                y el diff (`gh pr diff ${{ inputs.pr_number }}`). El código del PR ya está en el directorio de trabajo.
-            3. Si hay tests o build, ejecútalos.
+            3. Si hay tests o build, ejecútalos. Hay un Postgres listo en DATABASE_URL.
             4. Verifica: que cumpla lo que pide el issue, bugs, pérdida de trazabilidad (las muestras
                retiradas NUNCA se borran), seguridad, tests faltantes y coherencia con el stack de CLAUDE.md.
 
@@ -124,7 +150,7 @@ jobs:
             Escribe el resumen y los cambios en español.
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(git status:*),Bash(ls:*),Bash(npm ci:*),Bash(npm install:*),Bash(npm run:*),Bash(npm test:*),Bash(npx:*),Bash(pip install:*),Bash(python -m pytest:*),Bash(pytest:*)"
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(git status:*),Bash(ls:*),Bash(cd:*),Bash(npm ci:*),Bash(npm install:*),Bash(npm run:*),Bash(npm test:*),Bash(npx:*),Bash(pip install:*),Bash(python:*),Bash(python -m pytest:*),Bash(pytest:*),Bash(alembic:*)"
             --json-schema '{"type":"object","properties":{"veredicto":{"type":"string","enum":["aprobar","cambios"]},"resumen":{"type":"string"},"cambios_requeridos":{"type":"array","items":{"type":"string"}}},"required":["veredicto","resumen","cambios_requeridos"]}'
 
       - name: Publicar resultado

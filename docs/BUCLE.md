@@ -19,6 +19,12 @@ Bucle B:  issue ─► @claude abre PR ─► Copilot revisa ─► Claude corri
           (termina cuando Claude no necesita cambiar nada ─► bucle:aprobado)
 ```
 
+El Bucle B **no** escucha el evento de la review de Copilot: GitHub deja esas ejecuciones en
+*action_required* (hay que pulsar *Approve and run* a mano) porque las dispara un bot. En su lugar,
+cada vez que el PR se abre o recibe un push, el workflow se lanza, **espera** (hasta 30 min) a que
+Copilot publique su review sobre ese commit y recién ahí llama a Claude. Solo entran PRs de ramas
+`claude/*` que cierren algún issue (`Closes #N`).
+
 Etiquetas:
 - `bucle:aprobado`: el revisor ya no pide cambios.
 - `bucle:requiere-humano`: se alcanzó el límite de iteraciones o algo falló.
@@ -93,11 +99,24 @@ en vez de como el dueño del token.
 *Settings → Rules → Rulesets → New branch ruleset* sobre `main`:
 - Activa **Automatically request Copilot code review**.
 - Activa también **Review new pushes**, para que Copilot vuelva a revisar después de cada corrección de Claude.
+  Sin esto el Bucle B espera 30 min la segunda review y se detiene con `bucle:requiere-humano`.
+- Si activas *Require a pull request before merging*, deja **Required approvals en 0**: la review
+  de Copilot es solo un comentario y nunca cuenta como aprobación, así que el merge automático fallaría.
+- Si quieres, marca `backend` y `frontend` (jobs de `ci.yml`) como *Required status checks*.
+
+### 5. Merge y Postgres para los agentes
+- *Settings → General → Pull Requests*: deja habilitado **Allow squash merging** (el Bucle B mergea
+  con `--squash`). Opcional: **Automatically delete head branches**.
+- Copilot necesita `DATABASE_URL` para correr los tests: *Settings → Environments → `copilot`* →
+  *Environment variables* → `DATABASE_URL` = `postgresql+psycopg://refri:refri@localhost:5432/refri_test`.
+  El Postgres lo levanta `copilot-setup-steps.yml`. Los workflows de Claude ya traen el suyo.
 
 ## Uso diario
 
 - **Bucle A:** crea un issue bien descrito y asígnalo a Copilot. Lo demás es automático.
 - **Bucle B:** en un issue, comenta `@claude implementa este issue`.
+- **Pedirle algo a Claude en un PR:** escribe `@claude ...` en la conversación del PR. Los
+  comentarios en línea (de review) ya no lo invocan.
 - **Relanzar a mano:** *Actions → (workflow del bucle) → Run workflow → número del PR*.
 - **Ajustar el límite:** cambia `MAX_ITERACIONES` al inicio de cada workflow.
 - **Sacar un PR del bucle A:** quita la etiqueta `bucle` o cierra el PR.
@@ -110,5 +129,8 @@ en vez de como el dueño del token.
 | `Falta el secret BUCLE_PAT` | No se creó el secret del paso 1 |
 | Copilot no reacciona al comentario `@copilot` | El dueño de `BUCLE_PAT` no tiene licencia de Copilot o no tiene permiso de escritura |
 | El bucle A no arranca cuando Copilot termina | La aprobación de workflows sigue activa (paso 3); apruébalo en el PR o lánzalo a mano |
-| El bucle B no arranca | Falta el ruleset del paso 4, o la rama del PR no empieza con `claude/` |
+| El bucle B no arranca | La rama del PR no empieza con `claude/` o el PR no tiene `Closes #N` |
+| El bucle B se detiene con "Copilot no revisó el commit" | Falta el ruleset del paso 4 (o *Review new pushes*), o se agotaron las premium requests de Copilot del dueño de `BUCLE_PAT` |
+| "Aprobado por el bucle, pero GitHub rechazó el merge" | El ruleset exige aprobaciones o el squash merge está deshabilitado (paso 5) |
+| Ejecuciones en *action_required* disparadas por Copilot | Workflows que escuchan eventos del bot de Copilot; los del bucle ya no lo hacen |
 | La revisión de Claude falla | Revisa `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` y el log del run |

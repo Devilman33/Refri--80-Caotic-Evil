@@ -53,6 +53,13 @@ jobs:
               --comment "Implementado y mergeado en el PR #$PR." || true
           done
 
+          # Un PR que no cerraba ningún issue (p. ej. un cambio de configuración hecho
+          # desde una rama claude/*) no avanza la cadena.
+          if [ -z "$cerrados" ]; then
+            echo "::notice::El PR #$PR no cerraba ningún issue; la cadena no avanza."
+            exit 0
+          fi
+
           # 2. Siguiente issue de la serie [n/m] que la cadena no haya lanzado aún.
           pendientes=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --limit 100 \
                          --json number,title \
