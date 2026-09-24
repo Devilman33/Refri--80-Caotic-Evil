@@ -77,6 +77,21 @@ def test_import_unknown_rack_is_skipped_and_reported(db_session, tmp_path):
     assert any(a.column == "Rack" for a in result.anomalies)
 
 
+def test_import_oversized_field_is_skipped_and_reported(db_session, tmp_path):
+    """Una fila con un valor más largo que la columna del modelo (aquí ID Environ,
+    VARCHAR(60)) se reporta y se salta en vez de abortar el flush completo."""
+    _seed(db_session)
+    rows = [make_row(**{"ID Environ": "X" * 61})]
+    path = write_workbook(tmp_path / "inventario.xlsx", rows)
+
+    result = import_inventory(path, db_session)
+
+    assert result.summary.imported == 0
+    assert result.summary.skipped_invalid == 1
+    assert db_session.query(Sample).count() == 0
+    assert any(a.column == "ID Environ" and "caracteres" in a.reason for a in result.anomalies)
+
+
 def test_import_withdrawal_creates_sample_and_thaw_movement(db_session, tmp_path):
     _seed(db_session)
     rows = [make_row(**{"Fecha de salida": "21-4-25 VF (revisado)"})]

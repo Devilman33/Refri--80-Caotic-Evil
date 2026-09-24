@@ -105,6 +105,15 @@ def _raw_str(value: object) -> str:
     return "" if value is None else str(value)
 
 
+def _find_oversized_field(
+    fields: list[tuple[str, str | None, int]]
+) -> tuple[str, str, int] | None:
+    for column, value, max_len in fields:
+        if value is not None and len(value) > max_len:
+            return column, value, max_len
+    return None
+
+
 def import_inventory(path: str | Path, session: Session, *, dry_run: bool = False) -> ImportResult:
     source_file = Path(path).name
     workbook = load_workbook(Path(path), data_only=True, read_only=True)
@@ -339,10 +348,35 @@ def _parse_row(
         else SampleStatus.ACTIVE.value
     )
 
+    description = clean_text(values.get("ID Origen o Descripción"))
+    box_label = clean_text(values.get("Caja origen"))
+    box_owner_initials = parse_propietario_caja(values.get("Propietario de Caja"))
+
+    # Los límites siguen a las columnas de los modelos (Sample.environ_id/description/
+    # type_other, Box.label, User.initials): sin esta validación una fila con un valor
+    # demasiado largo aborta el flush completo en vez de reportarse y saltarse.
+    oversized = _find_oversized_field(
+        [
+            ("ID Environ", environ_id, 60),
+            ("ID Origen o Descripción", description, 255),
+            ("Tipo", type_other, 120),
+            ("Caja origen", box_label, 120),
+            ("Encargado", owner_initials, 10),
+            ("Propietario de Caja", box_owner_initials, 10),
+            ("Fecha de salida", exit_initials, 10),
+        ]
+    )
+    if oversized:
+        column, value, max_len = oversized
+        anomalies.append(
+            Anomaly(row_num, column, value, f"Valor de más de {max_len} caracteres, no se pudo importar")
+        )
+        return None
+
     return _RowRecord(
         row_num=row_num,
         environ_id=environ_id,
-        description=clean_text(values.get("ID Origen o Descripción")),
+        description=description,
         sample_type=sample_type,
         type_other=type_other,
         owner_initials=owner_initials,
@@ -352,9 +386,9 @@ def _parse_row(
         box_number=box_number,
         position=position,
         box_type=box_type,
-        box_label=clean_text(values.get("Caja origen")),
+        box_label=box_label,
         box_is_full=parse_si_no(values.get("Caja Completa Si/No")),
-        box_owner_initials=parse_propietario_caja(values.get("Propietario de Caja")),
+        box_owner_initials=box_owner_initials,
         entry_date=entry_date,
         exit_date=exit_date,
         exit_initials=exit_initials,
