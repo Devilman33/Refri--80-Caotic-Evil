@@ -91,7 +91,6 @@ class Box(Base):
     rack: Mapped[Rack] = relationship(back_populates="boxes")
     owner: Mapped[User | None] = relationship(back_populates="owned_boxes")
     samples: Mapped[list["Sample"]] = relationship(back_populates="box")
-    movements: Mapped[list["Movement"]] = relationship(back_populates="box")
 
 
 class Sample(Base):
@@ -143,10 +142,13 @@ class Movement(Base):
     )
     date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     operator_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    box_id: Mapped[int | None] = mapped_column(ForeignKey("boxes.id", ondelete="RESTRICT"))
-    position: Mapped[str | None] = mapped_column(String(8))
+    source_box_id: Mapped[int | None] = mapped_column(ForeignKey("boxes.id", ondelete="RESTRICT"))
+    source_position: Mapped[str | None] = mapped_column(String(8))
+    destination_box_id: Mapped[int | None] = mapped_column(ForeignKey("boxes.id", ondelete="RESTRICT"))
+    destination_position: Mapped[str | None] = mapped_column(String(8))
     note: Mapped[str | None] = mapped_column(Text)
 
     sample: Mapped[Sample] = relationship(back_populates="movements")
     operator: Mapped[User] = relationship(back_populates="operated_movements")
-    box: Mapped[Box | None] = relationship(back_populates="movements")
+    source_box: Mapped[Box | None] = relationship(foreign_keys=[source_box_id])
+    destination_box: Mapped[Box | None] = relationship(foreign_keys=[destination_box_id])

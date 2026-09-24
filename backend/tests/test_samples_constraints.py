@@ -83,13 +83,15 @@ def test_withdrawing_sample_releases_position_without_deleting_history(db_sessio
             action=MovementAction.FREEZE,
             date=datetime(2026, 9, 24, tzinfo=timezone.utc),
             operator=operator,
-            box=box,
-            position="1A",
+            destination_box=box,
+            destination_position="1A",
             note="Ingreso inicial",
         )
     )
     db_session.commit()
 
+    withdrawn_box = box
+    withdrawn_position = "1A"
     sample.status = SampleStatus.WITHDRAWN
     sample.box = None
     sample.position = None
@@ -99,8 +101,8 @@ def test_withdrawing_sample_releases_position_without_deleting_history(db_sessio
             action=MovementAction.THAW,
             date=datetime(2026, 9, 25, tzinfo=timezone.utc),
             operator=operator,
-            box=box,
-            position="1A",
+            source_box=withdrawn_box,
+            source_position=withdrawn_position,
             note="Retiro para análisis",
         )
     )
@@ -133,8 +135,8 @@ def test_withdrawing_sample_releases_position_without_deleting_history(db_sessio
     assert thaw_movement.operator_id == operator.id
     assert thaw_movement.date == datetime(2026, 9, 25, tzinfo=timezone.utc)
     assert thaw_movement.note == "Retiro para análisis"
-    assert thaw_movement.box_id == box.id
-    assert thaw_movement.position == "1A"
+    assert thaw_movement.source_box_id == box.id
+    assert thaw_movement.source_position == "1A"
 
 
 def test_transferring_sample_records_history_and_frees_previous_position(db_session) -> None:
@@ -159,13 +161,15 @@ def test_transferring_sample_records_history_and_frees_previous_position(db_sess
             action=MovementAction.FREEZE,
             date=datetime(2026, 9, 24, tzinfo=timezone.utc),
             operator=operator,
-            box=box,
-            position="2A",
+            destination_box=box,
+            destination_position="2A",
             note="Ingreso inicial",
         )
     )
     db_session.commit()
 
+    source_box = box
+    source_position = "2A"
     sample.box = second_box
     sample.position = "3A"
     db_session.add(
@@ -174,8 +178,10 @@ def test_transferring_sample_records_history_and_frees_previous_position(db_sess
             action=MovementAction.TRANSFER,
             date=datetime(2026, 9, 26, tzinfo=timezone.utc),
             operator=operator,
-            box=second_box,
-            position="3A",
+            source_box=source_box,
+            source_position=source_position,
+            destination_box=second_box,
+            destination_position="3A",
             note="Traslado a otra caja",
         )
     )
@@ -204,4 +210,9 @@ def test_transferring_sample_records_history_and_frees_previous_position(db_sess
         MovementAction.FREEZE,
         MovementAction.TRANSFER,
     ]
+    transfer_movement = persisted.movements[-1]
+    assert transfer_movement.source_box_id == box.id
+    assert transfer_movement.source_position == "2A"
+    assert transfer_movement.destination_box_id == second_box.id
+    assert transfer_movement.destination_position == "3A"
     assert replacement.id is not None

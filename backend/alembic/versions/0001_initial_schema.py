@@ -94,12 +94,15 @@ def upgrade() -> None:
         sa.Column("action", movement_action, nullable=False),
         sa.Column("date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("operator_id", sa.Integer(), nullable=False),
-        sa.Column("box_id", sa.Integer(), nullable=True),
-        sa.Column("position", sa.String(length=8), nullable=True),
+        sa.Column("source_box_id", sa.Integer(), nullable=True),
+        sa.Column("source_position", sa.String(length=8), nullable=True),
+        sa.Column("destination_box_id", sa.Integer(), nullable=True),
+        sa.Column("destination_position", sa.String(length=8), nullable=True),
         sa.Column("note", sa.Text(), nullable=True),
-        sa.ForeignKeyConstraint(["box_id"], ["boxes.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["destination_box_id"], ["boxes.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["operator_id"], ["users.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["sample_id"], ["samples.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["source_box_id"], ["boxes.id"], ondelete="RESTRICT"),
     )
 
 
