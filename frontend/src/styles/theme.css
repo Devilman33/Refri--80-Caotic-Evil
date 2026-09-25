@@ -131,6 +131,13 @@ a {
   color: var(--accent);
 }
 
+/* Foco visible en todo control (DESIGN.md › Foco y teclado). :where() deja la
+   especificidad en cero para que un componente pueda afinarlo. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .app {
   display: flex;
   flex-direction: column;
@@ -589,6 +596,13 @@ table.samples-table {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   font-weight: 700;
+}
+
+/* La elegida ya lleva contorno turquesa: el foco de teclado tiene que verse distinto
+   para que al recorrer con flechas se sepa dónde se está y cuál quedó elegida. */
+.position-cell:focus-visible {
+  outline: 2px dashed var(--ink);
+  outline-offset: 2px;
 }
 
 .view-toggle {
