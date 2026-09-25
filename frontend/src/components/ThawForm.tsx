@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { api, ApiError } from "../api/client";
 import {
   SAMPLE_TYPE_LABELS,
@@ -32,6 +32,8 @@ export interface ThawFormProps {
  * campos del Google Form se MUESTRAN con los datos de la muestra elegida: la posición ya
  * la identifica, y pedirlos de nuevo solo permitiría que no coincidan (docs/FORMULARIO.md).
  */
+const ID_DEBOUNCE_MS = 250;
+
 export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: ThawFormProps) {
   const [boxes, setBoxes] = useState<BoxOccupancy[] | null>(null);
   const [date, setDate] = useState(todayIso);
@@ -46,6 +48,13 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Frente al freezer se tiene el tubo en la mano y se lee su ID: se puede partir por ahí
+  // (docs/PLAN_FRONTEND.md, F2). Elegir una muestra rellena caja y posición; los campos
+  // del Google Form no cambian.
+  const [idQuery, setIdQuery] = useState("");
+  const [idMatches, setIdMatches] = useState<SampleWithLocation[]>([]);
+  const [idStatus, setIdStatus] = useState<"idle" | "loading" | "empty" | "error">("idle");
+  const idSeq = useRef(0);
 
   // Solo se ofrecen cajas con muestras activas: no hay nada que retirar de una vacía.
   useEffect(() => {
@@ -102,6 +111,49 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
     [positions],
   );
   const sampleId = positions.find((entry) => entry.position === position && entry.occupied)?.sample_id ?? null;
+
+  useEffect(() => {
+    const text = idQuery.trim();
+    const seq = ++idSeq.current;
+    if (text.length < 2) {
+      setIdMatches([]);
+      setIdStatus("idle");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setIdStatus("loading");
+      api
+        .searchSamples({ environ_id: text, status: "active", page: 1, page_size: 8 })
+        .then((page) => {
+          if (seq !== idSeq.current) return;
+          setIdMatches(page.items);
+          setIdStatus(page.total === 0 ? "empty" : "idle");
+        })
+        .catch(() => {
+          if (seq === idSeq.current) setIdStatus("error");
+        });
+    }, ID_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [idQuery]);
+
+  function chooseSample(match: SampleWithLocation) {
+    idSeq.current += 1;
+    setIdQuery(match.environ_id ?? "");
+    setIdMatches([]);
+    setIdStatus("idle");
+    if (!match.section_code || !match.rack_letter || match.box_number === undefined) return;
+    setSectionCode(match.section_code);
+    setRackLetter(match.rack_letter);
+    setBoxNumber(String(match.box_number));
+    setPosition(match.position);
+  }
+
+  function handleIdKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    // Enter en el ID elige la muestra si hay una sola; no envía el retiro.
+    event.preventDefault();
+    if (idMatches.length === 1) chooseSample(idMatches[0]);
+  }
 
   function chooseSection(value: string) {
     setSectionCode(value);
@@ -202,6 +254,40 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
           void submit();
         }}
       >
+        <div className="field field--full thaw-id">
+          <label htmlFor="tf-environ-id">ID Environ del tubo</label>
+          <input
+            id="tf-environ-id"
+            value={idQuery}
+            onChange={(event) => setIdQuery(event.target.value)}
+            onKeyDown={handleIdKeyDown}
+            placeholder="p. ej. BP1234"
+            autoComplete="off"
+            spellCheck={false}
+            aria-describedby="tf-environ-id-hint"
+          />
+          <p id="tf-environ-id-hint" className="field-hint" role="status">
+            {idStatus === "loading" && "Buscando…"}
+            {idStatus === "empty" && `No hay muestras activas con «${idQuery.trim()}».`}
+            {idStatus === "error" && "No se pudo buscar. Elige la caja y la posición abajo."}
+            {idStatus === "idle" && idMatches.length === 0 && "O elige la caja y la posición abajo."}
+            {idStatus === "idle" && idMatches.length > 1 && `${idMatches.length} muestras activas: elige cuál.`}
+          </p>
+          {idMatches.length > 0 && (
+            <ul className="thaw-id__matches" aria-label="Muestras con ese ID">
+              {idMatches.map((match) => (
+                <li key={match.id}>
+                  <button type="button" onClick={() => chooseSample(match)}>
+                    <span className="thaw-id__id">{match.environ_id ?? "Sin ID"}</span>
+                    <span className="thaw-id__loc">{match.location}</span>
+                    {match.is_core && <span className="global-search__core">Núcleo</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         <div className="field">
           <label htmlFor="tf-date">Fecha</label>
           <input id="tf-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
@@ -338,8 +424,9 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
           <button type="button" className="btn-ghost" onClick={onClose} disabled={submitting}>
             Cancelar
           </button>
-          <button type="submit" className="btn btn-danger" disabled={submitting || !allowed}>
-            {submitting ? "Retirando…" : "Retirar muestra"}
+          {/* Primario turquesa, no rojo: descongelar no borra nada (DESIGN.md). */}
+          <button type="submit" className="btn" disabled={submitting || !allowed}>
+            {submitting ? "Descongelando…" : "Descongelar"}
           </button>
         </div>
       </form>

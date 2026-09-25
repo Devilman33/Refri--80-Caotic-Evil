@@ -154,7 +154,7 @@ describe("App · recarga del visor", () => {
     const thaw = await screen.findByRole("dialog", { name: /retirar muestra/i });
     await within(thaw).findByRole("region", { name: /muestra a retirar/i });
     await user.type(within(thaw).getByLabelText(/motivo del retiro/i), "Extracción de RNA");
-    await user.click(within(thaw).getByRole("button", { name: /retirar muestra/i }));
+    await user.click(within(thaw).getByRole("button", { name: /^descongelar$/i }));
 
     await waitFor(() => expect(screen.getByTestId("viewer-reload")).toHaveTextContent("1"));
     expect(viewerMounts.count).toBe(1);

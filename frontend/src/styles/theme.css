@@ -2098,3 +2098,49 @@ h3[tabindex="-1"]:focus {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* F2: partir por el ID del tubo al descongelar. */
+.thaw-id input {
+  font-family: var(--mono);
+}
+
+.thaw-id__matches {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.thaw-id__matches button {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--panel);
+  text-align: left;
+  cursor: pointer;
+}
+
+.thaw-id__matches button:hover {
+  background: var(--accent-soft);
+}
+
+.thaw-id__id,
+.thaw-id__loc {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.thaw-id__id {
+  font-weight: 600;
+}
+
+.thaw-id__loc {
+  color: var(--muted);
+}

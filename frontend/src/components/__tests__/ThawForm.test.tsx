@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BoxOccupancy, MovementResult, SampleWithLocation, UserRead } from "../../api/types";
@@ -20,6 +20,7 @@ const { api, ApiError } = vi.hoisted(() => {
       getBoxPositions: vi.fn(),
       getSample: vi.fn(),
       createMovement: vi.fn(),
+      searchSamples: vi.fn(),
     },
     ApiError: ApiErrorMock,
   };
@@ -132,7 +133,7 @@ describe("ThawForm", () => {
 
     await screen.findByRole("region", { name: /muestra a retirar/i });
     await user.type(screen.getByLabelText(/motivo del retiro/i), "Extracción de RNA");
-    await user.click(screen.getByRole("button", { name: /retirar muestra/i }));
+    await user.click(screen.getByRole("button", { name: /^descongelar$/i }));
 
     await waitFor(() =>
       expect(api.createMovement).toHaveBeenCalledWith(
@@ -153,6 +154,67 @@ describe("ThawForm", () => {
     renderForm(daniela);
 
     expect(await screen.findByText(/solo sus encargados pueden retirarla/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /retirar muestra/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^descongelar$/i })).toBeDisabled();
+  });
+});
+
+describe("ThawForm · partir por el ID del tubo (F2)", () => {
+  const located = {
+    ...sample,
+    location: "III · F4 · 2C",
+    section_code: "III",
+    rack_letter: "F",
+    box_number: 4,
+    box_type: "carton_81" as const,
+    position: "2C",
+  };
+
+  it("elegir la muestra por su ID rellena sección, rack, caja y posición", async () => {
+    api.searchSamples.mockResolvedValue({ items: [located], total: 1, page: 1, page_size: 8 });
+    api.getBoxPositions.mockResolvedValue([
+      { position: "2C", occupied: true, sample_id: 9, environ_id: "BP009", is_core: true, owners: ["Gonzalo Carrasco"] },
+    ]);
+    const user = userEvent.setup();
+    render(<ThawForm users={users} sessionUser={gonzalo} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/id environ del tubo/i), "BP009");
+    await waitFor(() =>
+      expect(api.searchSamples).toHaveBeenCalledWith(expect.objectContaining({ environ_id: "BP009", status: "active" })),
+    );
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => expect(screen.getByLabelText(/sección/i)).toHaveValue("III"));
+    expect(screen.getByLabelText(/^rack$/i)).toHaveValue("F");
+    expect(screen.getByLabelText(/^caja$/i)).toHaveValue("4");
+    await waitFor(() => expect(api.getBoxPositions).toHaveBeenCalledWith(7));
+    expect(await screen.findByRole("region", { name: /muestra a retirar/i })).toHaveTextContent("BP009");
+    expect(api.createMovement).not.toHaveBeenCalled();
+  });
+
+  it("con varias muestras activas del mismo ID las lista con su ubicación para elegir", async () => {
+    api.searchSamples.mockResolvedValue({
+      items: [located, { ...located, id: 10, location: "III · F4 · 2D", position: "2D" }],
+      total: 2,
+      page: 1,
+      page_size: 8,
+    });
+    const user = userEvent.setup();
+    render(<ThawForm users={users} sessionUser={gonzalo} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/id environ del tubo/i), "BP009");
+    const list = await screen.findByRole("list", { name: /muestras con ese id/i });
+    expect(list).toHaveTextContent("III · F4 · 2C");
+    expect(list).toHaveTextContent("III · F4 · 2D");
+    await user.click(within(list).getByRole("button", { name: /2D/ }));
+    await waitFor(() => expect(screen.getByLabelText(/^caja$/i)).toHaveValue("4"));
+  });
+
+  it("sin muestras activas con ese ID lo dice", async () => {
+    api.searchSamples.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 8 });
+    const user = userEvent.setup();
+    render(<ThawForm users={users} sessionUser={gonzalo} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/id environ del tubo/i), "ZZ1");
+    expect(await screen.findByText(/no hay muestras activas con «zz1»/i)).toBeInTheDocument();
   });
 });
