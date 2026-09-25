@@ -627,8 +627,33 @@ table.samples-table {
   .field input,
   .field select,
   .field textarea,
-  .position-cell {
+  .position-cell,
+  .view-toggle button,
+  .fv-seg button,
+  .fv-search input,
+  .fv-search button,
+  .fv-est-name,
+  .fv-rk button,
+  .fv-cells button,
+  .fv-btn,
+  .alerts-chip button,
+  .sort-button {
     min-height: 44px;
+  }
+
+  .fv-rk button,
+  .bv-close,
+  .alerts-chip button {
+    min-width: 44px;
+  }
+
+  .bv-close {
+    min-height: 44px;
+  }
+
+  /* La fila entera abre el detalle: con guantes, 44px de alto como mínimo. */
+  .samples-table td {
+    height: 44px;
   }
 
   .position-cell {
