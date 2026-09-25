@@ -8,14 +8,9 @@ from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus
 from app.schemas.movement import MovementCreate, MovementRead, MovementResult, PositionConflict
 from app.services.location import sample_with_location
 from app.services.positions import next_free_position
-from app.services.users import get_or_create_user
+from app.services.users import NUCLEO_INITIALS, get_or_create_user
 
 router = APIRouter(prefix="/movements", tags=["movimientos"])
-
-# El Núcleo Environ no es una persona: se modela como un usuario reservado para
-# poder usar la misma columna `owner_id` que las muestras de propietario individual
-# (docs/FORMULARIO.md: "Si Núcleo = Sí, el encargado es el Núcleo Environ").
-NUCLEO_INITIALS = "NUCLEO"
 
 
 @router.post(

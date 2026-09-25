@@ -12,19 +12,30 @@ from app.schemas.common import Page
 from app.schemas.movement import MovementRead
 from app.schemas.sample import SampleCreate, SampleRead, SampleUpdate, SampleWithLocation
 from app.services.location import sample_with_location
-from app.services.users import get_or_create_user
+from app.services.users import NUCLEO_INITIALS, get_or_create_user
 
 router = APIRouter(prefix="/samples", tags=["muestras"])
 
 _LOCATION_LOAD = joinedload(Sample.box).joinedload(Box.rack).joinedload(Rack.section)
 
 
+def _check_nucleo_owner(owner: User, *, is_core: bool | None) -> None:
+    """Si Núcleo = Sí, el encargado debe ser el usuario reservado Núcleo Environ
+    (docs/FORMULARIO.md), igual que ya exige el flujo de `POST /movements`."""
+    if is_core and owner.initials != NUCLEO_INITIALS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Una muestra con Núcleo=Sí debe estar a cargo del usuario reservado 'NUCLEO'",
+        )
+
+
 @router.post("", response_model=SampleRead, status_code=status.HTTP_201_CREATED)
 def create_sample(payload: SampleCreate, db: DbSession) -> Sample:
     """Alta directa de una muestra: registra además el movimiento de congelamiento
     (igual que `POST /movements`) para no dejar el historial vacío."""
-    get_or_404(db, User, payload.owner_id, "Usuario encargado no encontrado")
+    owner = get_or_404(db, User, payload.owner_id, "Usuario encargado no encontrado")
     box = get_or_404(db, Box, payload.box_id, "Caja no encontrada")
+    _check_nucleo_owner(owner, is_core=payload.is_core)
 
     position, inferred_box_type, reason = parse_posicion(payload.position)
     if reason:
@@ -160,10 +171,12 @@ def get_sample(sample_id: int, db: DbSession) -> SampleWithLocation:
 def update_sample(sample_id: int, payload: SampleUpdate, db: DbSession) -> Sample:
     sample = get_or_404(db, Sample, sample_id, "Muestra no encontrada")
     data = payload.model_dump(exclude_unset=True)
+    owner = sample.owner
     if data.get("owner_id") is not None:
-        get_or_404(db, User, data["owner_id"], "Usuario encargado no encontrado")
+        owner = get_or_404(db, User, data["owner_id"], "Usuario encargado no encontrado")
     if data.get("type") is not None:
         data["type"] = data["type"].value
+    _check_nucleo_owner(owner, is_core=data.get("is_core", sample.is_core))
     for field, value in data.items():
         setattr(sample, field, value)
     db.commit()

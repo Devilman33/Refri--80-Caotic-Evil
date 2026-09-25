@@ -45,6 +45,34 @@ def test_create_sample_rejects_position_for_wrong_box_type(client, db_session):
     assert response.status_code == 422
 
 
+def test_create_core_sample_requires_nucleo_owner(client, db_session):
+    _, _, box = make_freezer(client)
+    owner = create_user(client, initials="GC")
+
+    response = client.post(
+        "/samples",
+        json={
+            "type": "vial_celulas",
+            "owner_id": owner["id"],
+            "box_id": box["id"],
+            "position": "1A",
+            "is_core": True,
+            "operator_initials": "GC",
+            "date": "2026-01-15",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_update_sample_rejects_setting_is_core_without_nucleo_owner(client, db_session):
+    _, _, box = make_freezer(client)
+    owner = create_user(client, initials="GC")
+    created = create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1A")
+
+    response = client.patch(f"/samples/{created['id']}", json={"is_core": True})
+    assert response.status_code == 422
+
+
 def test_get_sample_includes_readable_location(client, db_session):
     _, rack, box = make_freezer(client, section_code="III", rack_letter="F", box_number=12)
     owner = create_user(client, initials="GC")
