@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     # etc.) contra el inventario, así que se restringe a los orígenes conocidos.
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
+    # Tope de filas del export CSV. 25.000 sale de la realidad física del freezer: 8 racks
+    # x 20 subcajas x 100 posiciones = 16.000 posiciones activas, y 24.000 con la lectura
+    # de 1-30 cajas por rack de docs/DATOS.md. Un tope mucho mayor no protegería de nada
+    # (el endpoint no tiene autenticación, así que el tope también es el presupuesto de
+    # DoS) y uno cercano al dataset real convertiría "exportar todo" en un 422.
+    # Es configurable para poder probar el borde sin crear 25.000 filas.
+    export_max_rows: int = 25_000
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

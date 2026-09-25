@@ -12,9 +12,12 @@ export interface SampleDetailProps {
   /** Solo se ofrece cuando el detalle se abrió desde una posición ocupada del
    * visor 3D (issue #6): ahí ya se conoce la caja/posición sin otro round-trip. */
   onThaw?: () => void;
+  /** Corregir los datos descriptivos. Es lo que hace accionable la alerta de muestras
+   * sin encargado: sin esto, la alerta avisa de algo que la web no deja arreglar. */
+  onEdit?: () => void;
 }
 
-export function SampleDetail({ sample, ownerLabel, onClose, onThaw }: SampleDetailProps) {
+export function SampleDetail({ sample, ownerLabel, onClose, onThaw, onEdit }: SampleDetailProps) {
   const [movements, setMovements] = useState<MovementRead[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,16 +44,9 @@ export function SampleDetail({ sample, ownerLabel, onClose, onThaw }: SampleDeta
           <h2 id="sd-title" tabIndex={-1}>
             <code>{sample.environ_id ?? `Muestra #${sample.id}`}</code>
           </h2>
-          <div style={{ display: "flex", gap: 8 }}>
-            {onThaw && sample.status === "active" && (
-              <button className="btn-ghost" onClick={onThaw}>
-                Descongelar
-              </button>
-            )}
-            <button className="btn-ghost" onClick={onClose} aria-label="Cerrar">
-              Cerrar
-            </button>
-          </div>
+          <button className="btn-ghost" onClick={onClose} aria-label="Cerrar">
+            Cerrar
+          </button>
         </div>
 
         <NucleoWarning isCore={sample.is_core} />
@@ -90,6 +86,25 @@ export function SampleDetail({ sample, ownerLabel, onClose, onThaw }: SampleDeta
           </div>
         </dl>
 
+        {sample.status === "active" ? (
+          <div className="form-actions" style={{ marginTop: 12 }}>
+            {onEdit && (
+              <button className="btn-ghost" onClick={onEdit}>
+                Editar
+              </button>
+            )}
+            {onThaw && (
+              <button className="btn-ghost" onClick={onThaw}>
+                Descongelar
+              </button>
+            )}
+          </div>
+        ) : (
+          <p className="field-hint" style={{ marginTop: 12 }}>
+            Muestra retirada: queda en el historial y no se puede modificar desde acá.
+          </p>
+        )}
+
         <h3>Historial de movimientos</h3>
         {error && <p role="alert">No se pudo cargar el historial: {error}</p>}
         {!error && movements === null && <p>Cargando historial…</p>}
@@ -100,7 +115,8 @@ export function SampleDetail({ sample, ownerLabel, onClose, onThaw }: SampleDeta
               <li key={movement.id}>
                 <span>
                   <strong>{MOVEMENT_ACTION_LABELS[movement.action]}</strong> · {formatDate(movement.date)} ·{" "}
-                  posición {movement.position}
+                  posición {movement.position} ·{" "}
+                  {movement.operator_initials ?? "importado"}
                   {movement.note ? ` · ${movement.note}` : ""}
                 </span>
               </li>

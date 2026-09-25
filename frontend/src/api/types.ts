@@ -92,12 +92,27 @@ export interface SampleWithLocation {
   location: string;
 }
 
+/** Solo los datos descriptivos. La ubicación y el estado cambian por movimientos, para
+ * no romper la trazabilidad (ver SampleUpdate en el backend). */
+export interface SampleUpdate {
+  environ_id?: string | null;
+  description?: string | null;
+  type?: SampleType;
+  type_other?: string | null;
+  owner_id?: number;
+  passage?: number | null;
+  is_core?: boolean | null;
+  notes?: string | null;
+}
+
 export interface MovementRead {
   id: number;
   sample_id: number;
   action: MovementAction;
   date: string;
   operator_id: number | null;
+  /** `null` cuando el movimiento vino del importador: el Excel histórico no lo traía. */
+  operator_initials: string | null;
   box_id: number;
   position: string;
   note: string | null;
@@ -168,6 +183,20 @@ export interface BoxOccupancy extends FreezerOccupancy {
   box_type: BoxType;
   is_full: boolean | null;
 }
+
+// Alertas (GET /alerts, issue #8). Cuatro contadores con cuatro destinos distintos:
+// "llenas" y "casi llenas" NO son el mismo estado de la vista de % de uso.
+export interface AlertsRead {
+  unassigned_samples: number;
+  nearly_full_boxes: number;
+  full_boxes: number;
+  inconsistent_full_boxes: number;
+  boxes: BoxOccupancy[];
+}
+
+/** Centinela que el importador asigna a las filas sin Encargado (docs/DATOS.md). No es
+ * una persona: nunca se muestra crudo en la UI. */
+export const UNASSIGNED_INITIALS = "SIN_ASIG";
 
 export interface BoxPositionStatus {
   position: string;

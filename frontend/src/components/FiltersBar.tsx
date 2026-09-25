@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { api, ApiError } from "../api/client";
 import {
   RACK_LETTERS,
   SAMPLE_TYPE_LABELS,
@@ -11,6 +12,9 @@ import {
 export interface FiltersBarProps {
   filters: SampleSearchFilters;
   onChange: (next: SampleSearchFilters) => void;
+  /** Total de la búsqueda actual. El botón de export lo muestra para que se sepa cuánto
+   * se está por bajar antes de hacer clic, y se deshabilita en cero. */
+  total: number;
   myInitials: string;
   onMyInitialsChange: (initials: string) => void;
   myFilterActive: boolean;
@@ -30,6 +34,7 @@ function toOptionalNumber(value: string): number | undefined {
 export function FiltersBar({
   filters,
   onChange,
+  total,
   myInitials,
   onMyInitialsChange,
   myFilterActive,
@@ -99,6 +104,34 @@ export function FiltersBar({
 
   function clearFilters() {
     onChange({ page: 1, page_size: filters.page_size });
+  }
+
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  async function exportCsv() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      // Se piden TODOS los resultados del filtro, no la página que se está viendo: el
+      // export existe para llevarse la búsqueda entera.
+      const { page, page_size, sort_by, sort_dir, ...forExport } = filters;
+      void page;
+      void page_size;
+      void sort_by;
+      void sort_dir;
+      const { blob, filename } = await api.downloadSamplesCsv(forExport);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err instanceof ApiError ? err.message : "No se pudo generar el archivo");
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -272,7 +305,21 @@ export function FiltersBar({
         <button type="button" className="btn-ghost" onClick={clearFilters}>
           Limpiar filtros
         </button>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => void exportCsv()}
+          disabled={total === 0 || exporting}
+          title={total === 0 ? "No hay resultados para exportar" : undefined}
+        >
+          {exporting ? "Generando…" : `Exportar CSV (${total.toLocaleString("es-CL")})`}
+        </button>
       </div>
+      {exportError && (
+        <p className="field-error" role="alert">
+          {exportError}
+        </p>
+      )}
     </div>
   );
 }

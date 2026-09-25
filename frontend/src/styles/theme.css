@@ -1344,6 +1344,77 @@ table.samples-table {
   color: var(--muted);
 }
 
+/* Declarada completa pero con lugar libre: es un dato equivocado, no una caja llena.
+   Usa el color de advertencia con borde para distinguirse de "casi llena", que es una
+   situacion normal. */
+.usage-row--inconsistent td:first-child {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+
+.usage-badge--inconsistent {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+}
+
+/* Panel de alertas: lista compacta de contadores, NO un mosaico de cards de KPI.
+   Cada fila es un enlace a un destino distinto. */
+.alerts-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.alerts-panel button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.alerts-panel button:hover {
+  background: var(--chip-hover);
+}
+
+.alerts-panel .badge {
+  font-variant-numeric: tabular-nums;
+}
+
+.alerts-empty {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.alerts-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--chip);
+  font-size: 12px;
+}
+
+.alerts-chip button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 0 2px;
+}
+
 /* Panel de % en el visor 3D */
 /* Dentro del panel lateral del visor (sección "% de uso"). */
 .freezer-usage {

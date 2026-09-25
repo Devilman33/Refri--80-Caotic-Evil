@@ -1,4 +1,4 @@
-import { SAMPLE_TYPE_LABELS, type SampleSortKey, type SampleWithLocation } from "../api/types";
+import { SAMPLE_TYPE_LABELS, UNASSIGNED_INITIALS, type SampleSortKey, type SampleWithLocation } from "../api/types";
 import { formatDate } from "../utils/format";
 import { NucleoWarning } from "./NucleoWarning";
 
@@ -77,7 +77,15 @@ export function SamplesTable({ samples, ownerLookup, onSelect, sort, onSortChang
               </td>
               <td>{sample.description ?? "—"}</td>
               <td>{SAMPLE_TYPE_LABELS[sample.type]}</td>
-              <td>{ownerLookup[sample.owner_id] ?? "—"}</td>
+              <td>
+                {/* SIN_ASIG es el centinela del importador, no una persona: mostrarlo
+                    crudo obliga al operador a aprender un código interno. */}
+                {ownerLookup[sample.owner_id] === UNASSIGNED_INITIALS ? (
+                  <span className="badge badge-withdrawn">Sin encargado</span>
+                ) : (
+                  (ownerLookup[sample.owner_id] ?? "—")
+                )}
+              </td>
               <td>{sample.passage ?? "—"}</td>
               <td>
                 <span className={`badge ${sample.status === "active" ? "badge-active" : "badge-withdrawn"}`}>

@@ -59,6 +59,7 @@ function baseMovementResult(overrides: Partial<MovementResult["sample"]> = {}): 
       action: "freeze",
       date: "2026-01-10",
       operator_id: 1,
+      operator_initials: "GC",
       box_id: 1,
       position: "1A",
       note: null,

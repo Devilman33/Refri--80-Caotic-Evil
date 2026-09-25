@@ -214,3 +214,59 @@ def test_movements_endpoint_rejects_unimplemented_action(client, db_session):
 
     assert response.status_code == 422
     assert client.get("/samples").json()["total"] == 0
+
+
+def test_concurrent_box_creation_during_freeze_keeps_operator(client, db_session):
+    """A9: dos congelamientos simultáneos en una caja que aún no existe.
+
+    Se fuerza la carrera creando la caja entre el chequeo y el flush. El punto fino es que
+    el rescate NO puede ser un rollback completo: eso descartaría el INSERT del operador que
+    ya se flusheó, y como operator_id es nullable el evento saldría sin operador — un 201
+    que incumple en silencio la regla de registrar quién.
+    """
+    from app.api import movements as movements_module
+
+    section = create_section(client, code="I")
+    rack = create_rack(client, section_id=section["id"], letter="A", slot="center", capacity=30)
+
+    original = movements_module.ensure_box_number_within_capacity
+
+    def create_box_behind_our_back(rack_obj, number):
+        original(rack_obj, number)
+        # Otro request ganó la carrera y creó la caja justo ahora.
+        client.post("/boxes", json={"rack_id": rack["id"], "number": number, "box_type": "carton_81"})
+
+    movements_module.ensure_box_number_within_capacity = create_box_behind_our_back
+    try:
+        response = client.post(
+            "/movements", json=freeze_payload(rack_letter="A", box_number=7, position="1A")
+        )
+    finally:
+        movements_module.ensure_box_number_within_capacity = original
+
+    assert response.status_code == 201, response.text
+    sample_id = response.json()["sample"]["id"]
+    movements = client.get(f"/samples/{sample_id}/movements").json()
+    assert movements[0]["operator_initials"] == "GC"
+    assert movements[0]["operator_id"] is not None
+
+
+def test_cannot_renumber_a_box_that_has_samples(client, db_session):
+    """A8: cambiar el número reubica todas las muestras sin un evento de movimiento."""
+    _, rack, box = make_freezer(client)
+    client.post("/movements", json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A"))
+
+    response = client.patch(f"/boxes/{box['id']}", json={"number": 9})
+
+    assert response.status_code == 409
+    assert "sin registrar el movimiento" in response.json()["detail"]
+    assert client.get(f"/boxes/{box['id']}").json()["number"] == box["number"]
+
+
+def test_can_renumber_an_empty_box(client, db_session):
+    _, rack, box = make_freezer(client)
+
+    response = client.patch(f"/boxes/{box['id']}", json={"number": 9})
+
+    assert response.status_code == 200
+    assert response.json()["number"] == 9

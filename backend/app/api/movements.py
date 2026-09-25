@@ -99,9 +99,33 @@ def _freeze(
 ) -> MovementResult:
     if box is None:
         ensure_box_number_within_capacity(rack, payload.box_number)
-        box = Box(rack_id=rack.id, number=payload.box_number, box_type=box_type)
-        db.add(box)
-        db.flush()
+        # Dos congelamientos simultáneos en una caja que todavía no existe: los dos llegan
+        # acá con `box is None` y uno viola `uq_boxes_rack_number`. Antes eso salía como un
+        # 500 al operador.
+        #
+        # El SAVEPOINT importa: un `db.rollback()` completo también descartaría el INSERT
+        # del operador que `get_or_create_user` ya flusheó más arriba, y como
+        # `movements.operator_id` es nullable el evento saldría SIN operador — o sea un 201
+        # que incumple en silencio la regla de registrar quién, y que además se mostraría
+        # como "importado" en el historial. `begin_nested` deshace solo la caja.
+        try:
+            with db.begin_nested():
+                box = Box(rack_id=rack.id, number=payload.box_number, box_type=box_type)
+                db.add(box)
+                db.flush()
+        except IntegrityError:
+            box = (
+                db.query(Box)
+                .filter(Box.rack_id == rack.id, Box.number == payload.box_number)
+                .one_or_none()
+            )
+            if box is None:  # pragma: no cover - la caja existía al fallar el INSERT
+                raise
+            if box.box_type != box_type:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    f"La caja {rack.letter}{box.number} ya es de tipo '{box.box_type}'",
+                ) from None
     elif box.box_type != box_type:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,

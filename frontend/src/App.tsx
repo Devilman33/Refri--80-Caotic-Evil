@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "./api/client";
+import { UNASSIGNED_INITIALS } from "./api/types";
 import type { BoxOccupancy, Page, SampleSearchFilters, SampleWithLocation, UserRead } from "./api/types";
+import { AlertsPanel, type AlertDestination } from "./components/AlertsPanel";
 import { FiltersBar } from "./components/FiltersBar";
 import {
   FreezerViewer,
@@ -13,7 +15,9 @@ import { MovementForm, type MovementFormPrefill } from "./components/MovementFor
 import { OccupancyView } from "./components/OccupancyView";
 import { Pagination } from "./components/Pagination";
 import { SampleDetail } from "./components/SampleDetail";
+import { SampleEditModal } from "./components/SampleEditModal";
 import { SamplesTable, type SortState } from "./components/SamplesTable";
+import type { BoxFilter } from "./utils/occupancy";
 
 const THEME_KEY = "refri:theme";
 const MY_INITIALS_KEY = "refri:mis-iniciales";
@@ -44,6 +48,10 @@ export default function App() {
   const [thawSelection, setThawSelection] = useState<OccupiedPositionSelection | null>(null);
   const [freezerKey, setFreezerKey] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
+  const [editing, setEditing] = useState<SampleWithLocation | null>(null);
+  const [alertCount, setAlertCount] = useState(0);
+  const [showAlerts, setShowAlerts] = useState(false);
+  const [boxFilter, setBoxFilter] = useState<BoxFilter>("all");
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -179,6 +187,21 @@ export default function App() {
     setFocusTarget({ boxId: box.box_id, position: null, token: Date.now() });
   }
 
+  // Cada alerta lleva a un destino distinto de una vista que YA existe: el panel es un
+  // enrutador, no una pantalla nueva.
+  function handleAlertNavigate(destination: AlertDestination) {
+    setShowAlerts(false);
+    if (destination.kind === "unassigned") {
+      setViewMode("table");
+      setFilters((current) => ({ ...current, owner_initials: UNASSIGNED_INITIALS, page: 1 }));
+      return;
+    }
+    setBoxFilter(destination.filter);
+    setViewMode("usage");
+  }
+
+  const unassignedFilterActive = filters.owner_initials === UNASSIGNED_INITIALS;
+
   return (
     <div className="app">
       <Header
@@ -191,6 +214,16 @@ export default function App() {
           <button type="button" className="btn" onClick={() => openMovementForm(undefined)}>
             + Nuevo movimiento
           </button>
+          {alertCount > 0 && (
+            <button
+              type="button"
+              className={`btn-ghost${showAlerts ? " on" : ""}`}
+              aria-expanded={showAlerts}
+              onClick={() => setShowAlerts((open) => !open)}
+            >
+              <span aria-live="polite">⚠ {alertCount} alertas</span>
+            </button>
+          )}
           <div className="view-toggle" role="group" aria-label="Vista">
             <button
               type="button"
@@ -227,10 +260,38 @@ export default function App() {
             onMyInitialsChange={setMyInitials}
             myFilterActive={myFilterActive}
             onToggleMyFilter={toggleMyFilter}
+            total={result?.total ?? 0}
           />
         )}
 
-        {viewMode === "usage" && <OccupancyView key={freezerKey} onViewBox={handleViewBoxInFreezer} />}
+        {showAlerts && (
+          <div className="panel">
+            <AlertsPanel
+              reloadToken={reloadToken}
+              onNavigate={handleAlertNavigate}
+              onCountChange={setAlertCount}
+            />
+          </div>
+        )}
+
+        {viewMode === "table" && unassignedFilterActive && (
+          <div className="filters-actions">
+            <span className="alerts-chip">
+              Sin encargado
+              <button
+                type="button"
+                aria-label="Quitar el filtro de muestras sin encargado"
+                onClick={() => setFilters((current) => ({ ...current, owner_initials: undefined, page: 1 }))}
+              >
+                ×
+              </button>
+            </span>
+          </div>
+        )}
+
+        {viewMode === "usage" && (
+          <OccupancyView key={freezerKey} onViewBox={handleViewBoxInFreezer} initialFilter={boxFilter} />
+        )}
         {viewMode === "table" && loading && !result && <div className="empty-state">Cargando muestras…</div>}
         {viewMode === "table" && error && (
           <div className="empty-state" role="alert">
@@ -265,7 +326,7 @@ export default function App() {
         )}
       </main>
 
-      {selected && (
+      {selected && !editing && (
         <SampleDetail
           sample={selected}
           ownerLabel={ownerLookup[selected.owner_id] ?? "—"}
@@ -274,6 +335,20 @@ export default function App() {
             setThawSelection(null);
           }}
           onThaw={thawSelection && thawSelection.sampleId === selected.id ? handleThaw : undefined}
+          onEdit={() => setEditing(selected)}
+        />
+      )}
+
+      {editing && (
+        <SampleEditModal
+          sample={editing}
+          users={users}
+          onClose={() => setEditing(null)}
+          onSaved={(updated) => {
+            setEditing(null);
+            setSelected(updated);
+            setReloadToken((token) => token + 1);
+          }}
         />
       )}
 

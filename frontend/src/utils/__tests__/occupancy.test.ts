@@ -33,8 +33,14 @@ describe("usageLevel", () => {
     expect(usageLevel({ active: 0, capacity: 100, percent: 0 })).toBe("empty");
   });
 
-  it("respeta la caja declarada completa en el formulario", () => {
-    expect(usageLevel({ active: 40, capacity: 81, percent: 49.38, is_full: true })).toBe("full");
+  it("distingue la caja declarada completa que todavía tiene lugar", () => {
+    // 40 de 81 y marcada "llena": es un dato equivocado, no una caja llena. Se clasifica
+    // aparte porque es la alerta más accionable de las cuatro.
+    expect(usageLevel({ active: 40, capacity: 81, percent: 49.38, is_full: true })).toBe("inconsistent");
+  });
+
+  it("respeta la caja declarada completa que además está llena", () => {
+    expect(usageLevel({ active: 81, capacity: 81, percent: 100, is_full: true })).toBe("full");
   });
 });
 
