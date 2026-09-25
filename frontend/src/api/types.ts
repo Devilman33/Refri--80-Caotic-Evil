@@ -228,6 +228,8 @@ export interface BoxPositionStatus {
   sample_id: number | null;
   environ_id: string | null;
   is_core: boolean | null;
+  /** Encargados de la muestra, como se muestran (nombre o iniciales). */
+  owners: string[];
 }
 
 // Campos del formulario de movimientos (docs/FORMULARIO.md). `rack_letter` +

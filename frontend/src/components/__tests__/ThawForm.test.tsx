@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { MovementResult, RackRead, SampleWithLocation, SectionRead, UserRead } from "../../api/types";
+import type { BoxOccupancy, MovementResult, SampleWithLocation, UserRead } from "../../api/types";
 import { ThawForm } from "../ThawForm";
 
 const { api, ApiError } = vi.hoisted(() => {
@@ -16,9 +16,7 @@ const { api, ApiError } = vi.hoisted(() => {
   }
   return {
     api: {
-      listRacks: vi.fn(),
-      listSections: vi.fn(),
-      listBoxes: vi.fn(),
+      listBoxOccupancy: vi.fn(),
       getBoxPositions: vi.fn(),
       getSample: vi.fn(),
       createMovement: vi.fn(),
@@ -29,8 +27,27 @@ const { api, ApiError } = vi.hoisted(() => {
 
 vi.mock("../../api/client", () => ({ api, ApiError }));
 
-const racks: RackRead[] = [{ id: 1, section_id: 1, letter: "A", slot: "center", capacity: 20 }];
-const sections: SectionRead[] = [{ id: 1, code: "I" }];
+function occupancy(overrides: Partial<BoxOccupancy>): BoxOccupancy {
+  return {
+    box_id: 5,
+    number: 1,
+    rack_id: 1,
+    rack_letter: "A",
+    section_code: "I",
+    box_type: "carton_81",
+    is_full: false,
+    active: 1,
+    capacity: 81,
+    percent: 1.23,
+    ...overrides,
+  };
+}
+
+const boxes: BoxOccupancy[] = [
+  occupancy({}),
+  occupancy({ box_id: 6, number: 2, active: 0 }),
+  occupancy({ box_id: 7, number: 4, rack_id: 3, rack_letter: "F", section_code: "III", active: 12 }),
+];
 const gonzalo: UserRead = { id: 1, initials: "GC", name: "Gonzalo Carrasco", active: true };
 const daniela: UserRead = { id: 2, initials: "DB", name: "Daniela Bravo", active: true };
 const users = [gonzalo, daniela];
@@ -55,13 +72,9 @@ const sample: SampleWithLocation = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  api.listRacks.mockResolvedValue(racks);
-  api.listSections.mockResolvedValue(sections);
-  api.listBoxes.mockResolvedValue([
-    { id: 5, rack_id: 1, number: 1, box_type: "carton_81", label: null, owner_id: null, is_full: false },
-  ]);
+  api.listBoxOccupancy.mockResolvedValue(boxes);
   api.getBoxPositions.mockResolvedValue([
-    { position: "1A", occupied: true, sample_id: 9, environ_id: "BP009", is_core: true },
+    { position: "1A", occupied: true, sample_id: 9, environ_id: "BP009", is_core: true, owners: ["Gonzalo Carrasco"] },
   ]);
   api.getSample.mockResolvedValue(sample);
 });
@@ -71,7 +84,7 @@ function renderForm(sessionUser: UserRead = gonzalo, onSubmitted = vi.fn()) {
     <ThawForm
       users={users}
       sessionUser={sessionUser}
-      initial={{ rackLetter: "A", boxNumber: 1, position: "1A" }}
+      initial={{ sectionCode: "I", rackLetter: "A", boxNumber: 1, position: "1A" }}
       onClose={vi.fn()}
       onSubmitted={onSubmitted}
     />,
@@ -92,6 +105,22 @@ describe("ThawForm", () => {
     // Solo se editan los datos del retiro: nada de Tipo ni Núcleo como campos.
     expect(screen.queryByRole("combobox", { name: /^tipo$/i })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText(/sección/i)).toHaveValue("I"));
+  });
+
+  it("sección, rack y caja son desplegables encadenados con solo las cajas que tienen muestras", async () => {
+    const user = userEvent.setup();
+    render(<ThawForm users={users} sessionUser={gonzalo} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByRole("option", { name: "III" })).toBeInTheDocument());
+    expect(screen.getByLabelText(/^rack$/i)).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText(/sección/i), "III");
+    await user.selectOptions(screen.getByLabelText(/^rack$/i), "F");
+    // La caja vacía (A2) no se ofrece; la de F sí, con su ocupación.
+    expect(screen.queryByRole("option", { name: /A2/ })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText(/^caja$/i), "F4 · 12 de 81 ocupadas");
+
+    await waitFor(() => expect(api.getBoxPositions).toHaveBeenCalledWith(7));
   });
 
   it("registra el retiro con su motivo", async () => {

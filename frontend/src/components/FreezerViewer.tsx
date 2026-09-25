@@ -337,6 +337,7 @@ export function FreezerViewer({
           sampleId: null,
           environId: null,
           isCore: false,
+          owners: [],
         })),
       );
       return;
@@ -582,7 +583,7 @@ export function FreezerViewer({
                       const light = lightMap.get(id);
                       const state = light ? lidStateOf(light) : "free";
                       const label = light?.occupied
-                        ? `${id} · ${light.environId ?? "muestra sin ID Environ"}${light.isCore ? " · ⚠ Núcleo Environ" : ""}`
+                        ? `${id} · ${light.environId ?? "muestra sin ID Environ"}${light.owners.length ? ` · ${light.owners.join(", ")}` : ""}${light.isCore ? " · Núcleo" : ""}`
                         : `${id} · libre`;
                       return (
                         <button
@@ -635,11 +636,12 @@ export function FreezerViewer({
                   </div>
                   {selLight?.occupied ? (
                     <>
+                      <div>{selLight.environId ?? "Muestra sin ID Environ"}</div>
                       <div>
-                        {selLight.environId ?? "Muestra sin ID Environ"}
-                        {selLight.isCore && (
-                          <span className="fv-warn"> · ⚠ Núcleo Environ</span>
-                        )}
+                        {selLight.owners.length > 1 ? "Encargados: " : "Encargado: "}
+                        <b>{selLight.owners.length > 0 ? selLight.owners.join(", ") : "sin encargado"}</b>
+                        {/* Núcleo es una marca adicional al encargado, no lo reemplaza. */}
+                        {selLight.isCore && <span className="fv-warn"> · ⚠ Núcleo</span>}
                       </div>
                       <button
                         type="button"

@@ -41,6 +41,9 @@ class BoxPositionStatus(BaseModel):
     environ_id: str | None = None
     # Para pintar el warning de Núcleo en el tooltip del visor 3D sin otro round-trip.
     is_core: bool | None = None
+    #: Encargados de la muestra, como se muestran (nombre o iniciales). Núcleo es una
+    #: marca aparte: lo primero que se lee de una posición ocupada es de quién es.
+    owners: list[str] = []
 
 
 class BoxMoveCreate(BaseModel):

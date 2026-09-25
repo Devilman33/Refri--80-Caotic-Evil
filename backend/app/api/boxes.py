@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, DbSession, get_or_404
 from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus, User
@@ -105,7 +106,10 @@ def box_positions(box_id: int, db: DbSession) -> list[BoxPositionStatus]:
     """Estado de cada posición de la caja (ocupada/libre) para las luces del visor."""
     box = get_or_404(db, Box, box_id, "Caja no encontrada")
     active_samples = (
-        db.query(Sample).filter(Sample.box_id == box.id, Sample.status == SampleStatus.ACTIVE.value).all()
+        db.query(Sample)
+        .options(selectinload(Sample.owners))
+        .filter(Sample.box_id == box.id, Sample.status == SampleStatus.ACTIVE.value)
+        .all()
     )
     by_position = {sample.position: sample for sample in active_samples}
     return [
@@ -115,6 +119,9 @@ def box_positions(box_id: int, db: DbSession) -> list[BoxPositionStatus]:
             sample_id=by_position[position].id if position in by_position else None,
             environ_id=by_position[position].environ_id if position in by_position else None,
             is_core=by_position[position].is_core if position in by_position else None,
+            owners=[owner.name or owner.initials for owner in by_position[position].owners]
+            if position in by_position
+            else [],
         )
         for position in position_order(box.box_type)
     ]

@@ -275,6 +275,7 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
             sample_id: result.sample.id,
             environ_id: result.sample.environ_id,
             is_core: result.sample.is_core,
+            owners: form.ownerInitials,
           },
         ]);
         const next = nextFreePosition(form.boxType, updatedOccupied);

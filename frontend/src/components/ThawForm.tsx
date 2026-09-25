@@ -2,15 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../api/client";
 import {
   SAMPLE_TYPE_LABELS,
+  type BoxOccupancy,
+  type BoxPositionStatus,
   type MovementResult,
-  type RackRead,
   type SampleWithLocation,
-  type SectionRead,
   type UserRead,
 } from "../api/types";
-import { useBoxResolution } from "../hooks/useBoxResolution";
 import { formatBoolean, todayIso } from "../utils/format";
-import { parseBoxName, sectionCodeForBox } from "../utils/positions";
 import { canModifySample, ownersLabel, ownersOf } from "../utils/users";
 import type { LocationPrefill } from "./FreezeForm";
 import { Modal } from "./Modal";
@@ -35,13 +33,13 @@ export interface ThawFormProps {
  * la identifica, y pedirlos de nuevo solo permitiría que no coincidan (docs/FORMULARIO.md).
  */
 export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: ThawFormProps) {
-  const [racks, setRacks] = useState<RackRead[]>([]);
-  const [sections, setSections] = useState<SectionRead[]>([]);
+  const [boxes, setBoxes] = useState<BoxOccupancy[] | null>(null);
   const [date, setDate] = useState(todayIso);
   const [operatorInitials, setOperatorInitials] = useState(sessionUser.initials);
-  const [boxName, setBoxName] = useState(
-    initial?.rackLetter && initial?.boxNumber ? `${initial.rackLetter}${initial.boxNumber}` : "",
-  );
+  const [sectionCode, setSectionCode] = useState(initial?.sectionCode ?? "");
+  const [rackLetter, setRackLetter] = useState(initial?.rackLetter ?? "");
+  const [boxNumber, setBoxNumber] = useState(initial?.boxNumber ? String(initial.boxNumber) : "");
+  const [positions, setPositions] = useState<BoxPositionStatus[]>([]);
   const [position, setPosition] = useState(initial?.position ?? "");
   const [reason, setReason] = useState("");
   const [sample, setSample] = useState<SampleWithLocation | null>(null);
@@ -49,14 +47,79 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const box = useBoxResolution(boxName, racks);
-  const sectionCode = useMemo(() => sectionCodeForBox(boxName, racks, sections), [boxName, racks, sections]);
-  const sampleId = box.positions.find((entry) => entry.position === position && entry.occupied)?.sample_id ?? null;
+  // Solo se ofrecen cajas con muestras activas: no hay nada que retirar de una vacía.
+  useEffect(() => {
+    api
+      .listBoxOccupancy()
+      .then((list) => setBoxes(list.filter((box) => box.active > 0)))
+      .catch(() => setBoxes([]));
+  }, []);
+
+  const sectionOptions = useMemo(
+    () => [...new Set((boxes ?? []).map((box) => box.section_code))].sort(),
+    [boxes],
+  );
+  const rackOptions = useMemo(
+    () => [...new Set((boxes ?? []).filter((box) => box.section_code === sectionCode).map((box) => box.rack_letter))].sort(),
+    [boxes, sectionCode],
+  );
+  const boxOptions = useMemo(
+    () =>
+      (boxes ?? [])
+        .filter((box) => box.section_code === sectionCode && box.rack_letter === rackLetter)
+        .sort((a, b) => a.number - b.number),
+    [boxes, sectionCode, rackLetter],
+  );
+  const selectedBox = boxOptions.find((box) => String(box.number) === boxNumber) ?? null;
+  const selectedBoxId = selectedBox?.box_id ?? null;
 
   useEffect(() => {
-    api.listRacks().then(setRacks).catch(() => setRacks([]));
-    api.listSections().then(setSections).catch(() => setSections([]));
-  }, []);
+    if (selectedBoxId === null) {
+      setPositions([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .getBoxPositions(selectedBoxId)
+      .then((loaded) => {
+        if (!cancelled) setPositions(loaded);
+      })
+      .catch(() => {
+        if (!cancelled) setPositions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBoxId]);
+
+  const occupied = useMemo(() => new Set(positions.filter((entry) => entry.occupied).map((entry) => entry.position)), [positions]);
+  const occupantLabels = useMemo(
+    () => new Map(positions.filter((entry) => entry.occupied).map((entry) => [entry.position, entry.environ_id])),
+    [positions],
+  );
+  const corePositions = useMemo(
+    () => new Set(positions.filter((entry) => entry.occupied && entry.is_core).map((entry) => entry.position)),
+    [positions],
+  );
+  const sampleId = positions.find((entry) => entry.position === position && entry.occupied)?.sample_id ?? null;
+
+  function chooseSection(value: string) {
+    setSectionCode(value);
+    setRackLetter("");
+    setBoxNumber("");
+    setPosition("");
+  }
+
+  function chooseRack(value: string) {
+    setRackLetter(value);
+    setBoxNumber("");
+    setPosition("");
+  }
+
+  function chooseBox(value: string) {
+    setBoxNumber(value);
+    setPosition("");
+  }
 
   // La muestra que se va a retirar, con todos sus datos: es lo que el operador confirma.
   useEffect(() => {
@@ -85,12 +148,9 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
     const errors: Record<string, string> = {};
     if (!date) errors.date = "La fecha es obligatoria";
     if (!operatorInitials.trim()) errors.operatorInitials = "El operador es obligatorio";
-    const parsed = parseBoxName(boxName);
-    if (!boxName.trim()) errors.boxName = "El nombre de la caja es obligatorio";
-    else if (!parsed) errors.boxName = "Formato inválido: letra de rack + N° de caja (p. ej. A12)";
-    else if (!racks.some((rack) => rack.letter === parsed.rackLetter)) {
-      errors.boxName = `No existe el rack '${parsed.rackLetter}'`;
-    }
+    if (!sectionCode) errors.sectionCode = "Elige la sección";
+    else if (!rackLetter) errors.rackLetter = "Elige el rack";
+    else if (!selectedBox) errors.boxNumber = "Elige la caja";
     if (!position) errors.position = "Selecciona la posición de la muestra que vas a retirar";
     return errors;
   }
@@ -101,15 +161,14 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
     setSubmitError(null);
     if (Object.keys(errors).length > 0 || !allowed) return;
 
-    const parsed = parseBoxName(boxName)!;
     setSubmitting(true);
     try {
       const result = await api.createMovement({
         action: "thaw",
         date,
         operator_initials: operatorInitials.trim().toUpperCase(),
-        rack_letter: parsed.rackLetter,
-        box_number: parsed.boxNumber,
+        rack_letter: rackLetter,
+        box_number: Number(boxNumber),
         position,
         note: reason.trim() || null,
       });
@@ -158,32 +217,58 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
         </div>
 
         <div className="field">
-          <label htmlFor="tf-box-name">Nombre Caja (Letra rack y N° de caja)</label>
-          <input
-            id="tf-box-name"
-            value={boxName}
-            onChange={(event) => {
-              setBoxName(event.target.value);
-              setPosition("");
-            }}
-            placeholder="p. ej. A12"
-          />
-          {fieldErrors.boxName && <p className="field-error">{fieldErrors.boxName}</p>}
+          <label htmlFor="tf-section">Sección</label>
+          <select id="tf-section" value={sectionCode} onChange={(event) => chooseSection(event.target.value)}>
+            <option value="">{boxes === null ? "Cargando…" : "Selecciona…"}</option>
+            {sectionOptions.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
+          {fieldErrors.sectionCode && <p className="field-error">{fieldErrors.sectionCode}</p>}
         </div>
 
         <div className="field">
-          <label htmlFor="tf-section">Sección</label>
-          <input id="tf-section" value={sectionCode ?? ""} readOnly placeholder="Según el rack" />
+          <label htmlFor="tf-rack">Rack</label>
+          <select
+            id="tf-rack"
+            value={rackLetter}
+            disabled={!sectionCode}
+            onChange={(event) => chooseRack(event.target.value)}
+          >
+            <option value="">Selecciona…</option>
+            {rackOptions.map((letter) => (
+              <option key={letter} value={letter}>
+                {letter}
+              </option>
+            ))}
+          </select>
+          {fieldErrors.rackLetter && <p className="field-error">{fieldErrors.rackLetter}</p>}
+        </div>
+
+        <div className="field">
+          <label htmlFor="tf-box">Caja</label>
+          <select id="tf-box" value={boxNumber} disabled={!rackLetter} onChange={(event) => chooseBox(event.target.value)}>
+            <option value="">Selecciona…</option>
+            {boxOptions.map((box) => (
+              <option key={box.box_id} value={box.number}>
+                {box.rack_letter}
+                {box.number} · {box.active} de {box.capacity} ocupadas
+              </option>
+            ))}
+          </select>
+          {fieldErrors.boxNumber && <p className="field-error">{fieldErrors.boxNumber}</p>}
         </div>
 
         <div className="field field--full">
           <label>Posición de la muestra a retirar</label>
           <p className="field-hint">Solo se pueden elegir posiciones ocupadas.</p>
           <PositionPicker
-            boxType={box.boxType}
-            occupied={box.occupied}
-            occupantLabels={box.occupantLabels}
-            corePositions={box.corePositions}
+            boxType={selectedBox?.box_type ?? "carton_81"}
+            occupied={occupied}
+            occupantLabels={occupantLabels}
+            corePositions={corePositions}
             value={position || null}
             onChange={setPosition}
             selectMode="occupied"

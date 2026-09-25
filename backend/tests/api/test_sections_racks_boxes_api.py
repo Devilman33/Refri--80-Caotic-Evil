@@ -75,6 +75,7 @@ def test_create_box_and_positions(client, db_session):
         "sample_id": None,
         "environ_id": None,
         "is_core": None,
+        "owners": [],
     }
     assert all(not entry["occupied"] for entry in positions)
 
@@ -100,6 +101,9 @@ def test_box_positions_report_is_core_for_the_nucleo_warning(client, db_session)
     positions = {entry["position"]: entry for entry in client.get(f"/boxes/{box['id']}/positions").json()}
     assert positions["1A"]["occupied"] is True
     assert positions["1A"]["is_core"] is True
+    # Núcleo es una marca: la posición dice igual de quién es la muestra.
+    assert positions["1A"]["owners"] == ["GC"]
+    assert positions["1B"]["owners"] == ["DB"]
     assert positions["1B"]["occupied"] is True
     assert positions["1B"]["is_core"] is False
     assert positions["1C"]["occupied"] is False
