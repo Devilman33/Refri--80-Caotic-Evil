@@ -20,6 +20,18 @@ def test_list_users(client, db_session):
     assert initials == {"GC", "DB"}
 
 
+def test_create_user_rejects_whitespace_only_initials(client, db_session):
+    response = client.post("/users", json={"initials": "   "})
+    assert response.status_code == 422
+
+
+def test_update_user_rejects_whitespace_only_initials(client, db_session):
+    created = create_user(client, initials="GC")
+
+    response = client.patch(f"/users/{created['id']}", json={"initials": "   "})
+    assert response.status_code == 422
+
+
 def test_create_user_duplicate_initials_conflicts(client, db_session):
     create_user(client, initials="GC")
 
