@@ -14,6 +14,8 @@ export interface LayoutRack {
   id: number;
   letter: string;
   slot: "center" | "right";
+  /** Subcajas que caben físicamente en el rack (`rack.capacity`, ver seed/layout.yaml). */
+  capacity: number;
   boxes: LayoutBox[];
 }
 
@@ -53,6 +55,7 @@ export function buildFreezerLayout(sections: SectionRead[], racks: RackRead[], b
     id: rack.id,
     letter: rack.letter,
     slot: rack.slot,
+    capacity: rack.capacity,
     boxes: boxesByRack.get(rack.id) ?? [],
   });
 
@@ -79,6 +82,19 @@ export const RACK_GRID_COLUMNS = 4;
 export function rackGridRows(boxCount: number): number {
   if (boxCount <= 0) return 0;
   return Math.ceil(boxCount / RACK_GRID_COLUMNS);
+}
+
+/** Huecos a dibujar en el rack: su capacidad configurada, o más si alguna subcaja
+ * tiene un número mayor (datos históricos), para no superponer cajas. */
+export function rackSlotCount(rack: Pick<LayoutRack, "capacity" | "boxes">): number {
+  const highest = rack.boxes.reduce((max, box) => Math.max(max, box.number), 0);
+  return Math.max(rack.capacity, highest);
+}
+
+/** Fila/columna de la subcaja con número `number` (1-based): cada caja va en su hueco
+ * físico aunque falten las anteriores. */
+export function boxSlotPosition(number: number): BoxGridPosition {
+  return boxGridPosition(Math.max(number, 1) - 1);
 }
 
 export interface BoxGridPosition {

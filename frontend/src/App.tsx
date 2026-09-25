@@ -116,6 +116,8 @@ export default function App() {
   function closeMovementForm() {
     setShowMovementForm(false);
     setMovementInitial(undefined);
+    // Si se cierra un descongelamiento abierto desde el visor, la selección queda obsoleta.
+    setThawSelection(null);
   }
 
   // Clic en una posición libre del visor 3D (issue #6): abre el formulario de
@@ -176,13 +178,28 @@ export default function App() {
             + Nuevo movimiento
           </button>
           <div className="view-toggle" role="group" aria-label="Vista">
-            <button type="button" className={viewMode === "table" ? "on" : ""} onClick={() => setViewMode("table")}>
+            <button
+              type="button"
+              className={viewMode === "table" ? "on" : ""}
+              aria-pressed={viewMode === "table"}
+              onClick={() => setViewMode("table")}
+            >
               Vista tabla
             </button>
-            <button type="button" className={viewMode === "3d" ? "on" : ""} onClick={() => setViewMode("3d")}>
+            <button
+              type="button"
+              className={viewMode === "3d" ? "on" : ""}
+              aria-pressed={viewMode === "3d"}
+              onClick={() => setViewMode("3d")}
+            >
               Vista 3D
             </button>
-            <button type="button" className={viewMode === "usage" ? "on" : ""} onClick={() => setViewMode("usage")}>
+            <button
+              type="button"
+              className={viewMode === "usage" ? "on" : ""}
+              aria-pressed={viewMode === "usage"}
+              onClick={() => setViewMode("usage")}
+            >
               % de uso
             </button>
           </div>

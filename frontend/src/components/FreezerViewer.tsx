@@ -5,7 +5,15 @@ import { api, ApiError } from "../api/client";
 import type { BoxRead, BoxType, RackOccupancy, RackRead, SectionRead } from "../api/types";
 import { mapPositionsToLights, tooltipFor, type PositionLight } from "../three/boxPositionLights";
 import { FreezerUsagePanel } from "./FreezerUsagePanel";
-import { boxGridPosition, buildFreezerLayout, rackGridRows, type FreezerLayout, type LayoutBox, type LayoutRack } from "../three/freezerLayout";
+import {
+  boxSlotPosition,
+  buildFreezerLayout,
+  rackGridRows,
+  rackSlotCount,
+  type FreezerLayout,
+  type LayoutBox,
+  type LayoutRack,
+} from "../three/freezerLayout";
 
 export interface FreePositionSelection {
   sectionCode: string;
@@ -298,7 +306,8 @@ export function FreezerViewer({ focusTarget, onSelectFreePosition, onSelectOccup
 
         for (const { rack, xc } of slots) {
           if (!rack) continue;
-          const rows = Math.max(rackGridRows(rack.boxes.length), 1);
+          // Geometría según la capacidad configurada del rack, no solo las cajas ya creadas.
+          const rows = Math.max(rackGridRows(rackSlotCount(rack)), 1);
           const rackH = compH;
           const pitch = (rackH - 4) / rows;
           const boxH = Math.min(CABINET.box.h, Math.max(pitch - 3, 8));
@@ -333,8 +342,9 @@ export function FreezerViewer({ focusTarget, onSelectFreePosition, onSelectOccup
             boxMeshes: new Map(),
           };
 
-          rack.boxes.forEach((box, boxIndex) => {
-            const { row, column } = boxGridPosition(boxIndex);
+          rack.boxes.forEach((box) => {
+            // Cada caja en el hueco de su número (la caja 5 no ocupa el lugar de la 1).
+            const { row, column } = boxSlotPosition(box.number);
             const mesh = new THREE.Mesh(boxGeo, mBox);
             mesh.position.set(
               0,

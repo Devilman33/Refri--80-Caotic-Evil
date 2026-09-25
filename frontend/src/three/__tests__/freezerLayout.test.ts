@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BoxRead, RackRead, SectionRead } from "../../api/types";
-import { boxGridPosition, buildFreezerLayout, rackGridRows } from "../freezerLayout";
+import { boxGridPosition, boxSlotPosition, buildFreezerLayout, rackGridRows, rackSlotCount } from "../freezerLayout";
 
 const sections: SectionRead[] = [
   { id: 3, code: "III" },
@@ -73,5 +73,24 @@ describe("rackGridRows / boxGridPosition", () => {
     expect(boxGridPosition(3)).toEqual({ row: 0, column: 3 });
     expect(boxGridPosition(4)).toEqual({ row: 1, column: 0 });
     expect(boxGridPosition(9)).toEqual({ row: 2, column: 1 });
+  });
+});
+
+describe("rackSlotCount / boxSlotPosition", () => {
+  it("dibuja tantos huecos como la capacidad configurada del rack", () => {
+    const layout = buildFreezerLayout(sections, racks, boxes);
+    const rackA = layout.find((section) => section.code === "I")!.center!;
+    expect(rackA.capacity).toBe(30);
+    expect(rackSlotCount(rackA)).toBe(30);
+  });
+
+  it("agranda el rack si una subcaja tiene número mayor que la capacidad", () => {
+    expect(rackSlotCount({ capacity: 4, boxes: [{ id: 1, number: 6, boxType: "carton_81" }] })).toBe(6);
+  });
+
+  it("ubica cada subcaja en el hueco de su número, no por su orden en la lista", () => {
+    expect(boxSlotPosition(1)).toEqual({ row: 0, column: 0 });
+    expect(boxSlotPosition(5)).toEqual({ row: 1, column: 0 });
+    expect(boxSlotPosition(30)).toEqual({ row: 7, column: 1 });
   });
 });

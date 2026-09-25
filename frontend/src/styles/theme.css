@@ -787,7 +787,7 @@ table.samples-table {
 .freezer-usage {
   position: absolute;
   left: 12px;
-  bottom: 12px;
+  bottom: 40px;
   width: min(260px, calc(100% - 24px));
   background: var(--panel);
   border: 1px solid var(--line);
