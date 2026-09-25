@@ -53,6 +53,9 @@ def get_box(box_id: int, db: DbSession) -> Box:
 def update_box(box_id: int, payload: BoxUpdate, db: DbSession) -> Box:
     box = get_or_404(db, Box, box_id, "Caja no encontrada")
     data = payload.model_dump(exclude_unset=True)
+    if data.get("number") is not None:
+        rack = get_or_404(db, Rack, box.rack_id, "Rack no encontrado")
+        ensure_box_number_within_capacity(rack, data["number"])
     if data.get("owner_id") is not None:
         get_or_404(db, User, data["owner_id"], "Usuario propietario no encontrado")
     if data.get("box_type") is not None:

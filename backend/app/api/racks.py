@@ -61,8 +61,10 @@ def update_rack(rack_id: int, payload: RackUpdate, db: DbSession) -> Rack:
                 f"No se puede bajar la capacidad por debajo de la caja más alta existente ({highest})",
             )
     changes_location = (
-        data.get("section_id") is not None and data["section_id"] != rack.section_id
-    ) or (data.get("letter") is not None and data["letter"] != rack.letter)
+        (data.get("section_id") is not None and data["section_id"] != rack.section_id)
+        or (data.get("letter") is not None and data["letter"] != rack.letter)
+        or (data.get("slot") is not None and data["slot"] != rack.slot)
+    )
     if changes_location:
         has_samples = (
             db.query(Sample).join(Box, Sample.box_id == Box.id).filter(Box.rack_id == rack.id).first() is not None
@@ -70,7 +72,7 @@ def update_rack(rack_id: int, payload: RackUpdate, db: DbSession) -> Rack:
         if has_samples:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                "No se puede cambiar la sección o la letra de un rack que ya tiene muestras asociadas",
+                "No se puede cambiar la sección, la letra o el slot de un rack que ya tiene muestras asociadas",
             )
     for field, value in data.items():
         setattr(rack, field, value)
