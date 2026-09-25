@@ -9,6 +9,7 @@ from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus
 from app.schemas.common import Page
 from app.schemas.movement import MovementRead
 from app.schemas.sample import (
+    IdLookupResult,
     SampleCreate,
     SampleRead,
     SampleUpdate,
@@ -160,6 +161,40 @@ def search_samples(
     samples = query.offset((page - 1) * page_size).limit(page_size).all()
     items = [sample_with_location(sample) for sample in samples]
     return Page[SampleWithLocation](items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/by-ids", response_model=IdLookupResult)
+def lookup_by_ids(db: DbSession, filters: SampleFiltersDep) -> IdLookupResult:
+    """Busca una lista de IDs pegada o escaneada y dice cuáles NO están.
+
+    Con 40 tubos en la mano, la pregunta del laboratorio no es "cuáles encontraste" sino
+    "cuáles me faltan". Por eso devuelve `missing` y no pagina: la lista está acotada a 500
+    IDs, así que el resultado entero entra en una respuesta.
+
+    El diff se hace acá y no en el cliente a propósito. Contra una respuesta paginada, un
+    diff en el frontend reportaría como faltantes todos los que quedaron fuera de la
+    página, que es exactamente la respuesta equivocada a la única pregunta que importa.
+    """
+    if not filters.id_list:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Falta 'environ_id_exact' con la lista de IDs a buscar.",
+        )
+
+    samples = (
+        build_sample_query(db, filters)
+        .options(_LOCATION_LOAD)
+        .order_by(Section.code, Rack.letter, Box.number, Sample.position)
+        .all()
+    )
+    encontrados = {sample.environ_id for sample in samples if sample.environ_id}
+    faltantes = [environ_id for environ_id in filters.id_list if environ_id not in encontrados]
+
+    return IdLookupResult(
+        items=[sample_with_location(sample) for sample in samples],
+        total=len(samples),
+        missing=faltantes,
+    )
 
 
 # IMPORTANTE: esta ruta va ANTES de `/{sample_id}`. FastAPI resuelve por orden de
