@@ -65,6 +65,37 @@ def test_import_missing_type_is_skipped_and_reported(db_session, tmp_path):
     assert any(a.column == "Tipo" and a.reason == "Tipo vacío" for a in result.anomalies)
 
 
+def test_import_skips_rows_whose_position_does_not_fit_existing_box_type(db_session, tmp_path):
+    _seed(db_session)
+    rack_a = db_session.query(Rack).filter_by(letter="A").one()
+    db_session.add(Box(rack_id=rack_a.id, number=6, box_type="carton_81"))
+    db_session.flush()
+    # "15" es una posición de caja plástica; la caja A6 ya está registrada como cartón.
+    rows = [make_row(**{"Caja": 6, "Posición": "15"}), make_row(**{"Caja": 6, "Posición": "2B"})]
+    path = write_workbook(tmp_path / "inventario.xlsx", rows)
+
+    result = import_inventory(path, db_session)
+
+    assert result.summary.imported == 1
+    assert result.summary.skipped_invalid == 1
+    assert [sample.position for sample in db_session.query(Sample).all()] == ["2B"]
+    assert any(a.value == "15" and "Tipo de caja inconsistente" in a.reason for a in result.anomalies)
+
+
+def test_import_skips_rows_with_mixed_box_types_in_the_same_file(db_session, tmp_path):
+    _seed(db_session)
+    rows = [make_row(**{"Caja": 3, "Posición": "1A"}), make_row(**{"Caja": 3, "Posición": "40"})]
+    path = write_workbook(tmp_path / "inventario.xlsx", rows)
+
+    result = import_inventory(path, db_session)
+
+    assert result.summary.imported == 1
+    assert result.summary.skipped_invalid == 1
+    box = db_session.query(Box).filter_by(number=3).one()
+    assert box.box_type == "carton_81"
+    assert [sample.position for sample in db_session.query(Sample).all()] == ["1A"]
+
+
 def test_import_unknown_rack_is_skipped_and_reported(db_session, tmp_path):
     _seed(db_session)
     rows = [make_row(**{"Rack": "Z"})]

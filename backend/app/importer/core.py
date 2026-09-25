@@ -194,6 +194,10 @@ def import_inventory(path: str | Path, session: Session, *, dry_run: bool = Fals
 
     _resolve_new_row_conflicts(records, anomalies, summary)
 
+    # Una fila cuya posición no corresponde al tipo de su caja (p. ej. "15" en una caja de
+    # cartón ya registrada desde la página) no se importa: quedaría una muestra en una
+    # posición inexistente, contada en la ocupación pero invisible en el visor.
+    placed_records: list[_RowRecord] = []
     for record in records:
         rack = racks_by_letter[record.rack_letter]
         box_key = (rack.id, record.box_number)
@@ -219,11 +223,15 @@ def import_inventory(path: str | Path, session: Session, *, dry_run: bool = Fals
                     value=record.position,
                     reason=(
                         f"Tipo de caja inconsistente: la caja {rack.letter}{record.box_number} "
-                        f"ya es '{box.box_type}'"
+                        f"ya es '{box.box_type}'; la fila no se importa"
                     ),
                 )
             )
+            summary.skipped_invalid += 1
+            continue
         record.box_id = box.id
+        placed_records.append(record)
+    records = placed_records
 
     _resolve_conflicts_with_existing_active(session, records, anomalies, summary)
 
