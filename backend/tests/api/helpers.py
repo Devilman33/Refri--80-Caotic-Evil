@@ -38,6 +38,8 @@ def create_sample(client: TestClient, *, owner_id: int, box_id: int, position: s
         "owner_id": owner_id,
         "box_id": box_id,
         "position": position,
+        "operator_initials": "GC",
+        "date": "2026-01-15",
     }
     payload.update(overrides)
     response = client.post("/samples", json=payload)

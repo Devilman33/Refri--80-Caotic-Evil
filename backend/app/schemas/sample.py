@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,7 +19,12 @@ class SampleBase(BaseModel):
 
 
 class SampleCreate(SampleBase):
-    pass
+    """Alta directa de una muestra activa. Registra también el movimiento de
+    congelamiento (igual que `POST /movements`) para no romper la trazabilidad."""
+
+    operator_initials: str = Field(min_length=1, max_length=10)
+    date: date
+    note: str | None = Field(default=None, max_length=255)
 
 
 class SampleUpdate(BaseModel):

@@ -8,7 +8,14 @@ def test_create_sample_conflicts_on_occupied_position(client, db_session):
 
     response = client.post(
         "/samples",
-        json={"type": "vial_celulas", "owner_id": owner["id"], "box_id": box["id"], "position": "1A"},
+        json={
+            "type": "vial_celulas",
+            "owner_id": owner["id"],
+            "box_id": box["id"],
+            "position": "1A",
+            "operator_initials": "GC",
+            "date": "2026-01-15",
+        },
     )
     assert response.status_code == 409
 
@@ -50,14 +57,17 @@ def test_list_samples_paginated(client, db_session):
     assert len(body["items"]) == 1
 
 
-def test_sample_movements_history_starts_empty(client, db_session):
+def test_sample_movements_history_starts_with_freeze(client, db_session):
     _, _, box = make_freezer(client)
     owner = create_user(client, initials="GC")
     created = create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1A")
 
     response = client.get(f"/samples/{created['id']}/movements")
     assert response.status_code == 200
-    assert response.json() == []
+    movements = response.json()
+    assert len(movements) == 1
+    assert movements[0]["action"] == "freeze"
+    assert movements[0]["position"] == "1A"
 
 
 def test_get_missing_sample_404(client, db_session):

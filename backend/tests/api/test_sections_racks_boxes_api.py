@@ -78,7 +78,14 @@ def test_delete_box_with_samples_conflicts(client, db_session):
 
     response = client.post(
         "/samples",
-        json={"type": "vial_celulas", "owner_id": owner["id"], "box_id": box["id"], "position": "1A"},
+        json={
+            "type": "vial_celulas",
+            "owner_id": owner["id"],
+            "box_id": box["id"],
+            "position": "1A",
+            "operator_initials": "GC",
+            "date": "2026-01-15",
+        },
     )
     assert response.status_code == 201
 

@@ -11,6 +11,7 @@ from app.schemas.common import Page
 from app.schemas.movement import MovementRead
 from app.schemas.sample import SampleCreate, SampleRead, SampleUpdate, SampleWithLocation
 from app.services.location import sample_with_location
+from app.services.users import get_or_create_user
 
 router = APIRouter(prefix="/samples", tags=["muestras"])
 
@@ -19,10 +20,11 @@ _LOCATION_LOAD = joinedload(Sample.box).joinedload(Box.rack).joinedload(Rack.sec
 
 @router.post("", response_model=SampleRead, status_code=status.HTTP_201_CREATED)
 def create_sample(payload: SampleCreate, db: DbSession) -> Sample:
-    """Alta directa de una muestra. El flujo normal de laboratorio pasa por
-    `POST /movements` (congelamiento), que además registra el evento."""
+    """Alta directa de una muestra: registra además el movimiento de congelamiento
+    (igual que `POST /movements`) para no dejar el historial vacío."""
     get_or_404(db, User, payload.owner_id, "Usuario encargado no encontrado")
     get_or_404(db, Box, payload.box_id, "Caja no encontrada")
+    operator = get_or_create_user(db, payload.operator_initials)
     sample = Sample(
         environ_id=payload.environ_id,
         description=payload.description,
@@ -37,12 +39,24 @@ def create_sample(payload: SampleCreate, db: DbSession) -> Sample:
     )
     db.add(sample)
     try:
-        db.commit()
+        db.flush()
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
             status.HTTP_409_CONFLICT, "La posición ya está ocupada por una muestra activa"
         ) from exc
+
+    movement = Movement(
+        sample_id=sample.id,
+        action=MovementAction.FREEZE.value,
+        date=payload.date,
+        operator_id=operator.id,
+        box_id=payload.box_id,
+        position=payload.position,
+        note=payload.note,
+    )
+    db.add(movement)
+    db.commit()
     db.refresh(sample)
     return sample
 
