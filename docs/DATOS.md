@@ -5,11 +5,22 @@ El archivo `Data/Inventario Freezer -80 Environ (Nucleo).xlsx` **no se versiona*
 importador en local. Los tests usan un Excel **sintético** con la misma estructura
 (`backend/tests/fixtures/`), generado por código.
 
+> **⚠️ Este Excel es histórico.** El laboratorio entregará más adelante los datos actuales del
+> freezer. El Excel histórico sirve como referencia de la **estructura** y de los **casos sucios**
+> que el importador debe tolerar, pero **no** como fuente para decidir:
+> - la distribución de racks por sección (`backend/app/seed/layout.yaml` es **provisoria**);
+> - la capacidad de los racks;
+> - reglas nuevas del importador para "arreglar" filas puntuales de este archivo.
+>
+> Las anomalías que reporta (secciones que no coinciden, filas omitidas, fechas imposibles) son
+> esperables en datos históricos y **no son bugs**. Cuando lleguen los datos actuales se hará un
+> `--dry-run`, y con ese resultado se ajustará la siembra antes de importar.
+
 ## Hojas
 
 | Hoja | Uso |
 |---|---|
-| `Inventario-80` | **Inventario actual del freezer (~7.600 filas, una fila = un tubo).** Es la que se importa. Encabezados en la **fila 2**; la fila 1 tiene los nombres técnicos (`tbl_44_Tipo`, …) |
+| `Inventario-80` | **Inventario del freezer (histórico, ~7.600 filas, una fila = un tubo).** Es la que se importa. Encabezados en la **fila 2**; la fila 1 tiene los nombres técnicos (`tbl_44_Tipo`, …) |
 | `Inventario-80 Glosa` | Diccionario de valores válidos de la hoja anterior |
 | `Nucleo (2)`, `Nucleo Glosa`, `Cultivo` | Metadatos clínicos y de cultivo por ID Environ (institución, diagnóstico, caracterización, pasajes). **Fuera del alcance inicial**; el modelo debe permitir agregarlos después |
 
