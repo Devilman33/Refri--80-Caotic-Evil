@@ -103,6 +103,7 @@ def box_positions(box_id: int, db: DbSession) -> list[BoxPositionStatus]:
             occupied=position in by_position,
             sample_id=by_position[position].id if position in by_position else None,
             environ_id=by_position[position].environ_id if position in by_position else None,
+            is_core=by_position[position].is_core if position in by_position else None,
         )
         for position in position_order(box.box_type)
     ]

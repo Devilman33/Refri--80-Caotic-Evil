@@ -37,3 +37,5 @@ class BoxPositionStatus(BaseModel):
     occupied: bool
     sample_id: int | None = None
     environ_id: str | None = None
+    # Para pintar el warning de Núcleo en el tooltip del visor 3D sin otro round-trip.
+    is_core: bool | None = None
