@@ -320,3 +320,19 @@ describe("App · mover caja (F4)", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
+
+describe("App · mover una muestra (regresión FINDING-005)", () => {
+  it("'Mover' abre un solo diálogo y oculta el detalle mientras se mueve", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /posición ocupada 3b/i }));
+    const detail = await screen.findByRole("complementary", { name: /BP009/ });
+    await user.click(within(detail).getByRole("button", { name: /^mover$/i }));
+
+    expect(await screen.findAllByRole("dialog")).toHaveLength(1);
+    expect(screen.queryByRole("complementary", { name: /BP009/ })).not.toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(await screen.findByRole("complementary", { name: /BP009/ })).toBeInTheDocument();
+  });
+});
