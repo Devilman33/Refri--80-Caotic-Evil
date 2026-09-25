@@ -56,10 +56,19 @@ export interface FreezerFocusTarget {
   token: number;
 }
 
+export interface BoxMoveRequest {
+  boxId: number;
+  /** Lugar actual legible, p. ej. `I · A3`. */
+  label: string;
+  active: number;
+}
+
 export interface FreezerViewerProps {
   focusTarget?: FreezerFocusTarget | null;
   onSelectFreePosition: (selection: FreePositionSelection) => void;
   onSelectOccupiedPosition: (selection: OccupiedPositionSelection) => void;
+  /** "Mover caja": traslada la subcaja seleccionada con todas sus muestras. */
+  onMoveBox?: (request: BoxMoveRequest) => void;
 }
 
 interface RackInfo {
@@ -94,6 +103,7 @@ export function FreezerViewer({
   focusTarget,
   onSelectFreePosition,
   onSelectOccupiedPosition,
+  onMoveBox,
 }: FreezerViewerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
@@ -860,6 +870,21 @@ export function FreezerViewer({
                   onClick={() => setBoxViewOpen(true)}
                 >
                   Abrir caja {formatLabel(selSlot.boxType)}
+                </button>
+              )}
+              {onMoveBox && selSlot.box && occupiedCount > 0 && (
+                <button
+                  type="button"
+                  className="fv-btn"
+                  onClick={() =>
+                    onMoveBox({
+                      boxId: selSlot.box!.id,
+                      label: `${selRack.sectionCode} · ${selRack.rack.letter}${selSlot.number}`,
+                      active: occupiedCount,
+                    })
+                  }
+                >
+                  Mover caja
                 </button>
               )}
             </>

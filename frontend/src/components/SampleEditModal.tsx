@@ -7,7 +7,9 @@ import {
   type SampleWithLocation,
   type UserRead,
 } from "../api/types";
+import { selectableUsers } from "../utils/users";
 import { Modal } from "./Modal";
+import { userOptionLabel } from "./UserOptions";
 
 const SAMPLE_TYPE_OPTIONS = Object.entries(SAMPLE_TYPE_LABELS) as [SampleType, string][];
 
@@ -58,6 +60,9 @@ export function SampleEditModal({ sample, users, onClose, onSaved }: SampleEditM
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const ownerOptions = useMemo(() => selectableUsers(users), [users]);
+  const currentOwner = users.find((user) => user.id === sample.owner_id);
+
   const pristine = useMemo(
     () => JSON.stringify(form) === JSON.stringify(initialForm(sample)),
     [form, sample],
@@ -95,14 +100,7 @@ export function SampleEditModal({ sample, users, onClose, onSaved }: SampleEditM
       const updated = await api.updateSample(sample.id, buildPayload());
       onSaved(updated);
     } catch (err) {
-      // El backend valida la coherencia Núcleo/encargado: ese 422 pertenece a un campo
-      // concreto, no a un banner global.
-      const message = err instanceof ApiError ? err.message : "No se pudo guardar";
-      if (message.toLowerCase().includes("nucleo") || message.toLowerCase().includes("núcleo")) {
-        setFieldErrors({ isCore: message });
-      } else {
-        setSubmitError(message);
-      }
+      setSubmitError(err instanceof ApiError ? err.message : "No se pudo guardar");
     } finally {
       setSaving(false);
     }
@@ -166,10 +164,16 @@ export function SampleEditModal({ sample, users, onClose, onSaved }: SampleEditM
         <div className="field">
           <label htmlFor="se-owner">Encargado</label>
           <select id="se-owner" value={form.ownerId} onChange={(event) => set("ownerId", event.target.value)}>
-            {users.map((user) => (
+            {/* El encargado actual se ofrece aunque no sea seleccionable (p. ej. "sin
+                encargado"), para que el select muestre lo que la muestra tiene hoy. */}
+            {!ownerOptions.some((user) => user.id === sample.owner_id) && (
+              <option value={sample.owner_id}>
+                {currentOwner ? userOptionLabel(currentOwner) : "—"}
+              </option>
+            )}
+            {ownerOptions.map((user) => (
               <option key={user.id} value={user.id}>
-                {user.initials}
-                {user.name ? ` · ${user.name}` : ""}
+                {userOptionLabel(user)}
               </option>
             ))}
           </select>

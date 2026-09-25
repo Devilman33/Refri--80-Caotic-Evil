@@ -67,14 +67,18 @@ docker compose up
 
 Esto levanta Postgres, el backend (FastAPI) y el frontend (React, servido con nginx). El
 backend, al arrancar, corre las migraciones de Alembic y siembra la distribución física del
-freezer (`backend/app/seed/layout.yaml`). Verificá que quedó arriba con:
+freezer (`backend/app/seed/layout.yaml`) y las personas de la carga inicial del Google Form
+(solo iniciales). Verificá que quedó arriba con:
 
 ```bash
 curl http://localhost:8000/health
 # {"status":"ok"}
 ```
 
-El frontend queda disponible en <http://localhost:5173>.
+El frontend queda disponible en <http://localhost:5173>. Al entrar, cada persona elige
+quién es de la lista o se registra con su nombre completo (sin contraseña: ver
+`docs/adr/0002-autenticacion.md`). Solo el encargado de una muestra puede editarla,
+trasladarla o retirarla.
 
 ### Frontend en local (sin Docker)
 

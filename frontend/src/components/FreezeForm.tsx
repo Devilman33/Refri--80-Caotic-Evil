@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../api/client";
 import {
-  DEFAULT_OPERATOR_INITIALS,
-  DEFAULT_OWNER_INITIALS,
-  MOVEMENT_ACTION_LABELS,
   SAMPLE_TYPE_LABELS,
-  SECTION_CODES,
   type BoxPositionStatus,
   type BoxType,
-  type MovementAction,
   type MovementCreate,
   type MovementResult,
   type PositionConflict,
@@ -18,38 +13,15 @@ import {
   type UserRead,
 } from "../api/types";
 import { nextFreePosition, parseBoxName } from "../utils/positions";
+import { todayIso } from "../utils/format";
+import { sectionCodeForBox } from "../utils/positions";
 import { Modal } from "./Modal";
 import { PositionPicker } from "./PositionPicker";
+import { UserOptions } from "./UserOptions";
 
-const LAST_OPERATOR_KEY = "refri:ultimo-operador";
 const SAMPLE_TYPE_OPTIONS = Object.entries(SAMPLE_TYPE_LABELS) as [SampleType, string][];
-// Literal a propósito, NO derivado de MOVEMENT_ACTION_LABELS. Ese mapa tiene que crecer
-// con cada acción nueva para que el historial la sepa renderizar, pero este formulario
-// solo sabe registrar congelamientos y descongelamientos: derivarlo de ahí hacía aparecer
-// en el desplegable acciones que este endpoint no implementa.
-const ACTION_OPTIONS: [MovementAction, string][] = [
-  ["freeze", MOVEMENT_ACTION_LABELS.freeze],
-  ["thaw", MOVEMENT_ACTION_LABELS.thaw],
-];
-
-function todayIso(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function mergeInitials(defaults: readonly string[], users: UserRead[]): string[] {
-  const extra = users
-    .filter((user) => user.active && !defaults.includes(user.initials))
-    .map((user) => user.initials)
-    .sort();
-  return [...defaults, ...extra];
-}
 
 interface FormState {
-  action: MovementAction;
   date: string;
   environId: string;
   description: string;
@@ -57,19 +29,16 @@ interface FormState {
   typeOther: string;
   operatorInitials: string;
   passage: string;
-  sectionCode: string;
   boxName: string;
   boxType: BoxType;
   position: string;
   isCore: "" | "true" | "false";
-  nonCoreOwnerInitials: string;
-  boxIsFull: "" | "true" | "false";
+  ownerInitials: string;
 }
 
-// Prellenado desde el visor 3D (issue #6): clic en una posición libre arma un
-// congelamiento con esa caja/posición; clic en una ocupada arma un descongelamiento.
-export interface MovementFormPrefill {
-  action?: MovementAction;
+/** Prellenado desde el visor 3D (issue #6): clic en una posición libre abre el
+ * congelamiento con esa caja y posición ya elegidas. */
+export interface LocationPrefill {
   sectionCode?: string;
   rackLetter?: string;
   boxNumber?: number;
@@ -77,36 +46,40 @@ export interface MovementFormPrefill {
   position?: string;
 }
 
-function emptyForm(lastOperator: string, initial?: MovementFormPrefill): FormState {
+function emptyForm(sessionInitials: string, initial?: LocationPrefill): FormState {
   return {
-    action: initial?.action ?? "freeze",
     date: todayIso(),
     environId: "",
     description: "",
     sampleType: "",
     typeOther: "",
-    operatorInitials: lastOperator,
+    operatorInitials: sessionInitials,
     passage: "",
-    sectionCode: initial?.sectionCode ?? "",
     boxName: initial?.rackLetter && initial?.boxNumber ? `${initial.rackLetter}${initial.boxNumber}` : "",
     boxType: initial?.boxType ?? "carton_81",
     position: initial?.position ?? "",
     isCore: "",
-    nonCoreOwnerInitials: "",
-    boxIsFull: "",
+    // Lo más común es congelar muestras propias: el encargado parte siendo quien registra.
+    ownerInitials: sessionInitials,
   };
 }
 
-export interface MovementFormProps {
+export interface FreezeFormProps {
   users: UserRead[];
-  initial?: MovementFormPrefill;
+  /** Iniciales de la persona de la sesión: prellenan Operador y Encargado. */
+  sessionInitials: string;
+  initial?: LocationPrefill;
   onClose: () => void;
   onSubmitted: (result: MovementResult) => void;
 }
 
-export function MovementForm({ users, initial, onClose, onSubmitted }: MovementFormProps) {
-  const [lastOperator] = useState(() => localStorage.getItem(LAST_OPERATOR_KEY) ?? "");
-  const [form, setForm] = useState<FormState>(() => emptyForm(lastOperator, initial));
+/**
+ * Congelamiento (ingreso) de una muestra: el Google Form del laboratorio con las
+ * desviaciones acordadas de docs/FORMULARIO.md. El descongelamiento es `ThawForm`, a
+ * propósito un formulario aparte: compartían pantalla y se confundían.
+ */
+export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitted }: FreezeFormProps) {
+  const [form, setForm] = useState<FormState>(() => emptyForm(sessionInitials, initial));
   const [racks, setRacks] = useState<RackRead[]>([]);
   const [sections, setSections] = useState<SectionRead[]>([]);
   const [boxExists, setBoxExists] = useState(false);
@@ -116,9 +89,6 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
   const [conflict, setConflict] = useState<PositionConflict | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-
-  const operatorOptions = useMemo(() => mergeInitials(DEFAULT_OPERATOR_INITIALS, users), [users]);
-  const ownerOptions = useMemo(() => mergeInitials(DEFAULT_OWNER_INITIALS, users), [users]);
 
   const occupied = useMemo(
     () => new Set(boxPositions.filter((entry) => entry.occupied).map((entry) => entry.position)),
@@ -146,10 +116,9 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
       .catch(() => setSections([]));
   }, []);
 
-  const sectionCodeByRackId = useMemo(
-    () => new Map(racks.map((rack) => [rack.id, sections.find((section) => section.id === rack.section_id)?.code])),
-    [racks, sections],
-  );
+  // Sección se deduce del rack de "Nombre Caja": pedirla aparte solo permitía que no
+  // coincidieran (docs/FORMULARIO.md, desviaciones).
+  const sectionCode = useMemo(() => sectionCodeForBox(form.boxName, racks, sections), [form.boxName, racks, sections]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -202,7 +171,7 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
   // propietario y caja de otras muestras con el mismo ID (docs/FORMULARIO.md).
   useEffect(() => {
     const environId = form.environId.trim();
-    if (environId.length < 2 || form.action !== "freeze") return;
+    if (environId.length < 2) return;
     let cancelled = false;
     const timer = setTimeout(() => {
       api
@@ -218,10 +187,7 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
               typeOther: suggestion.type_other ?? current.typeOther,
               passage: suggestion.passage !== null ? String(suggestion.passage) : current.passage,
               isCore: suggestion.is_core === null ? current.isCore : suggestion.is_core ? "true" : "false",
-              nonCoreOwnerInitials:
-                suggestion.is_core === false && suggestion.owner_initials
-                  ? suggestion.owner_initials
-                  : current.nonCoreOwnerInitials,
+              ownerInitials: suggestion.owner_initials ?? current.ownerInitials,
               boxName:
                 suggestion.rack_letter && suggestion.box_number
                   ? `${suggestion.rack_letter}${suggestion.box_number}`
@@ -236,17 +202,12 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [form.environId, form.action]);
+  }, [form.environId]);
 
   function validate(): Record<string, string> {
     const errors: Record<string, string> = {};
     if (!form.date) errors.date = "La fecha es obligatoria";
     if (!form.operatorInitials.trim()) errors.operatorInitials = "El operador es obligatorio";
-
-    // Campo 9 de docs/FORMULARIO.md: Sección es obligatoria. Antes solo se validaba la
-    // coherencia con el rack *si* ya habías elegido una, así que se podía enviar sin sección
-    // y el formulario dejaba de ser idéntico al Google Form.
-    if (!form.sectionCode) errors.sectionCode = "La sección es obligatoria";
 
     const parsedBox = parseBoxName(form.boxName);
     if (!form.boxName.trim()) {
@@ -255,55 +216,36 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
       errors.boxName = "Formato inválido: letra de rack + N° de caja (p. ej. A12)";
     } else {
       const rack = racks.find((entry) => entry.letter === parsedBox.rackLetter);
-      if (!rack) {
-        errors.boxName = `No existe el rack '${parsedBox.rackLetter}'`;
-      } else if (form.sectionCode) {
-        const rackSectionCode = sectionCodeByRackId.get(rack.id);
-        if (rackSectionCode && rackSectionCode !== form.sectionCode) {
-          errors.sectionCode = `El rack '${rack.letter}' pertenece a la sección ${rackSectionCode}, no a ${form.sectionCode}`;
-        }
-      }
+      if (!rack) errors.boxName = `No existe el rack '${parsedBox.rackLetter}'`;
     }
 
-    if (!form.position) {
-      errors.position =
-        form.action === "thaw" ? "Selecciona la posición que quieres retirar" : "Selecciona una posición libre en la caja";
+    if (!form.position) errors.position = "Selecciona una posición libre en la caja";
+    if (!form.environId.trim()) errors.environId = "El ID Environ es obligatorio";
+    if (!form.sampleType) errors.sampleType = "El tipo es obligatorio";
+    if (form.sampleType === "otros" && !form.typeOther.trim()) {
+      errors.typeOther = "Especifica el tipo cuando seleccionas 'Otros'";
     }
-
-    if (form.action === "freeze") {
-      if (!form.environId.trim()) errors.environId = "El ID Environ es obligatorio";
-      if (!form.sampleType) errors.sampleType = "El tipo es obligatorio";
-      if (form.sampleType === "otros" && !form.typeOther.trim()) {
-        errors.typeOther = "Especifica el tipo cuando seleccionas 'Otros'";
-      }
-      if (!form.isCore) errors.isCore = "Indica si pertenece al Núcleo Environ";
-      if (form.isCore === "false" && !form.nonCoreOwnerInitials.trim()) {
-        errors.nonCoreOwnerInitials = "Indica el propietario cuando no es del Núcleo";
-      }
-      if (!form.boxIsFull) errors.boxIsFull = "Indica si la caja quedó llena";
-    }
+    if (!form.isCore) errors.isCore = "Indica si pertenece al Núcleo Environ";
+    if (!form.ownerInitials.trim()) errors.ownerInitials = "Indica el encargado de la muestra";
     return errors;
   }
 
   function buildPayload(): MovementCreate {
     const parsedBox = parseBoxName(form.boxName)!;
-    const isFreeze = form.action === "freeze";
     return {
-      action: form.action,
+      action: "freeze",
       date: form.date,
       operator_initials: form.operatorInitials.trim().toUpperCase(),
       rack_letter: parsedBox.rackLetter,
       box_number: parsedBox.boxNumber,
       position: form.position,
-      environ_id: isFreeze ? form.environId.trim() : undefined,
-      description: isFreeze ? form.description.trim() || null : undefined,
-      sample_type: isFreeze ? (form.sampleType as SampleType) : undefined,
-      type_other: isFreeze && form.sampleType === "otros" ? form.typeOther.trim() : undefined,
-      passage: isFreeze && form.passage.trim() !== "" ? Number(form.passage) : undefined,
-      is_core: isFreeze ? form.isCore === "true" : undefined,
-      non_core_owner_initials:
-        isFreeze && form.isCore === "false" ? form.nonCoreOwnerInitials.trim().toUpperCase() : undefined,
-      box_is_full: isFreeze ? form.boxIsFull === "true" : undefined,
+      environ_id: form.environId.trim(),
+      description: form.description.trim() || null,
+      sample_type: form.sampleType as SampleType,
+      type_other: form.sampleType === "otros" ? form.typeOther.trim() : undefined,
+      passage: form.passage.trim() !== "" ? Number(form.passage) : undefined,
+      is_core: form.isCore === "true",
+      owner_initials: form.ownerInitials.trim().toUpperCase(),
     };
   }
 
@@ -319,10 +261,9 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
     try {
       const payload = buildPayload();
       const result = await api.createMovement(payload);
-      localStorage.setItem(LAST_OPERATOR_KEY, payload.operator_initials);
       onSubmitted(result);
 
-      if (sameSet && form.action === "freeze") {
+      if (sameSet) {
         const updatedOccupied = new Set(occupied);
         updatedOccupied.add(form.position);
         setBoxPositions((current) => [
@@ -356,12 +297,12 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
     }
   }
 
-  const thawTarget = form.action === "thaw" && form.position ? occupantLabels.get(form.position) : undefined;
-
   return (
     <Modal titleId="mf-title" onClose={onClose} wide>
         <div className="modal-header">
-          <h2 id="mf-title" tabIndex={-1}>Nuevo movimiento</h2>
+          <h2 id="mf-title" tabIndex={-1}>
+            <span className="movement-kind movement-kind--freeze">Congelamiento</span> Ingresar muestra
+          </h2>
           <button className="btn-ghost" onClick={onClose} aria-label="Cerrar">
             Cerrar
           </button>
@@ -374,32 +315,6 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
             void submit(false);
           }}
         >
-          <div className="field">
-            <label htmlFor="mf-action">Acción</label>
-            <select
-              id="mf-action"
-              value={form.action}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  action: event.target.value as MovementAction,
-                  position: "",
-                }))
-              }
-            >
-              {ACTION_OPTIONS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            {form.action === "thaw" && (
-              <p className="field-hint">
-                Para un retiro no hace falta completar Descripción, Tipo, Pasaje, Núcleo ni si la caja quedó llena.
-              </p>
-            )}
-          </div>
-
           <div className="field">
             <label htmlFor="mf-date">Fecha</label>
             <input
@@ -468,12 +383,7 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
               value={form.operatorInitials}
               onChange={(event) => set("operatorInitials", event.target.value)}
             >
-              <option value="">Selecciona…</option>
-              {operatorOptions.map((initials) => (
-                <option key={initials} value={initials}>
-                  {initials}
-                </option>
-              ))}
+              <UserOptions users={users} />
             </select>
             {fieldErrors.operatorInitials && <p className="field-error">{fieldErrors.operatorInitials}</p>}
           </div>
@@ -490,19 +400,6 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
           </div>
 
           <div className="field">
-            <label htmlFor="mf-section">Sección</label>
-            <select id="mf-section" value={form.sectionCode} onChange={(event) => set("sectionCode", event.target.value)}>
-              <option value="">Selecciona…</option>
-              {SECTION_CODES.map((code) => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-            </select>
-            {fieldErrors.sectionCode && <p className="field-error">{fieldErrors.sectionCode}</p>}
-          </div>
-
-          <div className="field">
             <label htmlFor="mf-box-name">Nombre Caja (Letra rack y N° de caja)</label>
             <input
               id="mf-box-name"
@@ -511,6 +408,12 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
               placeholder="p. ej. A12"
             />
             {fieldErrors.boxName && <p className="field-error">{fieldErrors.boxName}</p>}
+          </div>
+
+          <div className="field">
+            <label htmlFor="mf-section">Sección</label>
+            <input id="mf-section" value={sectionCode ?? ""} readOnly placeholder="Según el rack" />
+            <p className="field-hint">Se completa sola según la letra del rack.</p>
           </div>
 
           <div className="field">
@@ -555,13 +458,8 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
               corePositions={corePositions}
               value={form.position || null}
               onChange={(position) => set("position", position)}
-              selectMode={form.action === "thaw" ? "occupied" : "free"}
+              selectMode="free"
             />
-            {form.action === "thaw" && form.position && (
-              <p className="field-hint">
-                Vas a retirar: <strong>{thawTarget ?? "muestra sin ID Environ"}</strong>
-              </p>
-            )}
             {fieldErrors.position && <p className="field-error">{fieldErrors.position}</p>}
             {conflict && (
               <p className="field-error">
@@ -597,37 +495,17 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
             {fieldErrors.isCore && <p className="field-error">{fieldErrors.isCore}</p>}
           </div>
 
-          {form.isCore === "false" && (
-            <div className="field">
-              <label htmlFor="mf-owner">Si la respuesta es no, indicar propietario de lo ingresado</label>
-              <select
-                id="mf-owner"
-                value={form.nonCoreOwnerInitials}
-                onChange={(event) => set("nonCoreOwnerInitials", event.target.value)}
-              >
-                <option value="">Selecciona…</option>
-                {ownerOptions.map((initials) => (
-                  <option key={initials} value={initials}>
-                    {initials}
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.nonCoreOwnerInitials && <p className="field-error">{fieldErrors.nonCoreOwnerInitials}</p>}
-            </div>
-          )}
-
           <div className="field">
-            <label htmlFor="mf-box-full">¿La caja está llena?</label>
+            <label htmlFor="mf-owner">Encargado de la muestra</label>
             <select
-              id="mf-box-full"
-              value={form.boxIsFull}
-              onChange={(event) => set("boxIsFull", event.target.value as FormState["boxIsFull"])}
+              id="mf-owner"
+              value={form.ownerInitials}
+              onChange={(event) => set("ownerInitials", event.target.value)}
             >
-              <option value="">Selecciona…</option>
-              <option value="true">SI</option>
-              <option value="false">No</option>
+              <UserOptions users={users} />
             </select>
-            {fieldErrors.boxIsFull && <p className="field-error">{fieldErrors.boxIsFull}</p>}
+            <p className="field-hint">Siempre una persona, también si la muestra es de Núcleo.</p>
+            {fieldErrors.ownerInitials && <p className="field-error">{fieldErrors.ownerInitials}</p>}
           </div>
 
           {submitError && (
@@ -645,11 +523,9 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
             <button type="button" className="btn-ghost" onClick={onClose} disabled={submitting}>
               Cancelar
             </button>
-            {form.action === "freeze" && (
-              <button type="button" className="btn-ghost" disabled={submitting} onClick={() => void submit(true)}>
-                Guardar y agregar otra del mismo set
-              </button>
-            )}
+            <button type="button" className="btn-ghost" disabled={submitting} onClick={() => void submit(true)}>
+              Guardar y agregar otra del mismo set
+            </button>
             <button type="submit" className="btn" disabled={submitting}>
               Guardar
             </button>

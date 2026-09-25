@@ -143,6 +143,19 @@ export interface UserRead {
   active: boolean;
 }
 
+/** Registro: basta con el nombre completo; las iniciales se derivan si no se dan. */
+export interface UserCreate {
+  name?: string | null;
+  initials?: string | null;
+  active?: boolean;
+}
+
+export interface UserUpdate {
+  name?: string | null;
+  initials?: string;
+  active?: boolean;
+}
+
 export interface SectionRead {
   id: number;
   code: string;
@@ -231,9 +244,11 @@ export interface MovementCreate {
   sample_type?: SampleType | null;
   type_other?: string | null;
   passage?: number | null;
+  /** Marca de Núcleo Environ: solo el warning, no cambia el encargado. */
   is_core?: boolean | null;
-  non_core_owner_initials?: string | null;
-  box_is_full?: boolean | null;
+  /** Encargado de la muestra: se pide siempre en un congelamiento. */
+  owner_initials?: string | null;
+  /** En un descongelamiento, el motivo del retiro. */
   note?: string | null;
 }
 
@@ -245,6 +260,22 @@ export interface SampleMoveCreate {
   box_number: number;
   position: string;
   note?: string | null;
+}
+
+/** Traslado de una subcaja entera con todas sus muestras activas. */
+export interface BoxMoveCreate {
+  date: string;
+  operator_initials: string;
+  rack_letter: string;
+  box_number: number;
+  note?: string | null;
+}
+
+export interface BoxMoveResult {
+  box: BoxRead;
+  moved: number;
+  from_label: string;
+  to_label: string;
 }
 
 /** Resultado de buscar una lista de IDs pegada. `missing` lo calcula el servidor: con el

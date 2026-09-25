@@ -19,8 +19,6 @@ export interface FiltersBarProps {
   total: number;
   /** Personas registradas: el filtro de Encargado es una lista, no texto libre. */
   users: UserRead[];
-  myInitials: string;
-  onMyInitialsChange: (initials: string) => void;
   myFilterActive: boolean;
   onToggleMyFilter: () => void;
 }
@@ -40,8 +38,6 @@ export function FiltersBar({
   onChange,
   total,
   users,
-  myInitials,
-  onMyInitialsChange,
   myFilterActive,
   onToggleMyFilter,
 }: FiltersBarProps) {
@@ -287,24 +283,10 @@ export function FiltersBar({
       </div>
 
       <div className="filters-actions" style={{ marginTop: 12 }}>
-        <input
-          aria-label="Mis iniciales"
-          placeholder="Mis iniciales"
-          value={myInitials}
-          onChange={(event) => onMyInitialsChange(event.target.value)}
-          style={{
-            width: 110,
-            background: "var(--chip)",
-            border: "1px solid var(--line)",
-            borderRadius: 6,
-            padding: "7px 8px",
-          }}
-        />
         <button
           type="button"
           className={`btn-ghost${myFilterActive ? " on" : ""}`}
           onClick={onToggleMyFilter}
-          disabled={myInitials.trim() === ""}
           aria-pressed={myFilterActive}
         >
           Mis muestras

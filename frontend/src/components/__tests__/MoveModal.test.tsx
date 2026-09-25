@@ -57,8 +57,6 @@ beforeEach(() => {
 });
 
 async function fillDestination(user: ReturnType<typeof userEvent.setup>) {
-  await user.selectOptions(screen.getByLabelText(/operador/i), "MN");
-  await user.selectOptions(screen.getByLabelText(/sección/i), "I");
   await user.type(screen.getByLabelText(/nombre caja/i), "A2");
   await waitFor(() => expect(api.getBoxPositions).toHaveBeenCalled());
   await user.click(screen.getByRole("button", { name: /^posición 3b,/i }));
@@ -66,7 +64,7 @@ async function fillDestination(user: ReturnType<typeof userEvent.setup>) {
 
 describe("MoveModal", () => {
   it("muestra de dónde sale la muestra", () => {
-    render(<MoveModal sample={sample} users={users} onClose={vi.fn()} onMoved={vi.fn()} />);
+    render(<MoveModal sample={sample} users={users} sessionInitials="MN" onClose={vi.fn()} onMoved={vi.fn()} />);
 
     expect(screen.getByText("I · A1 · 1A")).toBeInTheDocument();
   });
@@ -93,7 +91,7 @@ describe("MoveModal", () => {
     });
     const onMoved = vi.fn();
     const user = userEvent.setup();
-    render(<MoveModal sample={sample} users={users} onClose={vi.fn()} onMoved={onMoved} />);
+    render(<MoveModal sample={sample} users={users} sessionInitials="MN" onClose={vi.fn()} onMoved={onMoved} />);
 
     await fillDestination(user);
     await user.click(screen.getByRole("button", { name: /^mover$/i }));
@@ -104,15 +102,24 @@ describe("MoveModal", () => {
     expect(onMoved.mock.calls[0][1]).toBe("Movida: I · A1 · 1A → I · A2 · 3B");
   });
 
-  it("exige sección, operador y posición antes de enviar", async () => {
+  it("exige caja y posición antes de enviar; el operador parte siendo la sesión", async () => {
     const user = userEvent.setup();
-    render(<MoveModal sample={sample} users={users} onClose={vi.fn()} onMoved={vi.fn()} />);
+    render(<MoveModal sample={sample} users={users} sessionInitials="MN" onClose={vi.fn()} onMoved={vi.fn()} />);
 
+    expect(screen.getByLabelText(/operador/i)).toHaveValue("MN");
     await user.click(screen.getByRole("button", { name: /^mover$/i }));
 
-    expect(await screen.findByText(/la sección es obligatoria/i)).toBeInTheDocument();
-    expect(screen.getByText(/el operador es obligatorio/i)).toBeInTheDocument();
+    expect(await screen.findByText(/el nombre de la caja es obligatorio/i)).toBeInTheDocument();
     expect(api.moveSample).not.toHaveBeenCalled();
+  });
+
+  it("deduce la sección del rack", async () => {
+    const user = userEvent.setup();
+    render(<MoveModal sample={sample} users={users} sessionInitials="MN" onClose={vi.fn()} onMoved={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/nombre caja/i), "A2");
+
+    expect(await screen.findByText("Sección I")).toBeInTheDocument();
   });
 
   it("ante un 409 ofrece la siguiente posición libre", async () => {
@@ -123,7 +130,7 @@ describe("MoveModal", () => {
       }),
     );
     const user = userEvent.setup();
-    render(<MoveModal sample={sample} users={users} onClose={vi.fn()} onMoved={vi.fn()} />);
+    render(<MoveModal sample={sample} users={users} sessionInitials="MN" onClose={vi.fn()} onMoved={vi.fn()} />);
 
     await fillDestination(user);
     await user.click(screen.getByRole("button", { name: /^mover$/i }));

@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MovementResult, RackRead, SectionRead, UserRead } from "../../api/types";
-import { MovementForm } from "../MovementForm";
+import { FreezeForm } from "../FreezeForm";
 
 const { api, ApiError } = vi.hoisted(() => {
   class ApiErrorMock extends Error {
@@ -31,7 +31,10 @@ vi.mock("../../api/client", () => ({ api, ApiError }));
 
 const racks: RackRead[] = [{ id: 1, section_id: 1, letter: "A", slot: "center", capacity: 30 }];
 const sections: SectionRead[] = [{ id: 1, code: "I" }];
-const users: UserRead[] = [{ id: 1, initials: "GC", name: "Guillermo", active: true }];
+const users: UserRead[] = [
+  { id: 1, initials: "GC", name: "Guillermo", active: true },
+  { id: 2, initials: "DB", name: "Daniela Bravo", active: true },
+];
 
 function baseMovementResult(overrides: Partial<MovementResult["sample"]> = {}): MovementResult {
   return {
@@ -75,12 +78,8 @@ function baseMovementResult(overrides: Partial<MovementResult["sample"]> = {}): 
 async function fillRequiredFreezeFields(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/id environ/i), "BP001");
   await user.selectOptions(screen.getByLabelText(/^tipo$/i), "vial_celulas");
-  await user.selectOptions(screen.getByLabelText(/operador/i), "GC");
-  // Campo 9 de docs/FORMULARIO.md: obligatorio. El rack A vive en la sección I.
-  await user.selectOptions(screen.getByLabelText(/sección/i), "I");
   await user.type(screen.getByLabelText(/nombre caja/i), "A1");
   await user.selectOptions(screen.getByLabelText(/núcleo environ/i), "true");
-  await user.selectOptions(screen.getByLabelText(/caja está llena/i), "false");
   await waitFor(() => expect(api.listBoxes).toHaveBeenCalled());
   await user.click(screen.getByRole("button", { name: /^posición 1a,/i }));
 }
@@ -106,12 +105,17 @@ beforeEach(() => {
   });
 });
 
-describe("MovementForm", () => {
-  it("muestra los 15 campos del formulario en el orden de docs/FORMULARIO.md", async () => {
-    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+function renderForm(props: Partial<Parameters<typeof FreezeForm>[0]> = {}) {
+  return render(
+    <FreezeForm users={users} sessionInitials="GC" onClose={vi.fn()} onSubmitted={vi.fn()} {...props} />,
+  );
+}
+
+describe("FreezeForm", () => {
+  it("muestra los campos del Google Form con las desviaciones de docs/FORMULARIO.md", async () => {
+    renderForm();
 
     for (const label of [
-      /acción/i,
       /^fecha$/i,
       /id environ/i,
       /descripción/i,
@@ -121,16 +125,27 @@ describe("MovementForm", () => {
       /sección/i,
       /nombre caja/i,
       /núcleo environ/i,
-      /caja está llena/i,
+      /encargado de la muestra/i,
     ]) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
     expect(screen.getByRole("group", { name: /posición en la caja/i })).toBeInTheDocument();
+    // Ya no se pregunta: se calcula. Y congelar no comparte pantalla con descongelar.
+    expect(screen.queryByLabelText(/caja está llena/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/acción/i)).not.toBeInTheDocument();
+  });
+
+  it("Operador y Encargado parten siendo la persona de la sesión, con su nombre", () => {
+    renderForm();
+
+    expect(screen.getByLabelText(/operador/i)).toHaveValue("GC");
+    expect(screen.getByLabelText(/encargado de la muestra/i)).toHaveValue("GC");
+    expect(screen.getAllByRole("option", { name: "Daniela Bravo (DB)" }).length).toBe(2);
   });
 
   it("Tipo = Otros muestra el campo para especificar y lo exige", async () => {
     const user = userEvent.setup();
-    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+    renderForm();
 
     expect(screen.queryByLabelText(/especifique el tipo/i)).not.toBeInTheDocument();
 
@@ -141,22 +156,26 @@ describe("MovementForm", () => {
     expect(screen.queryByLabelText(/especifique el tipo/i)).not.toBeInTheDocument();
   });
 
-  it("Núcleo = No muestra el campo de propietario, Núcleo = Si lo oculta", async () => {
+  it("Núcleo es solo una marca: el encargado se pide y se envía igual", async () => {
+    api.createMovement.mockResolvedValue(baseMovementResult());
     const user = userEvent.setup();
-    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+    renderForm();
 
-    expect(screen.queryByLabelText(/indicar propietario/i)).not.toBeInTheDocument();
+    await fillRequiredFreezeFields(user);
+    await user.selectOptions(screen.getByLabelText(/encargado de la muestra/i), "DB");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
-    await user.selectOptions(screen.getByLabelText(/núcleo environ/i), "false");
-    expect(screen.getByLabelText(/indicar propietario/i)).toBeInTheDocument();
-
-    await user.selectOptions(screen.getByLabelText(/núcleo environ/i), "true");
-    expect(screen.queryByLabelText(/indicar propietario/i)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(api.createMovement).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "freeze", is_core: true, owner_initials: "DB" }),
+      ),
+    );
+    expect(api.createMovement.mock.calls[0][0]).not.toHaveProperty("box_is_full");
   });
 
   it("muestra la grilla de cartón o la lista plástica según el tipo de subcaja elegido", async () => {
     const user = userEvent.setup();
-    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+    renderForm();
 
     expect(screen.getByRole("group", { name: /81 espacios caja cartón/i })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: /100 espacios caja plástica/i })).not.toBeInTheDocument();
@@ -169,7 +188,7 @@ describe("MovementForm", () => {
 
   it("no envía el movimiento y muestra errores si faltan campos obligatorios", async () => {
     const user = userEvent.setup();
-    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+    renderForm();
 
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
@@ -178,16 +197,14 @@ describe("MovementForm", () => {
     expect(screen.getByText(/el tipo es obligatorio/i)).toBeInTheDocument();
   });
 
-  it("rechaza el envío si la sección elegida no corresponde al rack de la caja", async () => {
+  it("la sección se completa sola según el rack de la caja", async () => {
     const user = userEvent.setup();
-    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+    renderForm();
 
-    await fillRequiredFreezeFields(user);
-    await user.selectOptions(screen.getByLabelText(/sección/i), "II");
-    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    expect(screen.getByLabelText(/sección/i)).toHaveValue("");
+    await user.type(screen.getByLabelText(/nombre caja/i), "A1");
 
-    expect(api.createMovement).not.toHaveBeenCalled();
-    expect(screen.getByText(/el rack 'a' pertenece a la sección i, no a ii/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/sección/i)).toHaveValue("I"));
   });
 
   it("autocompletado: sugiere los datos de otras muestras con el mismo ID Environ", async () => {
@@ -205,7 +222,7 @@ describe("MovementForm", () => {
       next_free_position: "2A",
     });
     const user = userEvent.setup();
-    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+    renderForm();
 
     await user.type(screen.getByLabelText(/id environ/i), "BP001");
 
@@ -213,7 +230,7 @@ describe("MovementForm", () => {
     await waitFor(() => expect(screen.getByLabelText(/descripción/i)).toHaveValue("Biopsia de próstata"));
     expect(screen.getByLabelText(/^tipo$/i)).toHaveValue("rna");
     expect(screen.getByLabelText(/núcleo environ/i)).toHaveValue("false");
-    expect(screen.getByLabelText(/indicar propietario/i)).toHaveValue("DB");
+    expect(screen.getByLabelText(/encargado de la muestra/i)).toHaveValue("DB");
     expect(screen.getByLabelText(/nombre caja/i)).toHaveValue("A1");
   });
 
@@ -222,7 +239,7 @@ describe("MovementForm", () => {
     const onSubmitted = vi.fn();
     const onClose = vi.fn();
     const user = userEvent.setup();
-    render(<MovementForm users={users} onClose={onClose} onSubmitted={onSubmitted} />);
+    renderForm({ onClose, onSubmitted });
 
     await fillRequiredFreezeFields(user);
 
@@ -249,7 +266,7 @@ describe("MovementForm", () => {
       }),
     );
     const user = userEvent.setup();
-    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+    renderForm();
 
     await fillRequiredFreezeFields(user);
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
@@ -261,37 +278,12 @@ describe("MovementForm", () => {
     expect(screen.getByRole("button", { name: /^posición 1b,/i })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("prellena acción, sección, caja y posición cuando viene de un clic en el visor 3D", async () => {
-    render(
-      <MovementForm
-        users={users}
-        initial={{ action: "thaw", sectionCode: "I", rackLetter: "A", boxNumber: 1, boxType: "carton_81", position: "1A" }}
-        onClose={vi.fn()}
-        onSubmitted={vi.fn()}
-      />,
-    );
+  it("prellena caja, sección y posición cuando viene de un clic en el visor 3D", async () => {
+    renderForm({ initial: { sectionCode: "I", rackLetter: "A", boxNumber: 1, boxType: "carton_81", position: "1A" } });
 
-    expect(screen.getByLabelText(/acción/i)).toHaveValue("thaw");
-    expect(screen.getByLabelText(/sección/i)).toHaveValue("I");
     expect(screen.getByLabelText(/nombre caja/i)).toHaveValue("A1");
+    await waitFor(() => expect(screen.getByLabelText(/sección/i)).toHaveValue("I"));
     await waitFor(() => expect(screen.getByRole("button", { name: /^posición 1a,/i })).toHaveAttribute("aria-pressed", "true"));
-  });
-
-  it("exige Sección antes de enviar", async () => {
-    const user = userEvent.setup();
-    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
-
-    await user.type(screen.getByLabelText(/id environ/i), "BP001");
-    await user.selectOptions(screen.getByLabelText(/^tipo$/i), "vial_celulas");
-    await user.selectOptions(screen.getByLabelText(/operador/i), "GC");
-    await user.type(screen.getByLabelText(/nombre caja/i), "A1");
-    await user.selectOptions(screen.getByLabelText(/núcleo environ/i), "true");
-    await user.selectOptions(screen.getByLabelText(/caja está llena/i), "false");
-
-    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
-
-    expect(await screen.findByText(/la sección es obligatoria/i)).toBeInTheDocument();
-    expect(api.createMovement).not.toHaveBeenCalled();
   });
 
   it("la grilla marca el núcleo y trae leyenda", async () => {
@@ -300,7 +292,7 @@ describe("MovementForm", () => {
       { position: "1A", occupied: true, sample_id: 9, environ_id: "BP009", is_core: true },
     ]);
     const user = userEvent.setup();
-    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+    renderForm();
 
     await user.type(screen.getByLabelText(/nombre caja/i), "A1");
     await waitFor(() => expect(api.getBoxPositions).toHaveBeenCalled());

@@ -36,3 +36,15 @@ export function parseBoxName(raw: string): { rackLetter: string; boxNumber: numb
   if (boxNumber <= 0) return null;
   return { rackLetter: match[1].toUpperCase(), boxNumber };
 }
+
+/** Sección a la que pertenece la caja de "Nombre Caja" (`F12` → la sección del rack F).
+ * `undefined` mientras el nombre no sea válido o el rack no exista. */
+export function sectionCodeForBox(
+  boxName: string,
+  racks: ReadonlyArray<{ id: number; letter: string; section_id: number }>,
+  sections: ReadonlyArray<{ id: number; code: string }>,
+): string | undefined {
+  const parsed = parseBoxName(boxName);
+  const rack = parsed ? racks.find((entry) => entry.letter === parsed.rackLetter) : undefined;
+  return rack ? sections.find((section) => section.id === rack.section_id)?.code : undefined;
+}

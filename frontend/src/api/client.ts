@@ -7,6 +7,8 @@ import type {
   ImportRunRead,
   BoxPositionStatus,
   BoxOccupancy,
+  BoxMoveCreate,
+  BoxMoveResult,
   BoxRead,
   FreezerOccupancy,
   MovementCreate,
@@ -22,7 +24,9 @@ import type {
   SampleWithLocation,
   SectionOccupancy,
   SectionRead,
+  UserCreate,
   UserRead,
+  UserUpdate,
 } from "./types";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ??
@@ -51,8 +55,18 @@ function buildQuery<T extends object>(params: T): string {
   return qs ? `?${qs}` : "";
 }
 
+// Persona que eligió quién es al entrar (docs/adr/0002-autenticacion.md). Viaja en cada
+// request como `X-User-Id`; el backend la exige para registrar cambios sobre muestras.
+let sessionUserId: number | null = null;
+
+export function setSessionUserId(id: number | null): void {
+  sessionUserId = id;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, init);
+  const headers = new Headers(init?.headers);
+  if (sessionUserId !== null) headers.set("X-User-Id", String(sessionUserId));
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const detail = body?.detail;
@@ -74,6 +88,14 @@ function post<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+function patch<T>(path: string, body: unknown): Promise<T> {
+  return request(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export const api = {
   searchSamples(filters: SampleSearchFilters): Promise<Page<SampleWithLocation>> {
     return request(`/samples/search${buildQuery(filters)}`);
@@ -86,6 +108,12 @@ export const api = {
   },
   listUsers(): Promise<UserRead[]> {
     return request(`/users`);
+  },
+  createUser(payload: UserCreate): Promise<UserRead> {
+    return post(`/users`, payload);
+  },
+  updateUser(id: number, payload: UserUpdate): Promise<UserRead> {
+    return patch(`/users/${id}`, payload);
   },
   listSections(): Promise<SectionRead[]> {
     return request(`/sections`);
@@ -141,6 +169,9 @@ export const api = {
   moveSample(id: number, payload: SampleMoveCreate): Promise<MovementResult> {
     return post(`/samples/${id}/movements`, payload);
   },
+  moveBox(boxId: number, payload: BoxMoveCreate): Promise<BoxMoveResult> {
+    return post(`/boxes/${boxId}/move`, payload);
+  },
   listImportRuns(): Promise<ImportRunRead[]> {
     return request(`/imports`);
   },
@@ -158,11 +189,7 @@ export const api = {
     return request(`/alerts`);
   },
   updateSample(id: number, payload: SampleUpdate): Promise<SampleWithLocation> {
-    return request(`/samples/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    return patch(`/samples/${id}`, payload);
   },
   createMovement(payload: MovementCreate): Promise<MovementResult> {
     return post(`/movements`, payload);

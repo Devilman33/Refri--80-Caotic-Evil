@@ -18,21 +18,18 @@ const USERS: UserRead[] = [
 
 function setup(filters: SampleSearchFilters = { page: 1, page_size: 25 }) {
   const onChange = vi.fn();
-  const onMyInitialsChange = vi.fn();
   const onToggleMyFilter = vi.fn();
   render(
     <FiltersBar
       filters={filters}
       onChange={onChange}
-      myInitials=""
-      onMyInitialsChange={onMyInitialsChange}
       myFilterActive={false}
       onToggleMyFilter={onToggleMyFilter}
       total={42}
       users={USERS}
     />,
   );
-  return { onChange, onMyInitialsChange, onToggleMyFilter };
+  return { onChange, onToggleMyFilter };
 }
 
 describe("FiltersBar", () => {
@@ -92,19 +89,12 @@ describe("FiltersBar", () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ status: "withdrawn" }));
   });
 
-  it('el botón "Mis muestras" está deshabilitado sin iniciales cargadas', () => {
-    setup();
-    expect(screen.getByRole("button", { name: /mis muestras/i })).toBeDisabled();
-  });
-
-  it('permite activar "Mis muestras" cuando hay iniciales cargadas', async () => {
+  it('"Mis muestras" filtra por la persona de la sesión', async () => {
     const onToggleMyFilter = vi.fn();
     render(
       <FiltersBar
         filters={{ page: 1, page_size: 25 }}
         onChange={vi.fn()}
-        myInitials="GC"
-        onMyInitialsChange={vi.fn()}
         myFilterActive={false}
         onToggleMyFilter={onToggleMyFilter}
         total={42}
@@ -133,8 +123,6 @@ describe("FiltersBar", () => {
       <FiltersBar
         filters={{ page: 1, page_size: 25 }}
         onChange={vi.fn()}
-        myInitials=""
-        onMyInitialsChange={vi.fn()}
         myFilterActive={false}
         onToggleMyFilter={vi.fn()}
         total={1284}
@@ -149,8 +137,6 @@ describe("FiltersBar", () => {
       <FiltersBar
         filters={{ page: 1, page_size: 25 }}
         onChange={vi.fn()}
-        myInitials=""
-        onMyInitialsChange={vi.fn()}
         myFilterActive={false}
         onToggleMyFilter={vi.fn()}
         total={0}

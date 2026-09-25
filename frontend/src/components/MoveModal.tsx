@@ -2,20 +2,17 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
 import type { PositionConflict, RackRead, SampleWithLocation, SectionRead, UserRead } from "../api/types";
 import { useBoxResolution } from "../hooks/useBoxResolution";
-import { parseBoxName } from "../utils/positions";
+import { todayIso } from "../utils/format";
+import { parseBoxName, sectionCodeForBox } from "../utils/positions";
 import { Modal } from "./Modal";
 import { PositionPicker } from "./PositionPicker";
-
-const LAST_OPERATOR_KEY = "refri:ultimo-operador";
-
-function todayIso(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
+import { UserOptions } from "./UserOptions";
 
 export interface MoveModalProps {
   sample: SampleWithLocation;
   users: UserRead[];
+  /** Iniciales de la persona de la sesión: prellenan el Operador. */
+  sessionInitials: string;
   onClose: () => void;
   onMoved: (sample: SampleWithLocation, summary: string) => void;
 }
@@ -27,15 +24,12 @@ export interface MoveModalProps {
  * (Sección, Nombre Caja, grilla), para que elegir una ubicación se vea igual en toda la
  * app. La lógica de resolver la caja es `useBoxResolution`, compartida con ese formulario.
  */
-export function MoveModal({ sample, users, onClose, onMoved }: MoveModalProps) {
+export function MoveModal({ sample, users, sessionInitials, onClose, onMoved }: MoveModalProps) {
   const [racks, setRacks] = useState<RackRead[]>([]);
   const [sections, setSections] = useState<SectionRead[]>([]);
-  const [sectionCode, setSectionCode] = useState("");
   const [boxName, setBoxName] = useState("");
   const [position, setPosition] = useState("");
-  const [operatorInitials, setOperatorInitials] = useState(
-    () => localStorage.getItem(LAST_OPERATOR_KEY) ?? "",
-  );
+  const [operatorInitials, setOperatorInitials] = useState(sessionInitials);
   const [date, setDate] = useState(todayIso);
   const [note, setNote] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -44,6 +38,7 @@ export function MoveModal({ sample, users, onClose, onMoved }: MoveModalProps) {
   const [saving, setSaving] = useState(false);
 
   const box = useBoxResolution(boxName, racks);
+  const sectionCode = sectionCodeForBox(boxName, racks, sections);
 
   useEffect(() => {
     api.listRacks().then(setRacks).catch(() => setRacks([]));
@@ -54,7 +49,6 @@ export function MoveModal({ sample, users, onClose, onMoved }: MoveModalProps) {
     const errors: Record<string, string> = {};
     if (!date) errors.date = "La fecha es obligatoria";
     if (!operatorInitials.trim()) errors.operatorInitials = "El operador es obligatorio";
-    if (!sectionCode) errors.sectionCode = "La sección es obligatoria";
 
     const parsed = parseBoxName(boxName);
     if (!boxName.trim()) {
@@ -63,14 +57,7 @@ export function MoveModal({ sample, users, onClose, onMoved }: MoveModalProps) {
       errors.boxName = "Formato inválido: letra de rack + N° de caja (p. ej. A12)";
     } else {
       const rack = racks.find((entry) => entry.letter === parsed.rackLetter);
-      if (!rack) {
-        errors.boxName = `No existe el rack '${parsed.rackLetter}'`;
-      } else if (sectionCode) {
-        const rackSection = sections.find((section) => section.id === rack.section_id)?.code;
-        if (rackSection && rackSection !== sectionCode) {
-          errors.sectionCode = `El rack '${rack.letter}' pertenece a la sección ${rackSection}, no a ${sectionCode}`;
-        }
-      }
+      if (!rack) errors.boxName = `No existe el rack '${parsed.rackLetter}'`;
     }
     if (!position) errors.position = "Elegí la posición de destino";
     return errors;
@@ -94,7 +81,6 @@ export function MoveModal({ sample, users, onClose, onMoved }: MoveModalProps) {
         position,
         note: note.trim() || null,
       });
-      localStorage.setItem(LAST_OPERATOR_KEY, operatorInitials.trim().toUpperCase());
       // El momento que importa: decir de dónde a dónde se movió. Sin esto el operador
       // cierra un diálogo y ve una tabla que se refrescó sola, sin confirmación de nada.
       onMoved(result.sample, `Movida: ${sample.location} → ${result.sample.location}`);
@@ -147,27 +133,9 @@ export function MoveModal({ sample, users, onClose, onMoved }: MoveModalProps) {
             value={operatorInitials}
             onChange={(event) => setOperatorInitials(event.target.value)}
           >
-            <option value="">Selecciona…</option>
-            {users.map((user) => (
-              <option key={user.id} value={user.initials}>
-                {user.initials}
-              </option>
-            ))}
+            <UserOptions users={users} />
           </select>
           {fieldErrors.operatorInitials && <p className="field-error">{fieldErrors.operatorInitials}</p>}
-        </div>
-
-        <div className="field">
-          <label htmlFor="mv-section">Sección</label>
-          <select id="mv-section" value={sectionCode} onChange={(event) => setSectionCode(event.target.value)}>
-            <option value="">Selecciona…</option>
-            {sections.map((section) => (
-              <option key={section.id} value={section.code}>
-                {section.code}
-              </option>
-            ))}
-          </select>
-          {fieldErrors.sectionCode && <p className="field-error">{fieldErrors.sectionCode}</p>}
         </div>
 
         <div className="field">
@@ -182,6 +150,7 @@ export function MoveModal({ sample, users, onClose, onMoved }: MoveModalProps) {
             placeholder="p. ej. A12"
           />
           {fieldErrors.boxName && <p className="field-error">{fieldErrors.boxName}</p>}
+          {sectionCode && <p className="field-hint">Sección {sectionCode}</p>}
           {!fieldErrors.boxName && boxName.trim() !== "" && (
             <p className="field-hint">
               {box.boxExists ? "Caja existente: se muestran sus posiciones." : "Caja nueva: se creará al mover."}

@@ -118,3 +118,19 @@ def test_seed_layout_rejects_duplicate_letter(db_session, tmp_path):
 
     with pytest.raises(LayoutError):
         seed_layout(db_session, bad)
+
+
+def test_seed_users_creates_the_initial_people_once(db_session):
+    from app.models import User
+    from app.seed.seed import INITIAL_USERS, seed_users
+
+    db_session.add(User(initials="GC", name="Gonzalo Carrasco"))
+    db_session.commit()
+
+    seed_users(db_session)
+    seed_users(db_session)
+
+    users = {user.initials: user for user in db_session.query(User).all()}
+    assert set(users) == set(INITIAL_USERS)
+    # Una persona que ya completó su nombre no se pisa.
+    assert users["GC"].name == "Gonzalo Carrasco"

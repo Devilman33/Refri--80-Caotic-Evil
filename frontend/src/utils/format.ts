@@ -13,3 +13,12 @@ export function formatBoolean(value: boolean | null | undefined): string {
   if (value === null || value === undefined) return "—";
   return value ? "Sí" : "No";
 }
+
+/** Fecha de hoy en formato `AAAA-MM-DD`, en la zona horaria local (no UTC: a las 22:00
+ * en Chile `toISOString` ya da el día siguiente). */
+export function todayIso(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}

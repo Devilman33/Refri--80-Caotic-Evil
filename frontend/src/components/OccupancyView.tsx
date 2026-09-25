@@ -19,6 +19,8 @@ const BOX_FILTERS: BoxFilter[] = ["all", "full", "near-full", "inconsistent"];
 export interface OccupancyViewProps {
   /** "Ver en el refri": abre el visor 3D enfocado en esa subcaja. */
   onViewBox: (box: BoxOccupancy) => void;
+  /** "Mover caja": traslada la subcaja con todas sus muestras activas. */
+  onMoveBox?: (box: BoxOccupancy) => void;
   /** Estado inicial del filtro. Cada contador del panel de alertas entra con el suyo:
    * sin esto, "llenas" y "casi llenas" llevarían a la misma pantalla. */
   initialFilter?: BoxFilter;
@@ -55,7 +57,7 @@ const SORT_LABELS: Record<BoxSortKey, string> = {
 
 // Vista de almacenamiento (issue #7): % de uso del freezer, por sección, por rack
 // y por subcaja (la cajita 9×9 o 10×10), con las llenas y casi llenas destacadas.
-export function OccupancyView({ onViewBox, initialFilter = "all" }: OccupancyViewProps) {
+export function OccupancyView({ onViewBox, onMoveBox, initialFilter = "all" }: OccupancyViewProps) {
   const [data, setData] = useState<OccupancyData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<BoxSortKey>("percent");
@@ -233,6 +235,11 @@ export function OccupancyView({ onViewBox, initialFilter = "all" }: OccupancyVie
                         <button type="button" className="btn-ghost" onClick={() => onViewBox(box)}>
                           Ver en el refri
                         </button>
+                        {onMoveBox && box.active > 0 && (
+                          <button type="button" className="btn-ghost" onClick={() => onMoveBox(box)}>
+                            Mover caja
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

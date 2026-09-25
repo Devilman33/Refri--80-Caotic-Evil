@@ -1,4 +1,5 @@
-"""Siembra la distribución física (secciones y racks) desde `layout.yaml`.
+"""Siembra la distribución física (secciones y racks) desde `layout.yaml`, y las personas
+de la carga inicial del Google Form (docs/FORMULARIO.md, campos 7 y 14).
 
 Uso: `python -m app.seed.seed` (requiere el esquema ya migrado con Alembic).
 Es idempotente: se puede correr de nuevo sin duplicar secciones ni racks.
@@ -13,7 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import Rack, Section
+from app.models import Rack, Section, User
 from app.schemas.rack import VALID_RACK_LETTERS
 from app.schemas.section import VALID_SECTION_CODES
 
@@ -132,10 +133,26 @@ def seed_layout(session: Session, path: pathlib.Path = LAYOUT_PATH) -> None:
     session.commit()
 
 
+# Operadores (campo 7) y propietarios (campo 14) del Google Form. Solo iniciales: cada
+# persona completa su nombre desde la página. Sin esto, la pantalla de ingreso de una
+# base nueva no tendría a nadie para elegir.
+INITIAL_USERS = ("APS", "BPG", "DB", "DM", "DRZ", "EV", "GC", "JCI", "JF", "MN", "MS", "RL", "VC", "VF")
+
+
+def seed_users(session: Session, initials: tuple[str, ...] = INITIAL_USERS) -> None:
+    """Crea las personas que falten. Nunca modifica ni reactiva las que ya existen."""
+    existing = {row[0] for row in session.query(User.initials).all()}
+    for value in initials:
+        if value not in existing:
+            session.add(User(initials=value))
+    session.commit()
+
+
 def main() -> None:
     with SessionLocal() as session:
         seed_layout(session)
-    print("Siembra de secciones y racks aplicada.")
+        seed_users(session)
+    print("Siembra de secciones, racks y usuarios iniciales aplicada.")
 
 
 if __name__ == "__main__":

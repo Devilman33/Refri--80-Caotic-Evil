@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SampleWithLocation } from "../../api/types";
+import type { MovementRead, SampleWithLocation, UserRead } from "../../api/types";
 import { SampleDetail } from "../SampleDetail";
 
 const { api } = vi.hoisted(() => ({
@@ -28,25 +28,75 @@ const activeSample: SampleWithLocation = {
   location: "I · A1 · 1A",
 };
 
+const users: UserRead[] = [
+  { id: 1, initials: "GC", name: "Gonzalo Carrasco", active: true },
+  { id: 2, initials: "MN", name: null, active: true },
+];
+
+const freeze: MovementRead = {
+  id: 1,
+  sample_id: 1,
+  action: "freeze",
+  date: "2026-01-12",
+  operator_id: 2,
+  operator_initials: "MN",
+  box_id: 1,
+  position: "1A",
+  location: "I · A1 · 1A",
+  from_box_id: null,
+  from_position: null,
+  from_location: null,
+  note: null,
+  created_at: "2026-01-12T00:00:00Z",
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   api.getSampleMovements.mockResolvedValue([]);
 });
 
 describe("SampleDetail", () => {
-  it('muestra "Descongelar" para una muestra activa cuando se pasa onThaw', () => {
-    render(<SampleDetail sample={activeSample} ownerLabel="GC" onClose={vi.fn()} onThaw={vi.fn()} />);
+  it('muestra "Descongelar" para una muestra activa de quien la mira', () => {
+    render(<SampleDetail sample={activeSample} users={users} canModify onClose={vi.fn()} onThaw={vi.fn()} />);
     expect(screen.getByRole("button", { name: /descongelar/i })).toBeInTheDocument();
   });
 
-  it("no muestra el botón de descongelar cuando no se pasa onThaw (detalle abierto desde la tabla)", () => {
-    render(<SampleDetail sample={activeSample} ownerLabel="GC" onClose={vi.fn()} />);
-    expect(screen.queryByRole("button", { name: /descongelar/i })).not.toBeInTheDocument();
+  it("a quien no es el encargado no le ofrece acciones y le dice quién puede", () => {
+    render(
+      <SampleDetail
+        sample={activeSample}
+        users={users}
+        canModify={false}
+        onClose={vi.fn()}
+        onThaw={vi.fn()}
+        onEdit={vi.fn()}
+        onMove={vi.fn()}
+      />,
+    );
+    for (const name of [/descongelar/i, /editar/i, /^mover$/i]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(screen.getByText(/solo gonzalo carrasco, su encargado/i)).toBeInTheDocument();
+  });
+
+  it("muestra de quién es, cuándo se congeló y quién la congeló", async () => {
+    api.getSampleMovements.mockResolvedValue([freeze]);
+    render(<SampleDetail sample={activeSample} users={users} canModify onClose={vi.fn()} />);
+
+    expect(screen.getByText("Gonzalo Carrasco (GC)")).toBeInTheDocument();
+    expect(await screen.findByText("12-01-2026")).toBeInTheDocument();
+    expect(screen.getAllByText("MN").length).toBeGreaterThan(0);
   });
 
   it("no muestra el botón de descongelar para una muestra ya retirada", () => {
     render(
-      <SampleDetail sample={{ ...activeSample, status: "withdrawn" }} ownerLabel="GC" onClose={vi.fn()} onThaw={vi.fn()} />,
+      <SampleDetail
+        sample={{ ...activeSample, status: "withdrawn" }}
+        users={users}
+        canModify
+        onClose={vi.fn()}
+        onThaw={vi.fn()}
+      />,
     );
     expect(screen.queryByRole("button", { name: /descongelar/i })).not.toBeInTheDocument();
   });
@@ -54,7 +104,7 @@ describe("SampleDetail", () => {
   it("llama a onThaw al hacer clic", async () => {
     const onThaw = vi.fn();
     const user = userEvent.setup();
-    render(<SampleDetail sample={activeSample} ownerLabel="GC" onClose={vi.fn()} onThaw={onThaw} />);
+    render(<SampleDetail sample={activeSample} users={users} canModify onClose={vi.fn()} onThaw={onThaw} />);
 
     await user.click(screen.getByRole("button", { name: /descongelar/i }));
     expect(onThaw).toHaveBeenCalledTimes(1);

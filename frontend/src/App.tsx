@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "./api/client";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { api, ApiError, setSessionUserId } from "./api/client";
 import { UNASSIGNED_INITIALS } from "./api/types";
 import type { BoxOccupancy, Page, SampleSearchFilters, SampleWithLocation, UserRead } from "./api/types";
 import { AlertsPanel, type AlertDestination } from "./components/AlertsPanel";
 import { AnomaliesView } from "./components/AnomaliesView";
+import { BoxMoveModal, type BoxMoveTarget } from "./components/BoxMoveModal";
 import { FiltersBar } from "./components/FiltersBar";
-import { IdListSearch } from "./components/IdListSearch";
-import { MoveModal } from "./components/MoveModal";
+import { FreezeForm, type LocationPrefill } from "./components/FreezeForm";
 import {
   FreezerViewer,
   type FreePositionSelection,
@@ -14,17 +14,21 @@ import {
   type OccupiedPositionSelection,
 } from "./components/FreezerViewer";
 import { Header } from "./components/Header";
-import { MovementForm, type MovementFormPrefill } from "./components/MovementForm";
+import { IdListSearch } from "./components/IdListSearch";
+import { LoginScreen } from "./components/LoginScreen";
+import { MoveModal } from "./components/MoveModal";
 import { OccupancyView } from "./components/OccupancyView";
 import { Pagination } from "./components/Pagination";
 import { SampleDetail } from "./components/SampleDetail";
 import { SampleEditModal } from "./components/SampleEditModal";
 import { SamplesTable, type SortState } from "./components/SamplesTable";
+import { ThawForm } from "./components/ThawForm";
+import { UsersModal } from "./components/UsersModal";
 import type { BoxFilter } from "./utils/occupancy";
-import { userLabel } from "./utils/users";
+import { canModifySample, userLabel } from "./utils/users";
 
 const THEME_KEY = "refri:theme";
-const MY_INITIALS_KEY = "refri:mis-iniciales";
+const SESSION_KEY = "refri:sesion-usuario";
 const DEFAULT_PAGE_SIZE = 25;
 
 type Theme = "light" | "dark";
@@ -33,27 +37,112 @@ type Theme = "light" | "dark";
 // desde el panel de alertas con un breadcrumb para volver.
 type ViewMode = "table" | "3d" | "usage" | "anomalies";
 
+/** Qué formulario de movimiento está abierto. Congelar y descongelar son dos formularios
+ * distintos a pedido del laboratorio: compartían pantalla y se confundían. */
+type MovementDialog = { kind: "freeze" | "thaw"; initial?: LocationPrefill } | null;
+
 function readTheme(): Theme {
   const stored = localStorage.getItem(THEME_KEY);
   if (stored === "light" || stored === "dark") return stored;
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+function readSessionId(): number | null {
+  const stored = Number(localStorage.getItem(SESSION_KEY));
+  return Number.isInteger(stored) && stored > 0 ? stored : null;
+}
+
+/** `III · F12 · 3B` → la caja y posición, para abrir el retiro de una muestra ya elegida. */
+function locationPrefill(sample: SampleWithLocation): LocationPrefill | undefined {
+  const match = /^(\S+) · ([A-H])(\d+) · (.+)$/.exec(sample.location);
+  if (!match) return undefined;
+  return { sectionCode: match[1], rackLetter: match[2], boxNumber: Number(match[3]), position: match[4] };
+}
+
 export default function App() {
   const [theme, setTheme] = useState<Theme>(readTheme);
+  const [users, setUsers] = useState<UserRead[] | null>(null);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<number | null>(readSessionId);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  const reloadUsers = useCallback(() => {
+    api
+      .listUsers()
+      .then((list) => {
+        setUsers(list);
+        setUsersError(null);
+      })
+      .catch(() => {
+        setUsers([]);
+        setUsersError("No se pudo cargar la lista de usuarios. ¿Está levantado el backend?");
+      });
+  }, []);
+
+  useEffect(reloadUsers, [reloadUsers]);
+
+  // Una sesión guardada de alguien que ya no existe o fue desactivado no vale: vuelve a
+  // la pantalla de entrada en vez de fallar en la primera escritura.
+  const sessionUser = useMemo(
+    () => users?.find((user) => user.id === sessionId && user.active) ?? null,
+    [users, sessionId],
+  );
+
+  useEffect(() => {
+    setSessionUserId(sessionUser?.id ?? null);
+  }, [sessionUser]);
+
+  function login(user: UserRead) {
+    localStorage.setItem(SESSION_KEY, String(user.id));
+    setSessionUserId(user.id);
+    setUsers((current) => (current?.some((entry) => entry.id === user.id) ? current : [...(current ?? []), user]));
+    setSessionId(user.id);
+  }
+
+  function logout() {
+    localStorage.removeItem(SESSION_KEY);
+    setSessionUserId(null);
+    setSessionId(null);
+  }
+
+  if (users === null) return <div className="empty-state">Cargando…</div>;
+  if (!sessionUser) return <LoginScreen users={users} loadError={usersError} onLogin={login} />;
+
+  return (
+    <Workspace
+      theme={theme}
+      onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+      users={users}
+      sessionUser={sessionUser}
+      onUsersChanged={reloadUsers}
+      onLogout={logout}
+    />
+  );
+}
+
+interface WorkspaceProps {
+  theme: Theme;
+  onToggleTheme: () => void;
+  users: UserRead[];
+  sessionUser: UserRead;
+  onUsersChanged: () => void;
+  onLogout: () => void;
+}
+
+function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, onLogout }: WorkspaceProps) {
   const [filters, setFilters] = useState<SampleSearchFilters>({ page: 1, page_size: DEFAULT_PAGE_SIZE });
   const [result, setResult] = useState<Page<SampleWithLocation> | null>(null);
-  const [users, setUsers] = useState<UserRead[]>([]);
   const [selected, setSelected] = useState<SampleWithLocation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [myInitials, setMyInitials] = useState(() => localStorage.getItem(MY_INITIALS_KEY) ?? "");
-  const [showMovementForm, setShowMovementForm] = useState(false);
-  const [movementInitial, setMovementInitial] = useState<MovementFormPrefill | undefined>(undefined);
+  const [movementDialog, setMovementDialog] = useState<MovementDialog>(null);
   // El visor 3D es la primera vista: es la que el laboratorio usa para ubicarse.
   const [viewMode, setViewMode] = useState<ViewMode>("3d");
   const [focusTarget, setFocusTarget] = useState<FreezerFocusTarget | null>(null);
-  const [thawSelection, setThawSelection] = useState<OccupiedPositionSelection | null>(null);
   const [freezerKey, setFreezerKey] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
   const [editing, setEditing] = useState<SampleWithLocation | null>(null);
@@ -61,22 +150,11 @@ export default function App() {
   const [showAlerts, setShowAlerts] = useState(false);
   const [boxFilter, setBoxFilter] = useState<BoxFilter>("all");
   const [moving, setMoving] = useState<SampleWithLocation | null>(null);
+  const [movingBox, setMovingBox] = useState<BoxMoveTarget | null>(null);
+  const [showUsers, setShowUsers] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [idListMode, setIdListMode] = useState(false);
   const [idListResult, setIdListResult] = useState<Page<SampleWithLocation> | null>(null);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem(THEME_KEY, theme);
-  }, [theme]);
-
-  useEffect(() => {
-    localStorage.setItem(MY_INITIALS_KEY, myInitials);
-  }, [myInitials]);
-
-  useEffect(() => {
-    api.listUsers().then(setUsers).catch(() => setUsers([]));
-  }, []);
 
   // "Cambiaron los filtros" y "se pidió un refetch" son dos cosas distintas. Antes el
   // refresh posterior a un movimiento era `setFilters(current => ({ ...current }))`: un
@@ -115,9 +193,7 @@ export default function App() {
     return map;
   }, [users]);
 
-  const myFilterActive = Boolean(
-    myInitials.trim() && filters.owner_initials?.toUpperCase() === myInitials.trim().toUpperCase(),
-  );
+  const myFilterActive = filters.owner_initials === sessionUser.initials;
 
   const sort: SortState | null = filters.sort_by ? { key: filters.sort_by, direction: filters.sort_dir ?? "asc" } : null;
 
@@ -131,61 +207,45 @@ export default function App() {
   }
 
   function toggleMyFilter() {
-    const initials = myInitials.trim().toUpperCase();
-    if (!initials) return;
     setFilters((current) => ({
       ...current,
-      owner_initials: myFilterActive ? undefined : initials,
+      owner_initials: myFilterActive ? undefined : sessionUser.initials,
       page: 1,
     }));
   }
 
-  function openMovementForm(initial?: MovementFormPrefill) {
-    setMovementInitial(initial);
-    setShowMovementForm(true);
+  /** Después de cualquier cambio de inventario: tabla, visor y alertas se recargan. */
+  function refreshInventory() {
+    setReloadToken((token) => token + 1);
+    setFreezerKey((key) => key + 1);
   }
 
-  function closeMovementForm() {
-    setShowMovementForm(false);
-    setMovementInitial(undefined);
-    // Si se cierra un descongelamiento abierto desde el visor, la selección queda obsoleta.
-    setThawSelection(null);
-  }
-
-  // Clic en una posición libre del visor 3D (issue #6): abre el formulario de
-  // ingreso con la caja y la posición ya elegidas.
+  // Clic en una posición libre del visor 3D (issue #6): abre el congelamiento con la caja
+  // y la posición ya elegidas.
   function handleSelectFreePosition(selection: FreePositionSelection) {
-    openMovementForm({
-      action: "freeze",
-      sectionCode: selection.sectionCode,
-      rackLetter: selection.rackLetter,
-      boxNumber: selection.boxNumber,
-      boxType: selection.boxType,
-      position: selection.position,
+    setMovementDialog({
+      kind: "freeze",
+      initial: {
+        sectionCode: selection.sectionCode,
+        rackLetter: selection.rackLetter,
+        boxNumber: selection.boxNumber,
+        boxType: selection.boxType,
+        position: selection.position,
+      },
     });
   }
 
-  // Clic en una posición ocupada del visor 3D: muestra el detalle de esa
-  // muestra con la opción de descongelarla desde esa misma caja/posición.
+  // Clic en una posición ocupada del visor 3D: muestra el detalle de esa muestra.
   function handleSelectOccupiedPosition(selection: OccupiedPositionSelection) {
-    setThawSelection(selection);
     api
       .getSample(selection.sampleId)
       .then(setSelected)
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "No se pudo cargar la muestra"));
   }
 
-  function handleThaw() {
-    if (!thawSelection) return;
-    openMovementForm({
-      action: "thaw",
-      sectionCode: thawSelection.sectionCode,
-      rackLetter: thawSelection.rackLetter,
-      boxNumber: thawSelection.boxNumber,
-      boxType: thawSelection.boxType,
-      position: thawSelection.position,
-    });
+  function handleThaw(sample: SampleWithLocation) {
     setSelected(null);
+    setMovementDialog({ kind: "thaw", initial: locationPrefill(sample) });
   }
 
   // "Ver en el refri" desde un resultado de búsqueda (issue #6): cambia a la
@@ -224,17 +284,25 @@ export default function App() {
   // búsquedas distintas y mezclarlas haría imposible saber cuál se está viendo.
   const tableResult = idListMode ? idListResult : result;
 
+  const selectedOwner = selected ? users.find((user) => user.id === selected.owner_id) : undefined;
+
   return (
     <div className="app">
       <Header
         theme={theme}
-        onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+        onToggleTheme={onToggleTheme}
         viewMode={viewMode}
+        sessionUser={sessionUser}
+        onOpenUsers={() => setShowUsers(true)}
+        onLogout={onLogout}
       />
       <main className="app-main">
         <div className="filters-actions">
-          <button type="button" className="btn" onClick={() => openMovementForm(undefined)}>
-            + Nuevo movimiento
+          <button type="button" className="btn" onClick={() => setMovementDialog({ kind: "freeze" })}>
+            + Congelar muestra
+          </button>
+          <button type="button" className="btn btn-thaw" onClick={() => setMovementDialog({ kind: "thaw" })}>
+            − Descongelar muestra
           </button>
           {alertCount > 0 && (
             <button
@@ -249,19 +317,19 @@ export default function App() {
           <div className="view-toggle" role="group" aria-label="Vista">
             <button
               type="button"
-              className={viewMode === "table" ? "on" : ""}
-              aria-pressed={viewMode === "table"}
-              onClick={() => setViewMode("table")}
-            >
-              Vista tabla
-            </button>
-            <button
-              type="button"
               className={viewMode === "3d" ? "on" : ""}
               aria-pressed={viewMode === "3d"}
               onClick={() => setViewMode("3d")}
             >
               Vista 3D
+            </button>
+            <button
+              type="button"
+              className={viewMode === "table" ? "on" : ""}
+              aria-pressed={viewMode === "table"}
+              onClick={() => setViewMode("table")}
+            >
+              Vista tabla
             </button>
             <button
               type="button"
@@ -298,8 +366,6 @@ export default function App() {
             filters={filters}
             onChange={setFilters}
             users={users}
-            myInitials={myInitials}
-            onMyInitialsChange={setMyInitials}
             myFilterActive={myFilterActive}
             onToggleMyFilter={toggleMyFilter}
             total={result?.total ?? 0}
@@ -308,11 +374,7 @@ export default function App() {
 
         {showAlerts && (
           <div className="panel">
-            <AlertsPanel
-              reloadToken={reloadToken}
-              onNavigate={handleAlertNavigate}
-              onCountChange={setAlertCount}
-            />
+            <AlertsPanel reloadToken={reloadToken} onNavigate={handleAlertNavigate} onCountChange={setAlertCount} />
           </div>
         )}
 
@@ -331,8 +393,25 @@ export default function App() {
           </div>
         )}
 
+        {notice && (
+          <p className="field-notice" role="status">
+            {notice}
+          </p>
+        )}
+
         {viewMode === "usage" && (
-          <OccupancyView key={freezerKey} onViewBox={handleViewBoxInFreezer} initialFilter={boxFilter} />
+          <OccupancyView
+            key={freezerKey}
+            onViewBox={handleViewBoxInFreezer}
+            onMoveBox={(box) =>
+              setMovingBox({
+                boxId: box.box_id,
+                label: `${box.section_code} · ${box.rack_letter}${box.number}`,
+                active: box.active,
+              })
+            }
+            initialFilter={boxFilter}
+          />
         )}
 
         {viewMode === "anomalies" && (
@@ -341,13 +420,8 @@ export default function App() {
               setViewMode("table");
               setShowAlerts(true);
             }}
-            operatorInitials={myInitials.trim().toUpperCase()}
+            operatorInitials={sessionUser.initials}
           />
-        )}
-        {notice && (
-          <p className="field-notice" role="status">
-            {notice}
-          </p>
         )}
 
         {viewMode === "table" && loading && !result && !idListMode && (
@@ -382,6 +456,7 @@ export default function App() {
             focusTarget={focusTarget}
             onSelectFreePosition={handleSelectFreePosition}
             onSelectOccupiedPosition={handleSelectOccupiedPosition}
+            onMoveBox={setMovingBox}
           />
         )}
       </main>
@@ -389,12 +464,10 @@ export default function App() {
       {selected && !editing && (
         <SampleDetail
           sample={selected}
-          ownerLabel={userLabel(users.find((user) => user.id === selected.owner_id))}
-          onClose={() => {
-            setSelected(null);
-            setThawSelection(null);
-          }}
-          onThaw={thawSelection && thawSelection.sampleId === selected.id ? handleThaw : undefined}
+          users={users}
+          canModify={canModifySample(selected, selectedOwner, sessionUser)}
+          onClose={() => setSelected(null)}
+          onThaw={() => handleThaw(selected)}
           onEdit={() => setEditing(selected)}
           onMove={() => setMoving(selected)}
         />
@@ -404,6 +477,7 @@ export default function App() {
         <MoveModal
           sample={moving}
           users={users}
+          sessionInitials={sessionUser.initials}
           onClose={() => setMoving(null)}
           onMoved={(updated, summary) => {
             setMoving(null);
@@ -411,8 +485,21 @@ export default function App() {
             // dónde: el momento que importa no puede terminar en un diálogo que se cierra.
             setSelected(updated);
             setNotice(summary);
-            setReloadToken((token) => token + 1);
-            setFreezerKey((key) => key + 1);
+            refreshInventory();
+          }}
+        />
+      )}
+
+      {movingBox && (
+        <BoxMoveModal
+          box={movingBox}
+          users={users}
+          sessionInitials={sessionUser.initials}
+          onClose={() => setMovingBox(null)}
+          onMoved={(summary) => {
+            setMovingBox(null);
+            setNotice(summary);
+            refreshInventory();
           }}
         />
       )}
@@ -430,18 +517,33 @@ export default function App() {
         />
       )}
 
-      {showMovementForm && (
-        <MovementForm
+      {movementDialog?.kind === "freeze" && (
+        <FreezeForm
           users={users}
-          initial={movementInitial}
-          onClose={closeMovementForm}
+          sessionInitials={sessionUser.initials}
+          initial={movementDialog.initial}
+          onClose={() => setMovementDialog(null)}
           onSubmitted={() => {
-            api.listUsers().then(setUsers).catch(() => undefined);
-            setReloadToken((token) => token + 1);
-            setFreezerKey((key) => key + 1);
+            onUsersChanged();
+            refreshInventory();
           }}
         />
       )}
+
+      {movementDialog?.kind === "thaw" && (
+        <ThawForm
+          users={users}
+          sessionUser={sessionUser}
+          initial={movementDialog.initial}
+          onClose={() => setMovementDialog(null)}
+          onSubmitted={(movement) => {
+            setNotice(`Muestra retirada: ${movement.sample.environ_id ?? "sin ID"} (${movement.sample.location}).`);
+            refreshInventory();
+          }}
+        />
+      )}
+
+      {showUsers && <UsersModal users={users} onClose={() => setShowUsers(false)} onChanged={onUsersChanged} />}
     </div>
   );
 }
