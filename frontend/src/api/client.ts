@@ -1,6 +1,7 @@
 import type {
   AlertsRead,
   AutocompleteSuggestion,
+  IdLookupResult,
   BoxPositionStatus,
   BoxOccupancy,
   BoxRead,
@@ -12,6 +13,7 @@ import type {
   PositionConflict,
   RackOccupancy,
   RackRead,
+  SampleMoveCreate,
   SampleSearchFilters,
   SampleUpdate,
   SampleWithLocation,
@@ -129,6 +131,12 @@ export const api = {
     const disposition = res.headers.get("content-disposition") ?? "";
     const match = /filename="?([^"]+)"?/.exec(disposition);
     return { blob: await res.blob(), filename: match?.[1] ?? "muestras.csv" };
+  },
+  lookupByIds(environIdExact: string): Promise<IdLookupResult> {
+    return request(`/samples/by-ids${buildQuery({ environ_id_exact: environIdExact })}`);
+  },
+  moveSample(id: number, payload: SampleMoveCreate): Promise<MovementResult> {
+    return post(`/samples/${id}/movements`, payload);
   },
   getAlerts(): Promise<AlertsRead> {
     return request(`/alerts`);

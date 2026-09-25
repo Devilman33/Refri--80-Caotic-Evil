@@ -115,6 +115,10 @@ export interface MovementRead {
   operator_initials: string | null;
   box_id: number;
   position: string;
+  location: string | null;
+  from_box_id: number | null;
+  from_position: string | null;
+  from_location: string | null;
   note: string | null;
   created_at: string;
 }
@@ -225,6 +229,25 @@ export interface MovementCreate {
   non_core_owner_initials?: string | null;
   box_is_full?: boolean | null;
   note?: string | null;
+}
+
+/** Traslado. Se direcciona por `sample.id`: un environ_id cubre hasta cientos de tubos. */
+export interface SampleMoveCreate {
+  date: string;
+  operator_initials: string;
+  rack_letter: string;
+  box_number: number;
+  position: string;
+  note?: string | null;
+}
+
+/** Resultado de buscar una lista de IDs pegada. `missing` lo calcula el servidor: con el
+ * diff en el cliente contra una respuesta paginada, los IDs fuera de la página se
+ * reportarían como faltantes. */
+export interface IdLookupResult {
+  items: SampleWithLocation[];
+  total: number;
+  missing: string[];
 }
 
 export interface MovementResult {

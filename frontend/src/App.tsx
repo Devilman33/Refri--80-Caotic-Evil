@@ -4,6 +4,8 @@ import { UNASSIGNED_INITIALS } from "./api/types";
 import type { BoxOccupancy, Page, SampleSearchFilters, SampleWithLocation, UserRead } from "./api/types";
 import { AlertsPanel, type AlertDestination } from "./components/AlertsPanel";
 import { FiltersBar } from "./components/FiltersBar";
+import { IdListSearch } from "./components/IdListSearch";
+import { MoveModal } from "./components/MoveModal";
 import {
   FreezerViewer,
   type FreePositionSelection,
@@ -52,6 +54,10 @@ export default function App() {
   const [alertCount, setAlertCount] = useState(0);
   const [showAlerts, setShowAlerts] = useState(false);
   const [boxFilter, setBoxFilter] = useState<BoxFilter>("all");
+  const [moving, setMoving] = useState<SampleWithLocation | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [idListMode, setIdListMode] = useState(false);
+  const [idListResult, setIdListResult] = useState<Page<SampleWithLocation> | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -202,6 +208,10 @@ export default function App() {
 
   const unassignedFilterActive = filters.owner_initials === UNASSIGNED_INITIALS;
 
+  // En modo lista de IDs la tabla muestra ese resultado y no el de los filtros: son dos
+  // búsquedas distintas y mezclarlas haría imposible saber cuál se está viendo.
+  const tableResult = idListMode ? idListResult : result;
+
   return (
     <div className="app">
       <Header
@@ -252,7 +262,26 @@ export default function App() {
           </div>
         </div>
 
-        {viewMode === "table" && (
+        {viewMode === "table" && !idListMode && (
+          <div className="filters-actions">
+            <button type="button" className="btn-ghost" onClick={() => setIdListMode(true)}>
+              Buscar por lista de IDs
+            </button>
+          </div>
+        )}
+
+        {viewMode === "table" && idListMode && (
+          <IdListSearch
+            onResult={(lookup) =>
+              setIdListResult(
+                lookup ? { items: lookup.items, total: lookup.total, page: 1, page_size: lookup.total || 1 } : null,
+              )
+            }
+            onClose={() => setIdListMode(false)}
+          />
+        )}
+
+        {viewMode === "table" && !idListMode && (
           <FiltersBar
             filters={filters}
             onChange={setFilters}
@@ -292,16 +321,24 @@ export default function App() {
         {viewMode === "usage" && (
           <OccupancyView key={freezerKey} onViewBox={handleViewBoxInFreezer} initialFilter={boxFilter} />
         )}
-        {viewMode === "table" && loading && !result && <div className="empty-state">Cargando muestras…</div>}
+        {notice && (
+          <p className="field-notice" role="status">
+            {notice}
+          </p>
+        )}
+
+        {viewMode === "table" && loading && !result && !idListMode && (
+          <div className="empty-state">Cargando muestras…</div>
+        )}
         {viewMode === "table" && error && (
           <div className="empty-state" role="alert">
             {error}
           </div>
         )}
-        {!error && result && viewMode === "table" && (
+        {!error && tableResult && viewMode === "table" && (
           <div aria-busy={loading} style={loading ? { opacity: 0.6 } : undefined}>
             <SamplesTable
-              samples={result.items}
+              samples={tableResult.items}
               ownerLookup={ownerLookup}
               onSelect={setSelected}
               sort={sort}
@@ -309,9 +346,9 @@ export default function App() {
               onViewInFreezer={handleViewInFreezer}
             />
             <Pagination
-              page={result.page}
-              pageSize={result.page_size}
-              total={result.total}
+              page={tableResult.page}
+              pageSize={tableResult.page_size}
+              total={tableResult.total}
               onPageChange={(page) => setFilters((current) => ({ ...current, page }))}
             />
           </div>
@@ -336,6 +373,24 @@ export default function App() {
           }}
           onThaw={thawSelection && thawSelection.sampleId === selected.id ? handleThaw : undefined}
           onEdit={() => setEditing(selected)}
+          onMove={() => setMoving(selected)}
+        />
+      )}
+
+      {moving && (
+        <MoveModal
+          sample={moving}
+          users={users}
+          onClose={() => setMoving(null)}
+          onMoved={(updated, summary) => {
+            setMoving(null);
+            // Se reabre el detalle con el dato fresco y la línea que dice de dónde a
+            // dónde: el momento que importa no puede terminar en un diálogo que se cierra.
+            setSelected(updated);
+            setNotice(summary);
+            setReloadToken((token) => token + 1);
+            setFreezerKey((key) => key + 1);
+          }}
         />
       )}
 

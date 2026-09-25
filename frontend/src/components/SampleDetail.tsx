@@ -15,9 +15,12 @@ export interface SampleDetailProps {
   /** Corregir los datos descriptivos. Es lo que hace accionable la alerta de muestras
    * sin encargado: sin esto, la alerta avisa de algo que la web no deja arreglar. */
   onEdit?: () => void;
+  /** Trasladar la muestra. Abre su propio diálogo y CIERRA este: dos `.modal-backdrop`
+   * apilados doblan el oscurecido y vuelven ambiguo a cuál de los dos cierra un clic. */
+  onMove?: () => void;
 }
 
-export function SampleDetail({ sample, ownerLabel, onClose, onThaw, onEdit }: SampleDetailProps) {
+export function SampleDetail({ sample, ownerLabel, onClose, onThaw, onEdit, onMove }: SampleDetailProps) {
   const [movements, setMovements] = useState<MovementRead[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,6 +91,11 @@ export function SampleDetail({ sample, ownerLabel, onClose, onThaw, onEdit }: Sa
 
         {sample.status === "active" ? (
           <div className="form-actions" style={{ marginTop: 12 }}>
+            {onMove && (
+              <button className="btn" onClick={onMove}>
+                Mover
+              </button>
+            )}
             {onEdit && (
               <button className="btn-ghost" onClick={onEdit}>
                 Editar
