@@ -24,14 +24,19 @@ laboratorio lo confirmó ("con el nombre está bien").
 - El frontend guarda el usuario elegido en `localStorage` y lo manda en cada request como
   header `X-User-Id`.
 - El backend exige ese header (`CurrentUser` en `app/api/deps.py`) en las escrituras sobre
-  muestras: `POST /movements`, `PATCH /samples/{id}`, `POST /samples/{id}/movements` y
-  `POST /boxes/{id}/move`. Sin él, o con un usuario desactivado, responde 401.
-- **Solo sus encargados** (una muestra puede tener varios; cualquiera de ellos) pueden editarla,
-  trasladarla o retirarla (`app/services/permissions.py`, 403 en otro caso). Las muestras sin encargado (`SIN_ASIG`,
-  centinela del importador) las puede tocar cualquiera, para poder asignarles uno.
+  muestras y en la administración del freezer: `POST /movements` (y `/movements/thaw-batch`),
+  `PATCH /samples/{id}`, `POST /samples/{id}/movements`, `POST /samples/{id}/return`,
+  `POST /boxes/{id}/move|deactivate` y `POST /racks/{id}/move|deactivate|activate`. Sin él, o
+  con un usuario desactivado, responde 401.
+- **Solo sus encargados** (una muestra puede tener varios; cualquiera de ellos) pueden editarla
+  o trasladarla (`app/services/permissions.py`, 403 en otro caso). Las muestras sin encargado
+  (`SIN_ASIG`, centinela del importador) las puede tocar cualquiera, para poder asignarles uno.
+- **Retirar** (una o varias) y **devolver** una muestra retirada lo puede hacer cualquier
+  persona identificada (parte 3: quien está frente al freezer saca lo que le piden).
 - **Congelar** lo puede hacer cualquier persona identificada, para sí o para otro encargado.
-- **Trasladar una subcaja entera** lo puede hacer cualquier persona identificada: una caja
-  física tiene muestras de varios encargados y moverla es una tarea del laboratorio.
+- **Trasladar una subcaja o un rack entero**, y **dar de baja** cajas o racks vacíos, lo
+  puede hacer cualquier persona identificada: tienen muestras de varios encargados y
+  reordenar el freezer es una tarea del laboratorio.
 - El **Operador** del formulario se prellena con la persona de la sesión y sigue editable
   (alguien puede registrar por otro, que es la razón por la que el Google Form lo pedía).
 - Núcleo **no** restringe quién manipula una muestra: es solo una marca con su warning.

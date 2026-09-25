@@ -56,7 +56,7 @@ def test_duplicate_rack_letter_conflicts(client, db_session):
 def test_create_rack_rejects_invalid_letter(client, db_session):
     section = create_section(client, code="I")
 
-    response = client.post("/racks", json={"section_id": section["id"], "letter": "Z", "slot": "center"})
+    response = client.post("/racks", json={"section_id": section["id"], "letter": "1", "slot": "center"})
     assert response.status_code == 422
 
 

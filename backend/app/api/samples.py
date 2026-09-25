@@ -7,7 +7,7 @@ from app.config import get_settings
 from app.importer.cleaning import parse_posicion
 from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus, SampleType, Section, User
 from app.schemas.common import Page
-from app.schemas.movement import MovementRead, MovementResult, PositionConflict, SampleMoveCreate
+from app.schemas.movement import MovementRead, MovementResult, PositionConflict, SampleMoveCreate, SampleReturnCreate
 from app.schemas.sample import (
     IdLookupResult,
     SampleCreate,
@@ -22,7 +22,7 @@ from app.services.occupancy import refresh_box_full
 from app.services.owners import owners_label
 from app.services.permissions import ensure_can_modify
 from app.services.positions import next_free_position
-from app.services.racks import ensure_box_number_within_capacity
+from app.services.racks import ensure_box_number_within_capacity, ensure_rack_active, reuse_box
 from app.services.search import SampleFiltersDep, build_sample_query
 from app.services.users import get_or_create_user
 
@@ -339,17 +339,15 @@ def move_sample(
     origin_box_id = sample.box_id
     origin_position = sample.position
 
+    ensure_rack_active(rack)
     box = db.query(Box).filter(Box.rack_id == rack.id, Box.number == payload.box_number).one_or_none()
     if box is None:
         ensure_box_number_within_capacity(rack, payload.box_number)
         box = Box(rack_id=rack.id, number=payload.box_number, box_type=inferred_box_type)
         db.add(box)
         db.flush()
-    elif box.box_type != inferred_box_type:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"La caja {rack.letter}{box.number} ya es de tipo '{box.box_type}'",
-        )
+    else:
+        reuse_box(db, box, inferred_box_type)
 
     if box.id == origin_box_id and position == origin_position:
         raise HTTPException(
@@ -406,6 +404,88 @@ def move_sample(
             status.HTTP_409_CONFLICT, "La posición ya está ocupada por una muestra activa"
         ) from exc
 
+    db.refresh(sample)
+    db.refresh(movement)
+    return MovementResult(sample=sample_with_location(sample), movement=MovementRead.model_validate(movement))
+
+
+@router.post(
+    "/{sample_id}/return",
+    response_model=MovementResult,
+    status_code=status.HTTP_201_CREATED,
+    responses={status.HTTP_409_CONFLICT: {"model": PositionConflict}},
+)
+def return_sample(
+    sample_id: int, payload: SampleReturnCreate, db: DbSession, current_user: CurrentUser
+) -> MovementResult:
+    """Devuelve al freezer una muestra retirada (se sacó por error, o un tubo vuelve).
+
+    Es la MISMA muestra, con su historial: se reactiva la fila y se registra un evento de
+    reingreso. Sin ubicación, vuelve a donde estaba; si ese lugar ya se ocupó, 409 con la
+    siguiente posición libre. Lo puede hacer cualquier persona identificada, igual que
+    retirar.
+    """
+    sample = db.query(Sample).filter(Sample.id == sample_id).with_for_update().one_or_none()
+    if sample is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Muestra no encontrada")
+    if sample.status == SampleStatus.ACTIVE.value:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "La muestra ya está en el freezer")
+
+    if payload.rack_letter is None:
+        box = sample.box
+        position = sample.position
+        ensure_rack_active(box.rack)
+        reuse_box(db, box, box.box_type)
+    else:
+        rack = db.query(Rack).filter(Rack.letter == payload.rack_letter.strip().upper()).one_or_none()
+        if rack is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"Rack '{payload.rack_letter}' no encontrado")
+        ensure_rack_active(rack)
+        position, inferred_box_type, reason = parse_posicion(payload.position)
+        if reason:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Posición inválida: {reason}")
+        box = db.query(Box).filter(Box.rack_id == rack.id, Box.number == payload.box_number).one_or_none()
+        if box is None:
+            ensure_box_number_within_capacity(rack, payload.box_number)
+            box = Box(rack_id=rack.id, number=payload.box_number, box_type=inferred_box_type)
+            db.add(box)
+            db.flush()
+        else:
+            reuse_box(db, box, inferred_box_type)
+
+    occupied = {
+        other.position
+        for other in db.query(Sample).filter(Sample.box_id == box.id, Sample.status == SampleStatus.ACTIVE.value)
+    }
+    if position in occupied:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "message": f"La posición {position} ya está ocupada",
+                "next_free_position": next_free_position(box.box_type, occupied),
+            },
+        )
+
+    operator = get_or_create_user(db, payload.operator_initials)
+    sample.box_id = box.id
+    sample.position = position
+    sample.status = SampleStatus.ACTIVE.value
+    movement = Movement(
+        sample_id=sample.id,
+        action=MovementAction.RETURN.value,
+        date=payload.date,
+        operator_id=operator.id,
+        box_id=box.id,
+        position=position,
+        note=payload.note,
+    )
+    db.add(movement)
+    try:
+        refresh_box_full(db, box)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "La posición ya está ocupada por una muestra activa") from exc
     db.refresh(sample)
     db.refresh(movement)
     return MovementResult(sample=sample_with_location(sample), movement=MovementRead.model_validate(movement))

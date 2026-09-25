@@ -30,6 +30,7 @@ class BoxRead(BoxBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    active: bool = True
 
 
 class BoxPositionStatus(BaseModel):

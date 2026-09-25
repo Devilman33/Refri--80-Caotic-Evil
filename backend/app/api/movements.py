@@ -5,12 +5,11 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser, DbSession
 from app.importer.cleaning import parse_posicion
 from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus, User
-from app.schemas.movement import MovementCreate, MovementRead, MovementResult, PositionConflict
+from app.schemas.movement import MovementCreate, MovementRead, MovementResult, PositionConflict, ThawBatchCreate
 from app.services.location import sample_with_location
 from app.services.occupancy import refresh_box_full
-from app.services.permissions import ensure_can_modify
 from app.services.positions import next_free_position
-from app.services.racks import ensure_box_number_within_capacity
+from app.services.racks import ensure_box_number_within_capacity, ensure_rack_active, reuse_box
 from app.services.users import get_or_create_user
 
 router = APIRouter(prefix="/movements", tags=["movimientos"])
@@ -49,6 +48,9 @@ def create_movement(payload: MovementCreate, db: DbSession, current_user: Curren
             f"'{payload.action.value}' se registra en su propio endpoint",
         )
 
+    if payload.action == MovementAction.FREEZE:
+        ensure_rack_active(rack)
+
     if payload.action == MovementAction.THAW:
         return _thaw(db, box=box, position=position, operator=operator, payload=payload, current_user=current_user)
     return _freeze(
@@ -68,7 +70,8 @@ def _thaw(
     )
     if sample is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No hay una muestra activa en esa posición")
-    ensure_can_modify(sample, current_user)
+    # Retirar lo puede hacer cualquier persona identificada (parte 3): quien está frente al
+    # freezer saca lo que le piden. Editar y trasladar siguen siendo de los encargados.
 
     sample.status = SampleStatus.WITHDRAWN.value
     movement = Movement(
@@ -127,11 +130,8 @@ def _freeze(
                     status.HTTP_422_UNPROCESSABLE_ENTITY,
                     f"La caja {rack.letter}{box.number} ya es de tipo '{box.box_type}'",
                 ) from None
-    elif box.box_type != box_type:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"La caja {rack.letter}{box.number} ya es de tipo '{box.box_type}'",
-        )
+    else:
+        reuse_box(db, box, box_type)
 
     active_in_box = (
         db.query(Sample).filter(Sample.box_id == box.id, Sample.status == SampleStatus.ACTIVE.value).all()
@@ -187,3 +187,52 @@ def _freeze(
     db.refresh(movement)
     return MovementResult(sample=sample_with_location(sample), movement=MovementRead.model_validate(movement))
 
+
+
+@router.post("/thaw-batch", response_model=list[MovementResult], status_code=status.HTTP_201_CREATED)
+def thaw_batch(payload: ThawBatchCreate, db: DbSession, current_user: CurrentUser) -> list[MovementResult]:
+    """Retira varias muestras de una vez: todas o ninguna.
+
+    Se direcciona por id de muestra (la grilla y la búsqueda ya la conocen), no por
+    posición: con varias cajas en juego, "caja + posición" repetido por cada una sería
+    pedir lo mismo muchas veces. Cada muestra deja su propio evento de retiro.
+    """
+    ids = list(dict.fromkeys(payload.sample_ids))
+    samples = db.query(Sample).filter(Sample.id.in_(ids)).with_for_update().all()
+    by_id = {sample.id: sample for sample in samples}
+    missing = [sample_id for sample_id in ids if sample_id not in by_id]
+    if missing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Muestras no encontradas: {missing}")
+    withdrawn = [sample_id for sample_id in ids if by_id[sample_id].status != SampleStatus.ACTIVE.value]
+    if withdrawn:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, f"Estas muestras ya estaban retiradas: {withdrawn}"
+        )
+
+    operator = get_or_create_user(db, payload.operator_initials)
+    movements = []
+    for sample_id in ids:
+        sample = by_id[sample_id]
+        sample.status = SampleStatus.WITHDRAWN.value
+        movement = Movement(
+            sample_id=sample.id,
+            action=MovementAction.THAW.value,
+            date=payload.date,
+            operator_id=operator.id,
+            box_id=sample.box_id,
+            position=sample.position,
+            note=payload.note,
+        )
+        db.add(movement)
+        movements.append(movement)
+    for box in {sample.box for sample in samples}:
+        refresh_box_full(db, box)
+    db.commit()
+    results = []
+    for sample_id, movement in zip(ids, movements):
+        db.refresh(by_id[sample_id])
+        db.refresh(movement)
+        results.append(
+            MovementResult(sample=sample_with_location(by_id[sample_id]), movement=MovementRead.model_validate(movement))
+        )
+    return results

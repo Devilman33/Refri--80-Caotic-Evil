@@ -57,7 +57,10 @@ Instrucciones que el formulario muestra y que la página debe mantener:
   - Los demás campos del Google Form (ID Environ, Descripción, Tipo, Pasaje, Núcleo, Encargado)
     se **muestran** con los datos de la muestra elegida, sin editarse: la muestra ya queda
     identificada por su posición, y pedirlos de nuevo solo permitiría que no coincidan.
-  - Solo un encargado de la muestra puede retirarla (ver `docs/adr/0002-autenticacion.md`).
+  - Cualquier persona identificada puede retirarla, y también retirar varias de una vez con
+    la misma fecha y motivo (ver `docs/adr/0002-autenticacion.md`).
+  - Una muestra retirada se puede **devolver** al freezer en cualquier momento (evento
+    "Reingreso"): vuelve a su lugar si está libre, o a otro que se elija.
 - **Campos 11 y 12:** se muestra solo el que corresponde al tipo de la caja elegida (cartón 9×9 o plástica 10×10).
 - **Posición desde el visor:** hacer clic en una posición libre del visor abre este formulario prellenado.
 - **Autocompletado (QOL):**

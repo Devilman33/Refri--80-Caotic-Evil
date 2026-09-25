@@ -71,6 +71,33 @@ class SampleMoveCreate(BaseModel):
     note: str | None = Field(default=None, max_length=255)
 
 
+class ThawBatchCreate(BaseModel):
+    """Retirar varias muestras de una vez, con una sola fecha, operador y motivo."""
+
+    date: date
+    operator_initials: str = Field(min_length=1, max_length=10)
+    sample_ids: list[int] = Field(min_length=1, max_length=500)
+    note: str | None = Field(default=None, max_length=255)
+
+
+class SampleReturnCreate(BaseModel):
+    """Devolver al freezer una muestra retirada. Sin ubicación, vuelve a su lugar de antes."""
+
+    date: date
+    operator_initials: str = Field(min_length=1, max_length=10)
+    rack_letter: str | None = Field(default=None, min_length=1, max_length=1)
+    box_number: int | None = Field(default=None, gt=0)
+    position: str | None = Field(default=None, min_length=1, max_length=10)
+    note: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def _all_or_nothing(self) -> "SampleReturnCreate":
+        given = [self.rack_letter, self.box_number, self.position]
+        if any(value is not None for value in given) and not all(value is not None for value in given):
+            raise ValueError("Indica rack, caja y posición juntos, o ninguno para volver al lugar de antes")
+        return self
+
+
 class MovementRead(BaseModel):
     """Un evento del historial.
 

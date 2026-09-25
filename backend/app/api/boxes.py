@@ -7,7 +7,7 @@ from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus
 from app.schemas.box import BoxCreate, BoxMoveCreate, BoxMoveResult, BoxPositionStatus, BoxRead, BoxUpdate
 from app.services.occupancy import refresh_box_full
 from app.services.positions import position_order
-from app.services.racks import ensure_box_number_within_capacity
+from app.services.racks import active_sample_count, ensure_box_number_within_capacity, ensure_rack_active, reuse_box
 from app.services.users import get_or_create_user
 
 router = APIRouter(prefix="/boxes", tags=["cajas"])
@@ -18,9 +18,20 @@ _DUPLICATE_MESSAGE = "Ya existe una caja con ese número en el rack"
 @router.post("", response_model=BoxRead, status_code=status.HTTP_201_CREATED)
 def create_box(payload: BoxCreate, db: DbSession) -> Box:
     rack = get_or_404(db, Rack, payload.rack_id, "Rack no encontrado")
+    ensure_rack_active(rack)
     ensure_box_number_within_capacity(rack, payload.number)
     if payload.owner_id is not None:
         get_or_404(db, User, payload.owner_id, "Usuario propietario no encontrado")
+    existing = db.query(Box).filter(Box.rack_id == rack.id, Box.number == payload.number).one_or_none()
+    if existing is not None and not existing.active:
+        # Poner una caja en el lugar de una dada de baja la vuelve a usar (ver `reuse_box`).
+        reuse_box(db, existing, payload.box_type.value)
+        existing.label = payload.label
+        existing.owner_id = payload.owner_id
+        existing.is_full = False
+        db.commit()
+        db.refresh(existing)
+        return existing
     box = Box(
         rack_id=payload.rack_id,
         number=payload.number,
@@ -40,8 +51,10 @@ def create_box(payload: BoxCreate, db: DbSession) -> Box:
 
 
 @router.get("", response_model=list[BoxRead])
-def list_boxes(db: DbSession, rack_id: int | None = None) -> list[Box]:
+def list_boxes(db: DbSession, rack_id: int | None = None, include_inactive: bool = False) -> list[Box]:
     query = db.query(Box)
+    if not include_inactive:
+        query = query.filter(Box.active.is_(True))
     if rack_id is not None:
         query = query.filter(Box.rack_id == rack_id)
     return query.order_by(Box.rack_id, Box.number).all()
@@ -151,6 +164,7 @@ def move_box(box_id: int, payload: BoxMoveCreate, db: DbSession, current_user: C
     rack = db.query(Rack).filter(Rack.letter == payload.rack_letter.strip().upper()).one_or_none()
     if rack is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Rack '{payload.rack_letter}' no encontrado")
+    ensure_rack_active(rack)
     ensure_box_number_within_capacity(rack, payload.box_number)
     if rack.id == source.rack_id and payload.box_number == source.number:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "La caja ya está en ese lugar")
@@ -189,14 +203,10 @@ def move_box(box_id: int, payload: BoxMoveCreate, db: DbSession, current_user: C
                 status.HTTP_409_CONFLICT,
                 f"En {rack.letter}{target.number} ya hay una caja con muestras: elegí un lugar libre",
             )
-        if target.box_type != source.box_type:
-            has_history = db.query(Sample.id).filter(Sample.box_id == target.id).first() is not None
-            if has_history:
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    f"La caja registrada en {rack.letter}{target.number} es de otro tipo y tiene historial",
-                )
-            target.box_type = source.box_type
+        # Sin muestras activas, el lugar se reutiliza aunque la caja registrada ahí sea de
+        # otro tipo o esté dada de baja: la que llega es la caja física nueva.
+        target.box_type = source.box_type
+        target.active = True
 
     # La etiqueta y el propietario son de la caja física, que es la que se mueve.
     target.label = source.label
@@ -239,3 +249,21 @@ def move_box(box_id: int, payload: BoxMoveCreate, db: DbSession, current_user: C
         from_label=_box_label(source),
         to_label=_box_label(target),
     )
+
+
+@router.post("/{box_id}/deactivate", response_model=BoxRead)
+def deactivate_box(box_id: int, db: DbSession, current_user: CurrentUser) -> Box:
+    """Da de baja una caja vacía: sale del visor y de la ocupación, y su lugar queda
+    libre. Su historial queda intacto."""
+    box = get_or_404(db, Box, box_id, "Caja no encontrada")
+    active = active_sample_count(db, box_id=box.id)
+    if active:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"La caja tiene {active} muestras activas: retíralas o trasládalas antes de darla de baja",
+        )
+    box.active = False
+    box.is_full = False
+    db.commit()
+    db.refresh(box)
+    return box

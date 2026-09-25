@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, UniqueConstraint, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -29,6 +29,8 @@ class Box(Base):
     label: Mapped[str | None] = mapped_column(String(120), nullable=True)
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     is_full: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    #: Dada de baja: no aparece en el visor ni en la ocupación, pero su historial queda.
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
 
     rack: Mapped["Rack"] = relationship(back_populates="boxes")
     owner: Mapped["User | None"] = relationship(foreign_keys=[owner_id])
@@ -39,6 +41,10 @@ class Box(Base):
         """`III · F12`. NO se llama `label` porque esa ya es una columna: el nombre
         histórico de la caja que traía el Excel ("Caja origen")."""
         return f"{self.rack.section.code} · {self.rack.letter}{self.number}"
+
+    def location_label_in(self, section_code: str | None) -> str:
+        """`location_label` con la sección que tenía el rack en un momento dado."""
+        return f"{section_code or self.rack.section.code} · {self.rack.letter}{self.number}"
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"Box(id={self.id!r}, rack_id={self.rack_id!r}, number={self.number!r})"

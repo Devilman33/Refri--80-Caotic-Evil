@@ -3,6 +3,10 @@ de la carga inicial del Google Form (docs/FORMULARIO.md, campos 7 y 14).
 
 Uso: `python -m app.seed.seed` (requiere el esquema ya migrado con Alembic).
 Es idempotente: se puede correr de nuevo sin duplicar secciones ni racks.
+
+Desde la parte 3 la distribución se administra desde la página (mover racks, darlos de
+baja, crear nuevos), así que la BASE manda: `layout.yaml` solo crea lo que falta la
+primera vez y nunca mueve ni reactiva un rack que ya existe.
 """
 
 from __future__ import annotations
@@ -103,11 +107,6 @@ def load_layout(path: pathlib.Path = LAYOUT_PATH) -> list[dict]:
 def seed_layout(session: Session, path: pathlib.Path = LAYOUT_PATH) -> None:
     entries = load_layout(path)
 
-    # Intercambiar los slots de dos racks de la misma sección deja, a mitad del UPDATE,
-    # dos racks en el mismo (section_id, slot). El constraint es DEFERRABLE INITIALLY
-    # IMMEDIATE (migración 0003): acá lo diferimos hasta el COMMIT, solo para esta
-    # transacción. Fuera del seed sigue validando en el instante.
-    session.execute(text("SET CONSTRAINTS uq_racks_section_slot DEFERRED"))
 
     sections_by_code: dict[str, Section] = {}
 
@@ -121,14 +120,20 @@ def seed_layout(session: Session, path: pathlib.Path = LAYOUT_PATH) -> None:
                 session.flush()
             sections_by_code[entry["section"]] = section
 
-        rack = session.query(Rack).filter_by(letter=entry["letter"]).one_or_none()
-        if rack is None:
-            rack = Rack(letter=entry["letter"])
-            session.add(rack)
-
-        rack.section_id = section.id
-        rack.slot = entry["slot"]
-        rack.capacity = entry["capacity"]
+        # Un rack que ya existe no se toca: puede haberse movido o dado de baja desde la
+        # página, y el arranque siguiente no puede deshacerlo.
+        if session.query(Rack).filter_by(letter=entry["letter"]).one_or_none() is not None:
+            continue
+        # Su lugar puede estar ocupado por otro rack que se movió ahí: no se fuerza.
+        taken = (
+            session.query(Rack)
+            .filter_by(section_id=section.id, slot=entry["slot"], active=True)
+            .one_or_none()
+        )
+        if taken is not None:
+            continue
+        session.add(Rack(letter=entry["letter"], section_id=section.id, slot=entry["slot"], capacity=entry["capacity"]))
+        session.flush()
 
     session.commit()
 

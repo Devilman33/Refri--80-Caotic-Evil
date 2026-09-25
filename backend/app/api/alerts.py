@@ -39,7 +39,11 @@ def alerts(db: DbSession) -> AlertsRead:
     active_by_box = _active_counts_by_box(db)
     boxes: list[BoxOccupancy] = []
     for box in (
-        db.query(Box).options(joinedload(Box.rack).joinedload(Rack.section)).order_by(Box.rack_id, Box.number).all()
+        db.query(Box)
+        .options(joinedload(Box.rack).joinedload(Rack.section))
+        .filter(Box.active.is_(True))
+        .order_by(Box.rack_id, Box.number)
+        .all()
     ):
         capacity = box_capacity(box.box_type)
         active = active_by_box.get(box.id, 0)

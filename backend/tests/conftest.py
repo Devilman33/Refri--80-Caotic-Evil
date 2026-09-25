@@ -119,7 +119,10 @@ def db_session(engine):
 #: el encargado por defecto de lo que congelan.
 SESSION_INITIALS = "GC"
 
-_SESSION_PATHS = re.compile(r"^/movements$|^/samples/\d+(/movements)?$|^/boxes/\d+/move$")
+_SESSION_PATHS = re.compile(
+    r"^/movements(/thaw-batch)?$|^/samples/\d+(/movements|/return)?$"
+    r"|^/boxes/\d+/(move|deactivate)$|^/racks/\d+/(move|deactivate|activate)$"
+)
 
 
 class SessionClient(TestClient):

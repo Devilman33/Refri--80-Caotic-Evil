@@ -25,32 +25,38 @@ def test_seed_layout_is_idempotent(db_session):
     assert db_session.query(Rack).count() == 8
 
 
-def test_seed_layout_survives_slot_swap(db_session, tmp_path):
-    """El motivo por el que `uq_racks_section_slot` es DEFERRABLE.
+def test_seed_layout_does_not_undo_changes_made_from_the_page(db_session, tmp_path):
+    """La base manda: un rack movido o dado de baja desde la página no vuelve a su lugar
+    en el arranque siguiente. `layout.yaml` solo crea lo que falta."""
+    seed_layout(db_session)
+    section_i = db_session.query(Section).filter_by(code="I").one()
+    rack_a = db_session.query(Rack).filter_by(letter="A").one()
+    rack_b = db_session.query(Rack).filter_by(letter="B").one()
+    rack_b.active, rack_b.slot = False, None
+    db_session.flush()
+    rack_a.slot = "right"
+    db_session.commit()
 
-    Intercambiar los slots de dos racks de la misma sección deja, a mitad del UPDATE, dos
-    racks en el mismo (section_id, slot). Con el constraint validando por sentencia, la
-    siembra explotaba a la mitad y dejaba el layout a medio aplicar.
-    """
     seed_layout(db_session)
 
-    swapped = tmp_path / "layout.yaml"
-    swapped.write_text(
-        yaml.safe_dump(
-            {
-                "racks": [
-                    {"letter": "A", "section": "I", "slot": "right", "capacity": 20},
-                    {"letter": "B", "section": "I", "slot": "center", "capacity": 20},
-                ]
-            }
-        ),
+    db_session.refresh(rack_a)
+    db_session.refresh(rack_b)
+    assert (rack_a.section_id, rack_a.slot) == (section_i.id, "right")
+    assert (rack_b.active, rack_b.slot) == (False, None)
+
+
+def test_seed_layout_creates_missing_racks_only_where_the_place_is_free(db_session, tmp_path):
+    seed_layout(db_session)
+    extra = tmp_path / "layout.yaml"
+    extra.write_text(
+        yaml.safe_dump({"racks": [{"letter": "A", "section": "II", "slot": "center", "capacity": 20}]}),
         encoding="utf-8",
     )
 
-    seed_layout(db_session, swapped)
+    seed_layout(db_session, extra)
 
-    assert db_session.query(Rack).filter_by(letter="A").one().slot == "right"
-    assert db_session.query(Rack).filter_by(letter="B").one().slot == "center"
+    # A ya existía en I: no se mueve a II.
+    assert db_session.query(Rack).filter_by(letter="A").one().section.code == "I"
 
 
 def test_racks_unique_slot_still_rejects_immediate_duplicate(db_session):
@@ -93,13 +99,13 @@ def test_seed_layout_rejects_invalid_section_code(db_session, tmp_path):
 def test_seed_layout_rejects_invalid_rack_letter(db_session, tmp_path):
     bad = tmp_path / "layout.yaml"
     bad.write_text(
-        yaml.safe_dump({"racks": [{"letter": "Z", "section": "I", "slot": "center", "capacity": 20}]}),
+        yaml.safe_dump({"racks": [{"letter": "1", "section": "I", "slot": "center", "capacity": 20}]}),
         encoding="utf-8",
     )
 
     with pytest.raises(LayoutError) as exc:
         seed_layout(db_session, bad)
-    assert "Z" in str(exc.value)
+    assert "1" in str(exc.value)
 
 
 def test_seed_layout_rejects_duplicate_letter(db_session, tmp_path):

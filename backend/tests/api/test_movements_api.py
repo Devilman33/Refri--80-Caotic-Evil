@@ -199,22 +199,126 @@ def test_thaw_records_the_reason(client, db_session):
     assert response.json()["movement"]["note"] == "Extracción de RNA"
 
 
-def test_only_the_owner_can_thaw_a_sample(client, db_session):
+def test_anyone_can_thaw_a_sample_of_someone_else(client, db_session):
+    """Parte 3: retirar lo puede hacer cualquiera. Editar y trasladar siguen siendo de
+    los encargados."""
     _, rack, box = make_freezer(client)
-    client.post(
+    created = client.post(
         "/movements",
         json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", owner_initials=["DB"]),
-    )
+    ).json()["sample"]
     other = create_user(client, initials="VF", name="Valentina Fuentes")
-    owner = next(user for user in client.get("/users").json() if user["initials"] == "DB")
+
+    edit = client.patch(f"/samples/{created['id']}", json={"passage": 4}, headers=as_user(other["id"]))
+    assert edit.status_code == 403
+
     thaw = thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A")
-
-    rejected = client.post("/movements", json=thaw, headers=as_user(other["id"]))
-    assert rejected.status_code == 403
-    assert client.get(f"/boxes/{box['id']}/positions").json()[0]["occupied"] is True
-
-    accepted = client.post("/movements", json=thaw, headers=as_user(owner["id"]))
+    accepted = client.post("/movements", json=thaw, headers=as_user(other["id"]))
     assert accepted.status_code == 201
+
+
+def test_thaw_batch_withdraws_several_samples_at_once(client, db_session):
+    _, rack, box = make_freezer(client)
+    ids = [
+        client.post(
+            "/movements",
+            json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position=position, environ_id=f"BP{n}"),
+        ).json()["sample"]["id"]
+        for n, position in enumerate(["1A", "1B", "1C"])
+    ]
+
+    response = client.post(
+        "/movements/thaw-batch",
+        json={"date": "2026-09-25", "operator_initials": "GC", "sample_ids": ids[:2], "note": "Extracción"},
+    )
+
+    assert response.status_code == 201, response.text
+    assert [entry["sample"]["status"] for entry in response.json()] == ["withdrawn", "withdrawn"]
+    assert all(entry["movement"]["note"] == "Extracción" for entry in response.json())
+    assert client.get(f"/samples/{ids[2]}").json()["status"] == "active"
+
+
+def test_thaw_batch_is_all_or_nothing(client, db_session):
+    _, rack, box = make_freezer(client)
+    first = client.post(
+        "/movements", json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A")
+    ).json()["sample"]["id"]
+    second = client.post(
+        "/movements",
+        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1B", environ_id="BP2"),
+    ).json()["sample"]["id"]
+    client.post("/movements", json=thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="1B"))
+
+    response = client.post(
+        "/movements/thaw-batch", json={"date": "2026-09-25", "operator_initials": "GC", "sample_ids": [first, second]}
+    )
+
+    assert response.status_code == 422
+    assert client.get(f"/samples/{first}").json()["status"] == "active"
+
+
+def test_a_withdrawn_sample_can_return_to_its_place(client, db_session):
+    _, rack, box = make_freezer(client)
+    sample = client.post(
+        "/movements", json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A")
+    ).json()["sample"]
+    client.post("/movements", json=thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A"))
+
+    response = client.post(
+        f"/samples/{sample['id']}/return",
+        json={"date": "2026-09-26", "operator_initials": "GC", "note": "Se sacó por error"},
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["sample"]["id"] == sample["id"]
+    assert body["sample"]["status"] == "active"
+    assert body["sample"]["position"] == "1A"
+    assert [entry["action"] for entry in client.get(f"/samples/{sample['id']}/movements").json()] == [
+        "freeze",
+        "thaw",
+        "return",
+    ]
+
+
+def test_returning_to_a_taken_place_offers_the_next_free_one(client, db_session):
+    _, rack, box = make_freezer(client)
+    sample = client.post(
+        "/movements", json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A")
+    ).json()["sample"]
+    client.post("/movements", json=thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A"))
+    client.post(
+        "/movements",
+        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", environ_id="BP9"),
+    )
+
+    taken = client.post(f"/samples/{sample['id']}/return", json={"date": "2026-09-26", "operator_initials": "GC"})
+    assert taken.status_code == 409
+    assert taken.json()["detail"]["next_free_position"] == "1B"
+
+    elsewhere = client.post(
+        f"/samples/{sample['id']}/return",
+        json={
+            "date": "2026-09-26",
+            "operator_initials": "GC",
+            "rack_letter": rack["letter"],
+            "box_number": box["number"],
+            "position": "1B",
+        },
+    )
+    assert elsewhere.status_code == 201
+    assert elsewhere.json()["sample"]["position"] == "1B"
+
+
+def test_an_active_sample_cannot_return(client, db_session):
+    _, rack, box = make_freezer(client)
+    sample = client.post(
+        "/movements", json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A")
+    ).json()["sample"]
+
+    response = client.post(f"/samples/{sample['id']}/return", json={"date": "2026-09-26", "operator_initials": "GC"})
+
+    assert response.status_code == 422
 
 
 def test_anyone_can_thaw_a_sample_without_owner(client, db_session):
