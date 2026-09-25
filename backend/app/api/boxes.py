@@ -56,6 +56,15 @@ def update_box(box_id: int, payload: BoxUpdate, db: DbSession) -> Box:
     if data.get("number") is not None:
         rack = get_or_404(db, Rack, box.rack_id, "Rack no encontrado")
         ensure_box_number_within_capacity(rack, data["number"])
+        # Cambiar el número reubica físicamente TODAS las muestras de la caja sin registrar
+        # un solo evento de movimiento, y la regla dice que todo movimiento queda en la
+        # tabla de eventos. El cambio de `box_type` ya estaba bloqueado por lo mismo.
+        if data["number"] != box.number and db.query(Sample).filter(Sample.box_id == box.id).first() is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "No se puede cambiar el número de una caja que ya tiene muestras asociadas: "
+                "sería moverlas a todas sin registrar el movimiento",
+            )
     if data.get("owner_id") is not None:
         get_or_404(db, User, data["owner_id"], "Usuario propietario no encontrado")
     if data.get("box_type") is not None:
