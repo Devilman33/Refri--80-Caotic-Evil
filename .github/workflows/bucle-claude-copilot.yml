@@ -251,7 +251,9 @@ jobs:
             GitHub Copilot lo revisó: ${{ steps.eval.outputs.high }} hallazgo(s) High/Critical y ${{ steps.eval.outputs.otros }} Medium/Low abiertos.
             Ronda ${{ steps.ctx.outputs.iter }} de un máximo de ${{ env.MAX_ITERACIONES }}. Sé eficiente: cada ronda consume presupuesto.
 
-            1. Lee CLAUDE.md y requirements.md.
+            1. Lee CLAUDE.md y requirements.md, y la descripción del PR (`gh pr view ${{ inputs.pr_number }}`).
+               Si dice IMPLEMENTACIÓN INCOMPLETA, lo PRIMERO es terminar lo que falte del issue que cierra
+               (`gh issue view <N>`), con commits frecuentes; después atiende la review.
             2. Lee la review del commit ${{ steps.ctx.outputs.sha }} y sus comentarios en línea:
                `gh api repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}/reviews/${{ steps.espera.outputs.review_id }}`
                `gh api repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}/comments`
@@ -271,6 +273,14 @@ jobs:
             --max-turns 80
             --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(mkdir:*),Bash(touch:*),Bash(cp:*),Bash(mv:*),Bash(rm:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(git mv:*),Bash(git restore:*),Bash(git stash:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh api repos/${{ github.repository }}/*),Bash(jq:*),Bash(cut:*),Bash(tr:*),Bash(xargs:*),Bash(basename:*),Bash(dirname:*),Bash(true:*),Bash(test:*),Bash(timeout:*),Bash(env:*),Bash(ls:*),Bash(cd:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(find:*),Bash(grep:*),Bash(rg:*),Bash(sed:*),Bash(awk:*),Bash(sort:*),Bash(uniq:*),Bash(diff:*),Bash(echo:*),Bash(printf:*),Bash(tree:*),Bash(which:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(pip3:*),Bash(pytest:*),Bash(alembic:*),Bash(psql:*),Bash(npm:*),Bash(npx:*),Bash(node:*)"
             --json-schema '{"type":"object","properties":{"resumen":{"type":"string"},"descartados":{"type":"array","items":{"type":"string"}},"diferidos":{"type":"array","items":{"type":"string"}}},"required":["resumen","descartados","diferidos"]}'
+
+      - name: Comandos bloqueados por permisos
+        if: always() && steps.eval.outputs.accion == 'corregir'
+        run: |
+          f="$RUNNER_TEMP/claude-execution-output.json"
+          [ -f "$f" ] || exit 0
+          jq -r '.[] | select(.type == "result") | .permission_denials // [] | .[]
+                 | "::notice title=Permiso denegado::\(.tool_name) \(.tool_input.command // .tool_input.file_path // "" | tostring | .[0:200])"' "$f" || true
 
       - name: Guardar el log de Claude
         if: always() && steps.eval.outputs.accion == 'corregir'
