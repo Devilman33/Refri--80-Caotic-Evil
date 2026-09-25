@@ -260,3 +260,10 @@ def test_parse_caja_numero_accepts_thirty():
     """docs/DATOS.md fija `Caja` en 1-30 y dice que el visor agrega pisos si el número
     supera la capacidad configurada: el importador no rechaza por capacidad."""
     assert parse_caja_numero(30) == (30, None)
+
+
+def test_parse_caja_numero_rejects_above_thirty():
+    """docs/DATOS.md: `Caja` es un entero 1-30. Un 31 o un 300 es un dato mal cargado."""
+    assert parse_caja_numero(31) == (None, "Número de caja fuera de rango (1–30)")
+    assert parse_caja_numero("300") == (None, "Número de caja fuera de rango (1–30)")
+    assert parse_caja_numero(31.0) == (None, "Número de caja fuera de rango (1–30)")

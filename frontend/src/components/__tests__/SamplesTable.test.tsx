@@ -106,6 +106,19 @@ describe("SamplesTable", () => {
     expect(within(header).getByRole("button")).toBeInTheDocument();
   });
 
+  it('marca con "Sin ID" las muestras sin ID Environ', () => {
+    render(
+      <SamplesTable
+        samples={[{ ...baseSample, id: 3, environ_id: null }]}
+        ownerLookup={ownerLookup}
+        onSelect={vi.fn()}
+        sort={null}
+        onSortChange={vi.fn()}
+      />,
+    );
+    expect(within(screen.getByTestId("sample-row-3")).getByText("Sin ID")).toBeInTheDocument();
+  });
+
   it("muestra un estado vacío cuando no hay muestras", () => {
     render(<SamplesTable samples={[]} ownerLookup={{}} onSelect={vi.fn()} sort={null} onSortChange={vi.fn()} />);
     expect(screen.getByText(/no se encontraron muestras/i)).toBeInTheDocument();

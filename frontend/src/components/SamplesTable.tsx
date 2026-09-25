@@ -73,7 +73,13 @@ export function SamplesTable({ samples, ownerLookup, onSelect, sort, onSortChang
               data-testid={`sample-row-${sample.id}`}
             >
               <td>
-                <code>{sample.environ_id ?? "—"}</code>
+                {/* docs/DATOS.md: las muestras sin ID Environ se importan "con marca
+                    'sin ID'". Un guion se confunde con un campo opcional vacío. */}
+                {sample.environ_id ? (
+                  <code>{sample.environ_id}</code>
+                ) : (
+                  <span className="badge badge-warn">Sin ID</span>
+                )}
               </td>
               <td>{sample.description ?? "—"}</td>
               <td>{SAMPLE_TYPE_LABELS[sample.type]}</td>
