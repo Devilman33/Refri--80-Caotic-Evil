@@ -1,4 +1,5 @@
 import type {
+  AlertsRead,
   AutocompleteSuggestion,
   BoxPositionStatus,
   BoxOccupancy,
@@ -12,6 +13,7 @@ import type {
   RackOccupancy,
   RackRead,
   SampleSearchFilters,
+  SampleUpdate,
   SampleWithLocation,
   SectionOccupancy,
   SectionRead,
@@ -109,6 +111,16 @@ export const api = {
   },
   listBoxOccupancy(): Promise<BoxOccupancy[]> {
     return request(`/occupancy/boxes`);
+  },
+  getAlerts(): Promise<AlertsRead> {
+    return request(`/alerts`);
+  },
+  updateSample(id: number, payload: SampleUpdate): Promise<SampleWithLocation> {
+    return request(`/samples/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
   },
   createMovement(payload: MovementCreate): Promise<MovementResult> {
     return post(`/movements`, payload);

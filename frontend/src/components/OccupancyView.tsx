@@ -3,18 +3,25 @@ import { api, ApiError } from "../api/client";
 import type { BoxOccupancy, FreezerOccupancy, RackOccupancy, SectionOccupancy } from "../api/types";
 import {
   boxLabel,
+  BOX_FILTER_LABELS,
   formatPercent,
-  isHighlighted,
+  matchesBoxFilter,
   sortBoxes,
   usageLevel,
   USAGE_LEVEL_LABELS,
+  type BoxFilter,
   type BoxSortKey,
   type SortDirection,
 } from "../utils/occupancy";
 
+const BOX_FILTERS: BoxFilter[] = ["all", "full", "near-full", "inconsistent"];
+
 export interface OccupancyViewProps {
   /** "Ver en el refri": abre el visor 3D enfocado en esa subcaja. */
   onViewBox: (box: BoxOccupancy) => void;
+  /** Estado inicial del filtro. Cada contador del panel de alertas entra con el suyo:
+   * sin esto, "llenas" y "casi llenas" llevarían a la misma pantalla. */
+  initialFilter?: BoxFilter;
 }
 
 interface OccupancyData {
@@ -48,12 +55,16 @@ const SORT_LABELS: Record<BoxSortKey, string> = {
 
 // Vista de almacenamiento (issue #7): % de uso del freezer, por sección, por rack
 // y por subcaja (la cajita 9×9 o 10×10), con las llenas y casi llenas destacadas.
-export function OccupancyView({ onViewBox }: OccupancyViewProps) {
+export function OccupancyView({ onViewBox, initialFilter = "all" }: OccupancyViewProps) {
   const [data, setData] = useState<OccupancyData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<BoxSortKey>("percent");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
-  const [onlyHighlighted, setOnlyHighlighted] = useState(false);
+  const [boxFilter, setBoxFilter] = useState<BoxFilter>(initialFilter);
+
+  useEffect(() => {
+    setBoxFilter(initialFilter);
+  }, [initialFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,11 +87,22 @@ export function OccupancyView({ onViewBox }: OccupancyViewProps) {
 
   const boxes = useMemo(() => {
     if (!data) return [];
-    const filtered = onlyHighlighted ? data.boxes.filter(isHighlighted) : data.boxes;
-    return sortBoxes(filtered, sortKey, sortDir);
-  }, [data, onlyHighlighted, sortKey, sortDir]);
+    return sortBoxes(
+      data.boxes.filter((box) => matchesBoxFilter(box, boxFilter)),
+      sortKey,
+      sortDir,
+    );
+  }, [data, boxFilter, sortKey, sortDir]);
 
-  const highlightedCount = useMemo(() => data?.boxes.filter(isHighlighted).length ?? 0, [data]);
+  const counts = useMemo(() => {
+    const all = data?.boxes ?? [];
+    return {
+      all: all.length,
+      full: all.filter((box) => matchesBoxFilter(box, "full")).length,
+      "near-full": all.filter((box) => matchesBoxFilter(box, "near-full")).length,
+      inconsistent: all.filter((box) => matchesBoxFilter(box, "inconsistent")).length,
+    } as Record<BoxFilter, number>;
+  }, [data]);
 
   if (error) {
     return (
@@ -147,14 +169,25 @@ export function OccupancyView({ onViewBox }: OccupancyViewProps) {
       <section className="usage-card" aria-label="Uso por subcaja">
         <div className="usage-card__head">
           <h3>Por subcaja</h3>
-          <label className="tog">
-            <input type="checkbox" checked={onlyHighlighted} onChange={(event) => setOnlyHighlighted(event.target.checked)} />
-            Solo llenas y casi llenas ({highlightedCount})
-          </label>
+          <div className="view-toggle" role="group" aria-label="Filtrar subcajas">
+            {BOX_FILTERS.map((filter) => (
+              <button
+                key={filter}
+                type="button"
+                className={boxFilter === filter ? "on" : ""}
+                aria-pressed={boxFilter === filter}
+                onClick={() => setBoxFilter(filter)}
+              >
+                {BOX_FILTER_LABELS[filter]} ({counts[filter]})
+              </button>
+            ))}
+          </div>
         </div>
         {boxes.length === 0 ? (
           <p className="empty-state">
-            {onlyHighlighted ? "No hay subcajas llenas ni casi llenas." : "Todavía no hay subcajas registradas."}
+            {boxFilter === "all"
+              ? "Todavía no hay subcajas registradas."
+              : `No hay subcajas en "${BOX_FILTER_LABELS[boxFilter].toLowerCase()}".`}
           </p>
         ) : (
           <div className="table-wrap">

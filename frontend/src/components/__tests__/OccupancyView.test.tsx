@@ -51,14 +51,31 @@ describe("OccupancyView", () => {
     expect(screen.getByRole("progressbar", { name: "% de uso del rack A" })).toHaveAttribute("aria-valuenow", "96");
   });
 
-  it("destaca las subcajas llenas y casi llenas", async () => {
+  it("el control segmentado filtra por estado, cada uno con su propio conjunto", async () => {
     render(<OccupancyView onViewBox={vi.fn()} />);
     await screen.findByRole("table");
     expect(screen.getByText("Llena")).toBeInTheDocument();
     expect(screen.getByText("Casi llena")).toBeInTheDocument();
-    await userEvent.click(screen.getByLabelText(/solo llenas y casi llenas \(2\)/i));
-    expect(rowLabels()).toHaveLength(2);
-    expect(rowLabels().join(" ")).not.toContain("II · C1");
+
+    // "Llenas" y "Casi llenas" son estados DISTINTOS: con un solo booleano
+    // "destacadas" los dos contadores de alertas caerían en la misma pantalla.
+    await userEvent.click(screen.getByRole("button", { name: /^llenas \(1\)$/i }));
+    expect(rowLabels()).toHaveLength(1);
+    expect(rowLabels()[0]).toContain("I · A1");
+
+    await userEvent.click(screen.getByRole("button", { name: /^casi llenas \(1\)$/i }));
+    expect(rowLabels()).toHaveLength(1);
+    expect(rowLabels()[0]).toContain("I · A2");
+
+    await userEvent.click(screen.getByRole("button", { name: /^todas \(3\)$/i }));
+    expect(rowLabels()).toHaveLength(3);
+  });
+
+  it("arranca en el filtro que le pasa el panel de alertas", async () => {
+    render(<OccupancyView onViewBox={vi.fn()} initialFilter="near-full" />);
+    await screen.findByRole("table");
+    expect(rowLabels()).toHaveLength(1);
+    expect(rowLabels()[0]).toContain("I · A2");
   });
 
   it("ordena las subcajas al hacer clic en el encabezado", async () => {
