@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import DbSession, get_or_404
-from app.models import Rack, Section
+from app.models import Box, Rack, Sample, Section
 from app.schemas.rack import RackCreate, RackRead, RackUpdate
 
 router = APIRouter(prefix="/racks", tags=["racks"])
@@ -52,6 +52,18 @@ def update_rack(rack_id: int, payload: RackUpdate, db: DbSession) -> Rack:
         data["slot"] = data["slot"].value
     if data.get("letter") is not None:
         data["letter"] = data["letter"].strip().upper()
+    changes_location = (
+        data.get("section_id") is not None and data["section_id"] != rack.section_id
+    ) or (data.get("letter") is not None and data["letter"] != rack.letter)
+    if changes_location:
+        has_samples = (
+            db.query(Sample).join(Box, Sample.box_id == Box.id).filter(Box.rack_id == rack.id).first() is not None
+        )
+        if has_samples:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "No se puede cambiar la sección o la letra de un rack que ya tiene muestras asociadas",
+            )
     for field, value in data.items():
         setattr(rack, field, value)
     try:
