@@ -86,8 +86,11 @@ def boxes_occupancy(db: DbSession, rack_letter: str | None = None) -> list[BoxOc
             BoxOccupancy(
                 box_id=box.id,
                 number=box.number,
+                rack_id=box.rack_id,
                 rack_letter=box.rack.letter,
                 section_code=box.rack.section.code,
+                box_type=box.box_type,
+                is_full=box.is_full,
                 active=active,
                 capacity=capacity,
                 percent=percent(active, capacity),

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "./api/client";
-import type { Page, SampleSearchFilters, SampleWithLocation, UserRead } from "./api/types";
+import type { BoxOccupancy, Page, SampleSearchFilters, SampleWithLocation, UserRead } from "./api/types";
 import { FiltersBar } from "./components/FiltersBar";
 import {
   FreezerViewer,
@@ -10,6 +10,7 @@ import {
 } from "./components/FreezerViewer";
 import { Header } from "./components/Header";
 import { MovementForm, type MovementFormPrefill } from "./components/MovementForm";
+import { OccupancyView } from "./components/OccupancyView";
 import { Pagination } from "./components/Pagination";
 import { SampleDetail } from "./components/SampleDetail";
 import { SamplesTable, type SortState } from "./components/SamplesTable";
@@ -19,7 +20,7 @@ const MY_INITIALS_KEY = "refri:mis-iniciales";
 const DEFAULT_PAGE_SIZE = 25;
 
 type Theme = "light" | "dark";
-type ViewMode = "table" | "3d";
+type ViewMode = "table" | "3d" | "usage";
 
 function readTheme(): Theme {
   const stored = localStorage.getItem(THEME_KEY);
@@ -115,6 +116,8 @@ export default function App() {
   function closeMovementForm() {
     setShowMovementForm(false);
     setMovementInitial(undefined);
+    // Si se cierra un descongelamiento abierto desde el visor, la selección queda obsoleta.
+    setThawSelection(null);
   }
 
   // Clic en una posición libre del visor 3D (issue #6): abre el formulario de
@@ -160,6 +163,12 @@ export default function App() {
     setFocusTarget({ boxId: sample.box_id, position: sample.position, token: Date.now() });
   }
 
+  // "Ver en el refri" desde la vista de % de uso (issue #7): enfoca la subcaja sin resaltar posición.
+  function handleViewBoxInFreezer(box: BoxOccupancy) {
+    setViewMode("3d");
+    setFocusTarget({ boxId: box.box_id, position: null, token: Date.now() });
+  }
+
   return (
     <div className="app">
       <Header theme={theme} onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} />
@@ -169,26 +178,47 @@ export default function App() {
             + Nuevo movimiento
           </button>
           <div className="view-toggle" role="group" aria-label="Vista">
-            <button type="button" className={viewMode === "table" ? "on" : ""} onClick={() => setViewMode("table")}>
+            <button
+              type="button"
+              className={viewMode === "table" ? "on" : ""}
+              aria-pressed={viewMode === "table"}
+              onClick={() => setViewMode("table")}
+            >
               Vista tabla
             </button>
-            <button type="button" className={viewMode === "3d" ? "on" : ""} onClick={() => setViewMode("3d")}>
+            <button
+              type="button"
+              className={viewMode === "3d" ? "on" : ""}
+              aria-pressed={viewMode === "3d"}
+              onClick={() => setViewMode("3d")}
+            >
               Vista 3D
+            </button>
+            <button
+              type="button"
+              className={viewMode === "usage" ? "on" : ""}
+              aria-pressed={viewMode === "usage"}
+              onClick={() => setViewMode("usage")}
+            >
+              % de uso
             </button>
           </div>
         </div>
 
-        <FiltersBar
-          filters={filters}
-          onChange={setFilters}
-          myInitials={myInitials}
-          onMyInitialsChange={setMyInitials}
-          myFilterActive={myFilterActive}
-          onToggleMyFilter={toggleMyFilter}
-        />
+        {viewMode !== "usage" && (
+          <FiltersBar
+            filters={filters}
+            onChange={setFilters}
+            myInitials={myInitials}
+            onMyInitialsChange={setMyInitials}
+            myFilterActive={myFilterActive}
+            onToggleMyFilter={toggleMyFilter}
+          />
+        )}
 
-        {loading && <div className="empty-state">Cargando muestras…</div>}
-        {error && !loading && (
+        {viewMode === "usage" && <OccupancyView key={freezerKey} onViewBox={handleViewBoxInFreezer} />}
+        {viewMode !== "usage" && loading && <div className="empty-state">Cargando muestras…</div>}
+        {viewMode !== "usage" && error && !loading && (
           <div className="empty-state" role="alert">
             {error}
           </div>

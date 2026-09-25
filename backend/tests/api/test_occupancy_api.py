@@ -39,6 +39,10 @@ def test_section_and_rack_and_box_occupancy(client, db_session):
     assert boxes[0]["active"] == 2
     assert boxes[0]["capacity"] == 81
     assert round(boxes[0]["percent"], 2) == round(2 / 81 * 100, 2)
+    # Datos que usa la vista de % de uso (issue #7) para enlazar al visor.
+    assert boxes[0]["rack_id"] == rack["id"]
+    assert boxes[0]["box_type"] == "carton_81"
+    assert "is_full" in boxes[0]
 
 
 def test_rack_occupancy_counts_unconfigured_boxes_as_capacity(client, db_session):
