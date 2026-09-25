@@ -2,8 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "./api/client";
 import type { Page, SampleSearchFilters, SampleWithLocation, UserRead } from "./api/types";
 import { FiltersBar } from "./components/FiltersBar";
+import {
+  FreezerViewer,
+  type FreePositionSelection,
+  type FreezerFocusTarget,
+  type OccupiedPositionSelection,
+} from "./components/FreezerViewer";
 import { Header } from "./components/Header";
-import { MovementForm } from "./components/MovementForm";
+import { MovementForm, type MovementFormPrefill } from "./components/MovementForm";
 import { Pagination } from "./components/Pagination";
 import { SampleDetail } from "./components/SampleDetail";
 import { SamplesTable, type SortState } from "./components/SamplesTable";
@@ -13,6 +19,7 @@ const MY_INITIALS_KEY = "refri:mis-iniciales";
 const DEFAULT_PAGE_SIZE = 25;
 
 type Theme = "light" | "dark";
+type ViewMode = "table" | "3d";
 
 function readTheme(): Theme {
   const stored = localStorage.getItem(THEME_KEY);
@@ -30,6 +37,11 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [myInitials, setMyInitials] = useState(() => localStorage.getItem(MY_INITIALS_KEY) ?? "");
   const [showMovementForm, setShowMovementForm] = useState(false);
+  const [movementInitial, setMovementInitial] = useState<MovementFormPrefill | undefined>(undefined);
+  const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [focusTarget, setFocusTarget] = useState<FreezerFocusTarget | null>(null);
+  const [thawSelection, setThawSelection] = useState<OccupiedPositionSelection | null>(null);
+  const [freezerKey, setFreezerKey] = useState(0);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -95,14 +107,75 @@ export default function App() {
     }));
   }
 
+  function openMovementForm(initial?: MovementFormPrefill) {
+    setMovementInitial(initial);
+    setShowMovementForm(true);
+  }
+
+  function closeMovementForm() {
+    setShowMovementForm(false);
+    setMovementInitial(undefined);
+  }
+
+  // Clic en una posición libre del visor 3D (issue #6): abre el formulario de
+  // ingreso con la caja y la posición ya elegidas.
+  function handleSelectFreePosition(selection: FreePositionSelection) {
+    openMovementForm({
+      action: "freeze",
+      sectionCode: selection.sectionCode,
+      rackLetter: selection.rackLetter,
+      boxNumber: selection.boxNumber,
+      boxType: selection.boxType,
+      position: selection.position,
+    });
+  }
+
+  // Clic en una posición ocupada del visor 3D: muestra el detalle de esa
+  // muestra con la opción de descongelarla desde esa misma caja/posición.
+  function handleSelectOccupiedPosition(selection: OccupiedPositionSelection) {
+    setThawSelection(selection);
+    api
+      .getSample(selection.sampleId)
+      .then(setSelected)
+      .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "No se pudo cargar la muestra"));
+  }
+
+  function handleThaw() {
+    if (!thawSelection) return;
+    openMovementForm({
+      action: "thaw",
+      sectionCode: thawSelection.sectionCode,
+      rackLetter: thawSelection.rackLetter,
+      boxNumber: thawSelection.boxNumber,
+      boxType: thawSelection.boxType,
+      position: thawSelection.position,
+    });
+    setSelected(null);
+  }
+
+  // "Ver en el refri" desde un resultado de búsqueda (issue #6): cambia a la
+  // vista 3D y enfoca la caja resaltando la posición de esa muestra.
+  function handleViewInFreezer(sample: SampleWithLocation) {
+    setViewMode("3d");
+    setFocusTarget({ boxId: sample.box_id, position: sample.position, token: Date.now() });
+  }
+
   return (
     <div className="app">
       <Header theme={theme} onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} />
       <main className="app-main">
         <div className="filters-actions">
-          <button type="button" className="btn" onClick={() => setShowMovementForm(true)}>
+          <button type="button" className="btn" onClick={() => openMovementForm(undefined)}>
             + Nuevo movimiento
           </button>
+          <div className="view-toggle" role="group" aria-label="Vista">
+            <button type="button" className={viewMode === "table" ? "on" : ""} onClick={() => setViewMode("table")}>
+              Vista tabla
+            </button>
+            <button type="button" className={viewMode === "3d" ? "on" : ""} onClick={() => setViewMode("3d")}>
+              Vista 3D
+            </button>
+          </div>
         </div>
 
         <FiltersBar
@@ -120,7 +193,7 @@ export default function App() {
             {error}
           </div>
         )}
-        {!loading && !error && result && (
+        {!loading && !error && result && viewMode === "table" && (
           <>
             <SamplesTable
               samples={result.items}
@@ -128,6 +201,7 @@ export default function App() {
               onSelect={setSelected}
               sort={sort}
               onSortChange={handleSortChange}
+              onViewInFreezer={handleViewInFreezer}
             />
             <Pagination
               page={result.page}
@@ -137,23 +211,37 @@ export default function App() {
             />
           </>
         )}
+        {viewMode === "3d" && (
+          <FreezerViewer
+            key={freezerKey}
+            focusTarget={focusTarget}
+            onSelectFreePosition={handleSelectFreePosition}
+            onSelectOccupiedPosition={handleSelectOccupiedPosition}
+          />
+        )}
       </main>
 
       {selected && (
         <SampleDetail
           sample={selected}
           ownerLabel={ownerLookup[selected.owner_id] ?? "—"}
-          onClose={() => setSelected(null)}
+          onClose={() => {
+            setSelected(null);
+            setThawSelection(null);
+          }}
+          onThaw={thawSelection && thawSelection.sampleId === selected.id ? handleThaw : undefined}
         />
       )}
 
       {showMovementForm && (
         <MovementForm
           users={users}
-          onClose={() => setShowMovementForm(false)}
+          initial={movementInitial}
+          onClose={closeMovementForm}
           onSubmitted={() => {
             api.listUsers().then(setUsers).catch(() => undefined);
             setFilters((current) => ({ ...current }));
+            setFreezerKey((key) => key + 1);
           }}
         />
       )}

@@ -1,4 +1,4 @@
-from .helpers import create_box, create_rack, create_sample, create_section, create_user
+from .helpers import create_box, create_rack, create_sample, create_section, create_user, freeze_payload, make_freezer
 
 
 def test_create_and_list_sections(client, db_session):
@@ -69,8 +69,41 @@ def test_create_box_and_positions(client, db_session):
     assert response.status_code == 200
     positions = response.json()
     assert len(positions) == 81
-    assert positions[0] == {"position": "1A", "occupied": False, "sample_id": None, "environ_id": None}
+    assert positions[0] == {
+        "position": "1A",
+        "occupied": False,
+        "sample_id": None,
+        "environ_id": None,
+        "is_core": None,
+    }
     assert all(not entry["occupied"] for entry in positions)
+
+
+def test_box_positions_report_is_core_for_the_nucleo_warning(client, db_session):
+    _, rack, box = make_freezer(client)
+    client.post(
+        "/movements",
+        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", is_core=True),
+    )
+    client.post(
+        "/movements",
+        json=freeze_payload(
+            rack_letter=rack["letter"],
+            box_number=box["number"],
+            position="1B",
+            environ_id="BP002",
+            is_core=False,
+            non_core_owner_initials="DB",
+        ),
+    )
+
+    positions = {entry["position"]: entry for entry in client.get(f"/boxes/{box['id']}/positions").json()}
+    assert positions["1A"]["occupied"] is True
+    assert positions["1A"]["is_core"] is True
+    assert positions["1B"]["occupied"] is True
+    assert positions["1B"]["is_core"] is False
+    assert positions["1C"]["occupied"] is False
+    assert positions["1C"]["is_core"] is None
 
 
 def test_duplicate_box_number_in_rack_conflicts(client, db_session):

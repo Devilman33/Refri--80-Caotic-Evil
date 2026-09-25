@@ -146,6 +146,7 @@ export interface BoxPositionStatus {
   occupied: boolean;
   sample_id: number | null;
   environ_id: string | null;
+  is_core: boolean | null;
 }
 
 // Campos del formulario de movimientos (docs/FORMULARIO.md). `rack_letter` +

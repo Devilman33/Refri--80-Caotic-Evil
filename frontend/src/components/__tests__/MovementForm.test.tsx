@@ -253,4 +253,20 @@ describe("MovementForm", () => {
 
     expect(screen.getByRole("button", { name: /^posición 1b,/i })).toHaveAttribute("aria-pressed", "true");
   });
+
+  it("prellena acción, sección, caja y posición cuando viene de un clic en el visor 3D", async () => {
+    render(
+      <MovementForm
+        users={users}
+        initial={{ action: "thaw", sectionCode: "I", rackLetter: "A", boxNumber: 1, boxType: "carton_81", position: "1A" }}
+        onClose={vi.fn()}
+        onSubmitted={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText(/acción/i)).toHaveValue("thaw");
+    expect(screen.getByLabelText(/sección/i)).toHaveValue("I");
+    expect(screen.getByLabelText(/nombre caja/i)).toHaveValue("A1");
+    await waitFor(() => expect(screen.getByRole("button", { name: /^posición 1a,/i })).toHaveAttribute("aria-pressed", "true"));
+  });
 });
