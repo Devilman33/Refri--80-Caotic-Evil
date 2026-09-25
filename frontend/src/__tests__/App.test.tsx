@@ -39,6 +39,7 @@ vi.mock("../components/FreezerViewer", async () => {
       focusTarget?: { boxId: number; position: string | null } | null;
       reloadToken?: number;
       locationQuery?: { query: string } | null;
+      detailSlot?: import("react").ReactNode;
       onSelectOccupiedPosition: (selection: { sampleId: number }) => void;
     }) => {
       useEffect(() => {
@@ -51,6 +52,7 @@ vi.mock("../components/FreezerViewer", async () => {
           </p>
           <p data-testid="viewer-location">{props.locationQuery?.query ?? "sin ubicación"}</p>
           <p data-testid="viewer-reload">{props.reloadToken ?? "sin token"}</p>
+          {props.detailSlot}
           <button type="button" onClick={() => props.onSelectOccupiedPosition({ sampleId: 9 })}>
             Posición ocupada 3B
           </button>
@@ -129,7 +131,7 @@ describe("App · descongelar desde el detalle", () => {
 
     await user.click(await screen.findByRole("button", { name: /vista tabla/i }));
     await user.click(await screen.findByText("BP009"));
-    const detail = await screen.findByRole("dialog");
+    const detail = await screen.findByRole("complementary", { name: /BP009/ });
     await user.click(within(detail).getByRole("button", { name: /^descongelar$/i }));
 
     const thaw = await screen.findByRole("dialog", { name: /retirar muestra/i });
@@ -147,7 +149,7 @@ describe("App · recarga del visor", () => {
     render(<App />);
 
     await user.click(await screen.findByRole("button", { name: /posición ocupada 3b/i }));
-    const detail = await screen.findByRole("dialog");
+    const detail = await screen.findByRole("complementary", { name: /BP009/ });
     await user.click(within(detail).getByRole("button", { name: /^descongelar$/i }));
     const thaw = await screen.findByRole("dialog", { name: /retirar muestra/i });
     await within(thaw).findByRole("region", { name: /muestra a retirar/i });
@@ -175,7 +177,10 @@ describe("App · buscador global (F3)", () => {
     await search("BP009");
 
     await waitFor(() => expect(screen.getByTestId("viewer-focus")).toHaveTextContent("5:3B"));
-    expect(await screen.findByRole("dialog")).toHaveTextContent("BP009");
+    // El detalle es un panel dentro del visor, no un modal que lo tape.
+    const detail = await screen.findByRole("complementary", { name: /BP009/ });
+    expect(within(screen.getByRole("region", { name: /visor 3d/i })).getByRole("complementary")).toBe(detail);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(api.searchSamples).toHaveBeenCalledWith(expect.objectContaining({ q: "BP009", status: "active" }));
   });
 
@@ -263,5 +268,31 @@ describe("App · barra superior", () => {
     expect(screen.getByRole("button", { name: /^usuarios$/i })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("button", { name: /cambiar usuario/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("App · detalle como panel (T4)", () => {
+  it("en la tabla el panel ofrece 'Ver en el refri', que lleva al 3D con la posición enfocada", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /vista tabla/i }));
+    await user.click(await screen.findByText("BP009"));
+
+    const detail = await screen.findByRole("complementary", { name: /BP009/ });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(within(detail).getByRole("button", { name: /ver en el refri/i }));
+
+    await waitFor(() => expect(screen.getByTestId("viewer-focus")).toHaveTextContent("5:3B"));
+    const inViewer = await screen.findByRole("complementary", { name: /BP009/ });
+    expect(within(inViewer).queryByRole("button", { name: /ver en el refri/i })).not.toBeInTheDocument();
+  });
+
+  it("Esc cierra el panel", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /posición ocupada 3b/i }));
+    await screen.findByRole("complementary", { name: /BP009/ });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("complementary", { name: /BP009/ })).not.toBeInTheDocument());
   });
 });

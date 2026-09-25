@@ -345,6 +345,22 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
 
   const selectedOwners = selected ? ownersOf(selected, users) : [];
 
+  // El detalle es un panel (docs/PLAN_FRONTEND.md, D2). Se oculta mientras se mueve o edita
+  // esa muestra: un solo foco de trabajo a la vez, y al terminar vuelve con el dato fresco.
+  const detailPanel =
+    selected && !editing && !moving ? (
+      <SampleDetail
+        sample={selected}
+        users={users}
+        canModify={canModifySample(selected, selectedOwners, sessionUser)}
+        onClose={() => setSelected(null)}
+        onThaw={() => handleThaw(selected)}
+        onEdit={() => setEditing(selected)}
+        onMove={() => setMoving(selected)}
+        onViewInFreezer={viewMode === "3d" ? undefined : () => handleViewInFreezer(selected)}
+      />
+    ) : null;
+
   return (
     <div className="app">
       <Header
@@ -507,21 +523,24 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
           </div>
         )}
         {!error && tableResult && viewMode === "table" && (
-          <div aria-busy={loading} style={loading ? { opacity: 0.6 } : undefined}>
-            <SamplesTable
-              samples={tableResult.items}
-              ownerLookup={ownerLookup}
-              onSelect={setSelected}
-              sort={sort}
-              onSortChange={handleSortChange}
-              onViewInFreezer={handleViewInFreezer}
-            />
-            <Pagination
-              page={tableResult.page}
-              pageSize={tableResult.page_size}
-              total={tableResult.total}
-              onPageChange={(page) => setFilters((current) => ({ ...current, page }))}
-            />
+          <div className={`table-split${detailPanel ? " table-split--detail" : ""}`}>
+            <div aria-busy={loading} style={loading ? { opacity: 0.6 } : undefined}>
+              <SamplesTable
+                samples={tableResult.items}
+                ownerLookup={ownerLookup}
+                onSelect={setSelected}
+                sort={sort}
+                onSortChange={handleSortChange}
+                onViewInFreezer={handleViewInFreezer}
+              />
+              <Pagination
+                page={tableResult.page}
+                pageSize={tableResult.page_size}
+                total={tableResult.total}
+                onPageChange={(page) => setFilters((current) => ({ ...current, page }))}
+              />
+            </div>
+            {detailPanel}
           </div>
         )}
         {viewMode === "3d" && (
@@ -533,23 +552,13 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
             onSelectFreePosition={handleSelectFreePosition}
             onSelectOccupiedPosition={handleSelectOccupiedPosition}
             onMoveBox={setMovingBox}
+            detailSlot={detailPanel}
           />
         )}
       </main>
 
-      {/* Un solo diálogo a la vez: dos aria-modal apilados se disputan el foco y Esc
-          cierra el de abajo. Al terminar de mover o editar, el detalle vuelve a abrirse. */}
-      {selected && !editing && !moving && (
-        <SampleDetail
-          sample={selected}
-          users={users}
-          canModify={canModifySample(selected, selectedOwners, sessionUser)}
-          onClose={() => setSelected(null)}
-          onThaw={() => handleThaw(selected)}
-          onEdit={() => setEditing(selected)}
-          onMove={() => setMoving(selected)}
-        />
-      )}
+      {/* Fuera del 3D y de la tabla (p. ej. % de uso) el detalle igual se ve, como hoja. */}
+      {viewMode !== "3d" && viewMode !== "table" && detailPanel}
 
       {moving && (
         <MoveModal

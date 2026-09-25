@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { api } from "../api/client";
 import {
   MOVEMENT_ACTION_LABELS,
@@ -9,7 +9,6 @@ import {
 } from "../api/types";
 import { formatBoolean, formatDate } from "../utils/format";
 import { ownersLabel, ownersOf } from "../utils/users";
-import { Modal } from "./Modal";
 import { NucleoWarning } from "./NucleoWarning";
 import { userOptionLabel } from "./UserOptions";
 
@@ -27,15 +26,34 @@ export interface SampleDetailProps {
   /** Trasladar la muestra. Abre su propio diálogo y CIERRA este: dos `.modal-backdrop`
    * apilados doblan el oscurecido y vuelven ambiguo a cuál de los dos cierra un clic. */
   onMove?: () => void;
+  /** Solo fuera del visor 3D: vuelve al 3D con esta posición resaltada. */
+  onViewInFreezer?: () => void;
 }
 
-/** `III · F12 · 3B` → sus tres partes, para mostrarlas por separado. */
-function splitLocation(location: string): { section: string; box: string; position: string } | null {
-  const parts = location.split(" · ");
-  return parts.length === 3 ? { section: parts[0], box: parts[1], position: parts[2] } : null;
+/** Las partes de la ubicación, que la API manda por separado. Con un backend anterior que
+ * solo manda el texto, se muestra el texto entero. */
+function locationParts(sample: SampleWithLocation): { section: string; box: string; position: string } | null {
+  if (!sample.section_code || !sample.rack_letter || sample.box_number === undefined) return null;
+  return { section: sample.section_code, box: `${sample.rack_letter}${sample.box_number}`, position: sample.position };
 }
 
-export function SampleDetail({ sample, users, canModify, onClose, onThaw, onEdit, onMove }: SampleDetailProps) {
+/**
+ * Detalle de una muestra como PANEL, no modal (docs/PLAN_FRONTEND.md, D2): mirar una
+ * muestra no escribe nada, y un modal tapaba el 3D justo cuando se quería ver dónde está.
+ * En el 3D va arriba del panel derecho; en la tabla, a la derecha en PC y como hoja
+ * inferior en tablet (lo decide el CSS de `.detail-panel`).
+ */
+export function SampleDetail({
+  sample,
+  users,
+  canModify,
+  onClose,
+  onThaw,
+  onEdit,
+  onMove,
+  onViewInFreezer,
+}: SampleDetailProps) {
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
   const [movements, setMovements] = useState<MovementRead[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,7 +76,19 @@ export function SampleDetail({ sample, users, canModify, onClose, onThaw, onEdit
 
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const owners = ownersOf(sample, users);
-  const location = splitLocation(sample.location);
+  const location = locationParts(sample);
+
+  // Al elegir otra muestra, el foco va a su título: quien navega con teclado o lector de
+  // pantalla se entera de que el panel cambió.
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, [sample.id]);
+
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key !== "Escape") return;
+    event.stopPropagation();
+    onClose();
+  }
   // El congelamiento que la trajo al freezer (el primero) y el retiro, si lo hubo.
   const frozen = movements?.find((movement) => movement.action === "freeze");
   const thawed = movements ? [...movements].reverse().find((movement) => movement.action === "thaw") : undefined;
@@ -70,19 +100,23 @@ export function SampleDetail({ sample, users, canModify, onClose, onThaw, onEdit
   }
 
   return (
-    <Modal titleId="sd-title" onClose={onClose}>
-      <div className="modal-header">
-        <h2 id="sd-title" tabIndex={-1}>
-          <code>{sample.environ_id ?? `Muestra #${sample.id}`}</code>
-        </h2>
-        <button className="btn-ghost" onClick={onClose} aria-label="Cerrar">
+    <aside className="detail-panel" aria-labelledby="sd-title" onKeyDown={handleKeyDown}>
+      <div className="detail-panel__header">
+        <div>
+          <p className="eyebrow">Muestra seleccionada</p>
+          <h2 id="sd-title" ref={titleRef} tabIndex={-1} className="detail-panel__id">
+            {sample.environ_id ?? `Muestra #${sample.id}`}
+          </h2>
+          <p className="detail-panel__loc">{sample.location}</p>
+        </div>
+        <button className="btn-ghost" onClick={onClose} aria-label="Cerrar detalle">
           Cerrar
         </button>
       </div>
 
       <NucleoWarning isCore={sample.is_core} />
 
-      <dl className="detail-grid" style={{ marginTop: 12 }}>
+      <dl className="detail-grid">
         <div>
           <dt>{owners.length > 1 ? "Encargados" : "Encargado"}</dt>
           <dd>{owners.length > 0 ? owners.map(userOptionLabel).join(", ") : "—"}</dd>
@@ -164,13 +198,18 @@ export function SampleDetail({ sample, users, canModify, onClose, onThaw, onEdit
       </dl>
 
       {sample.status !== "active" ? (
-        <p className="field-hint" style={{ marginTop: 12 }}>
+        <p className="field-hint">
           Muestra retirada: queda en el historial y no se puede modificar.
         </p>
       ) : canModify ? (
-        <div className="form-actions" style={{ marginTop: 12 }}>
+        <div className="detail-panel__actions">
+          {onThaw && (
+            <button className="btn" onClick={onThaw}>
+              Descongelar
+            </button>
+          )}
           {onMove && (
-            <button className="btn" onClick={onMove}>
+            <button className="btn-ghost" onClick={onMove}>
               Mover
             </button>
           )}
@@ -179,21 +218,22 @@ export function SampleDetail({ sample, users, canModify, onClose, onThaw, onEdit
               Editar
             </button>
           )}
-          {onThaw && (
-            <button className="btn-ghost btn-ghost--danger" onClick={onThaw}>
-              Descongelar
-            </button>
-          )}
         </div>
       ) : (
-        <p className="field-hint" style={{ marginTop: 12 }}>
+        <p className="field-hint">
           {owners.length > 1
             ? `Solo sus encargados (${ownersLabel(owners)}) pueden moverla, editarla o descongelarla.`
             : `Solo ${ownersLabel(owners)}, su encargado, puede moverla, editarla o descongelarla.`}
         </p>
       )}
 
-      <h3>Historial de movimientos</h3>
+      {onViewInFreezer && (
+        <button className="btn-ghost detail-panel__locate" onClick={onViewInFreezer}>
+          Ver en el refri
+        </button>
+      )}
+
+      <h3 className="detail-panel__h3">Historial de movimientos</h3>
       {error && <p role="alert">No se pudo cargar el historial: {error}</p>}
       {!error && movements === null && <p>Cargando historial…</p>}
       {movements && movements.length === 0 && <p>Sin movimientos registrados.</p>}
@@ -215,6 +255,6 @@ export function SampleDetail({ sample, users, canModify, onClose, onThaw, onEdit
           ))}
         </ul>
       )}
-    </Modal>
+    </aside>
   );
 }

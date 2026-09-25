@@ -1966,3 +1966,116 @@ table.samples-table {
 .global-search input:not(:placeholder-shown) + .global-search__key {
   display: none;
 }
+
+/* Detalle de muestra como panel (docs/PLAN_FRONTEND.md, D2). PC: a la derecha de la tabla
+   o arriba del panel del visor. Tablet y teléfono: hoja inferior sobre el contenido. */
+.detail-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.detail-panel__header .eyebrow {
+  margin: 0 0 2px;
+}
+
+.detail-panel__id {
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+.detail-panel__loc {
+  margin: 2px 0 0;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-panel .detail-grid {
+  margin: 0;
+}
+
+.detail-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.detail-panel__locate {
+  align-self: flex-start;
+}
+
+.detail-panel__h3 {
+  font-size: 15px;
+  margin-top: 4px;
+}
+
+.detail-panel .field-hint {
+  margin: 0;
+}
+
+/* Dentro del panel del visor: sin caja propia, separado por una línea. */
+.fv-panel > .detail-panel {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 0 0 16px;
+}
+
+.table-split--detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.table-split--detail > .detail-panel {
+  position: sticky;
+  top: 88px;
+  max-height: calc(100vh - 104px);
+  overflow-y: auto;
+}
+
+@media (max-width: 1099px) {
+  .table-split--detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-panel,
+  .fv-panel > .detail-panel,
+  .table-split--detail > .detail-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    z-index: 15;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    border: 1px solid var(--line);
+    border-radius: 10px 10px 0 0;
+    box-shadow: 0 -10px 30px rgb(0 0 0 / 0.16);
+  }
+}
+
+/* Títulos que reciben el foco por programa (para anunciar un panel o diálogo nuevo): no son
+   controles, así que no llevan el anillo de foco. */
+h2[tabindex="-1"]:focus,
+h3[tabindex="-1"]:focus {
+  outline: none;
+}

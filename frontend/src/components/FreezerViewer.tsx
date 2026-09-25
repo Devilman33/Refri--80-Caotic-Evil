@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, ApiError } from "../api/client";
 import type { BoxOccupancy, BoxType, RackOccupancy } from "../api/types";
 import {
@@ -77,6 +77,9 @@ export interface FreezerViewerProps {
   locationQuery?: { query: string; token: number } | null;
   /** Por qué no se pudo ir a esa ubicación ("No existe el rack Z"), o "" si se pudo. */
   onQueryMessage?: (message: string) => void;
+  /** El detalle de la muestra seleccionada: va arriba del panel, sobre "Caja seleccionada",
+   * para ver el dato y la posición resaltada a la vez. */
+  detailSlot?: ReactNode;
 }
 
 interface RackInfo {
@@ -115,6 +118,7 @@ export function FreezerViewer({
   reloadToken = 0,
   locationQuery,
   onQueryMessage,
+  detailSlot,
 }: FreezerViewerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
@@ -697,6 +701,7 @@ export function FreezerViewer({
       </section>
 
       <aside className="fv-panel">
+        {detailSlot}
         <header>
           <p className="eyebrow">Congelador ULT vertical · −86 °C · 388 L</p>
           <h1 className="fv-title">Haier DW-86L388J</h1>
