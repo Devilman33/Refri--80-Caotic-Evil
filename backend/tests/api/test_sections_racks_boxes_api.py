@@ -24,6 +24,11 @@ def test_delete_section_with_racks_conflicts(client, db_session):
     assert response.status_code == 409
 
 
+def test_create_section_rejects_invalid_code(client, db_session):
+    response = client.post("/sections", json={"code": "V"})
+    assert response.status_code == 422
+
+
 def test_create_rack_requires_existing_section(client, db_session):
     response = client.post("/racks", json={"section_id": 999999, "letter": "A", "slot": "center"})
     assert response.status_code == 404
@@ -46,6 +51,13 @@ def test_duplicate_rack_letter_conflicts(client, db_session):
 
     response = client.post("/racks", json={"section_id": section["id"], "letter": "a", "slot": "right"})
     assert response.status_code == 409
+
+
+def test_create_rack_rejects_invalid_letter(client, db_session):
+    section = create_section(client, code="I")
+
+    response = client.post("/racks", json={"section_id": section["id"], "letter": "Z", "slot": "center"})
+    assert response.status_code == 422
 
 
 def test_create_box_and_positions(client, db_session):
