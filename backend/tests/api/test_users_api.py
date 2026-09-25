@@ -61,3 +61,21 @@ def test_delete_user(client, db_session):
 
     response = client.get(f"/users/{created['id']}")
     assert response.status_code == 404
+
+
+def test_update_nucleo_user_rejects_initials_change(client, db_session):
+    created = create_user(client, initials="NUCLEO", name="Núcleo Environ")
+
+    response = client.patch(f"/users/{created['id']}", json={"initials": "OTRO"})
+    assert response.status_code == 409
+
+    response = client.patch(f"/users/{created['id']}", json={"active": False})
+    assert response.status_code == 200
+    assert response.json()["initials"] == "NUCLEO"
+
+
+def test_delete_nucleo_user_is_rejected(client, db_session):
+    created = create_user(client, initials="NUCLEO", name="Núcleo Environ")
+
+    response = client.delete(f"/users/{created['id']}")
+    assert response.status_code == 409
