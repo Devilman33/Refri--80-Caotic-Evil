@@ -371,7 +371,9 @@ describe("FreezeForm · tanda del mismo set (F1)", () => {
     await user.selectOptions(screen.getByLabelText(/^tipo$/i), "vial_celulas");
     await user.type(screen.getByLabelText(/nombre caja/i), "A1");
     await user.selectOptions(screen.getByLabelText(/núcleo environ/i), "true");
-    await user.click(await screen.findByRole("button", { name: /^posición 9i,/i }));
+    // Las posiciones de la caja se cargan con debounce: esperar a que 1A figure ocupada.
+    await screen.findByRole("button", { name: /^posición 1a, ocupada/i });
+    await user.click(screen.getByRole("button", { name: /^posición 9i,/i }));
     await user.click(screen.getByRole("button", { name: /guardar y siguiente/i }));
 
     expect(await screen.findByText(/la caja A1 está llena: elige otra caja/i)).toBeInTheDocument();

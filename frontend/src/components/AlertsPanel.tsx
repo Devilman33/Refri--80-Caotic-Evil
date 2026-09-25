@@ -137,14 +137,14 @@ export function AlertsPanel({ reloadToken, onNavigate, onCountChange }: AlertsPa
         return (
           <button key={row.key} type="button" onClick={() => onNavigate(row.destination)}>
             <span>{row.label(count)}</span>
-            <span className="badge badge-warn">{count}</span>
+            <span className="badge badge-count">{count}</span>
           </button>
         );
       })}
       {extra.map((row) => (
         <button key={row.key} type="button" onClick={() => onNavigate(row.destination)}>
           <span>{row.label}</span>
-          <span className="badge badge-warn">{row.count}</span>
+          <span className="badge badge-count">{row.count}</span>
         </button>
       ))}
     </div>

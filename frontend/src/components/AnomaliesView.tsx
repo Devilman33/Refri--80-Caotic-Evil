@@ -173,7 +173,7 @@ export function AnomaliesView({ onBack, operatorInitials }: AnomaliesViewProps) 
                       {group.pending === 0 ? (
                         <span className="badge badge-active">Al día</span>
                       ) : (
-                        <span className="badge badge-warn">{group.pending.toLocaleString("es-CL")}</span>
+                        <span className="badge badge-count">{group.pending.toLocaleString("es-CL")}</span>
                       )}
                     </td>
                     <td>

@@ -378,6 +378,14 @@ table.samples-table {
   color: var(--warn);
 }
 
+/* Contadores y marcas que piden atención pero no son Núcleo (alertas, anomalías, "Sin
+   ID"): neutros. El naranja de .badge-warn queda solo para Núcleo (DESIGN.md). */
+.badge-count {
+  background: var(--chip);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--field-border);
+}
+
 .badge-active {
   background: var(--accent-soft);
   color: var(--accent);
@@ -635,8 +643,6 @@ table.samples-table {
   .position-cell,
   .view-toggle button,
   .fv-seg button,
-  .fv-search input,
-  .fv-search button,
   .fv-est-name,
   .fv-rk button,
   .fv-cells button,
@@ -899,42 +905,6 @@ table.samples-table {
   font-size: 12px;
   color: var(--muted);
 }
-.fv-search {
-  display: flex;
-  gap: 6px;
-}
-.fv-search input {
-  flex: 1;
-  min-width: 0;
-  background: var(--chip);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-family: var(--mono);
-  font-size: 13px;
-  text-transform: uppercase;
-  color: var(--ink);
-}
-.fv-search input::placeholder {
-  text-transform: none;
-  color: var(--muted);
-}
-.fv-search button {
-  border: 0;
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-radius: 6px;
-  padding: 8px 14px;
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-}
-.fv-msg {
-  font-size: 12px;
-  color: var(--warn);
-  margin: 6px 0 0;
-  min-height: 1em;
-}
 .fv-est {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -1025,11 +995,13 @@ table.samples-table {
 .fv-cells button:hover {
   background: var(--chip-hover);
 }
+/* Franja inferior: caja con muestras (turquesa) o llena (rojo de "ocupada"). Antes "con
+   muestras" iba en naranja, que en DESIGN.md es solo Núcleo. */
 .fv-cells button.used {
-  box-shadow: inset 0 -3px 0 var(--warn);
+  box-shadow: inset 0 -3px 0 var(--accent);
 }
 .fv-cells button.full {
-  box-shadow: inset 0 -3px 0 var(--led-on);
+  box-shadow: inset 0 -3px 0 var(--occupied-ink);
 }
 .fv-cells button.on {
   background: var(--accent);
@@ -1411,13 +1383,8 @@ table.samples-table {
   transition: width 0.3s ease;
 }
 
-.usage-bar--near-full .usage-bar__fill {
-  background: var(--warn);
-}
-
-.usage-bar--full .usage-bar__fill {
-  background: var(--danger);
-}
+/* La barra es siempre turquesa (DESIGN.md › Componentes): rojo/verde ya significan
+   posición ocupada/libre y el naranja es solo Núcleo. El estado lo dice la insignia. */
 
 .usage-cell {
   display: grid;
@@ -1427,22 +1394,16 @@ table.samples-table {
   font-family: var(--mono);
 }
 
-.usage-row--full td:first-child {
-  box-shadow: inset 3px 0 0 var(--danger);
-}
-
-.usage-row--near-full td:first-child {
-  box-shadow: inset 3px 0 0 var(--warn);
-}
-
+/* Llena = todas sus posiciones ocupadas: se lee con el mismo rojo de "ocupada". */
 .usage-badge--full {
-  background: var(--danger);
-  color: var(--accent-ink);
+  background: var(--occupied-soft);
+  color: var(--occupied-ink);
 }
 
 .usage-badge--near-full {
-  background: var(--warn-soft);
-  color: var(--warn);
+  background: var(--chip);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--field-border);
 }
 
 .usage-badge--normal,
@@ -1452,16 +1413,11 @@ table.samples-table {
 }
 
 /* Declarada completa pero con lugar libre: es un dato equivocado, no una caja llena.
-   Usa el color de advertencia con borde para distinguirse de "casi llena", que es una
-   situacion normal. */
-.usage-row--inconsistent td:first-child {
-  box-shadow: inset 3px 0 0 var(--warn);
-}
-
+   Se marca como error (--danger con borde), no con el naranja de Núcleo. */
 .usage-badge--inconsistent {
-  background: var(--warn-soft);
-  color: var(--warn);
-  border: 1px solid var(--warn);
+  background: var(--panel);
+  color: var(--danger);
+  border: 1px solid var(--danger);
 }
 
 /* Panel de alertas: lista compacta de contadores, NO un mosaico de cards de KPI.
