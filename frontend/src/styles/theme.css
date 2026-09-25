@@ -510,6 +510,7 @@ table.samples-table {
 }
 
 .position-cell {
+  min-height: 32px;
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 4px 0;
@@ -596,6 +597,23 @@ table.samples-table {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   font-weight: 700;
+}
+
+/* Tablet frente al freezer, con guantes: todo lo que se toca mide al menos 44px
+   (DESIGN.md › Espaciado y tamaño). En PC se mantiene la densidad. */
+@media (pointer: coarse) {
+  .btn,
+  .btn-ghost,
+  .field input,
+  .field select,
+  .field textarea,
+  .position-cell {
+    min-height: 44px;
+  }
+
+  .position-cell {
+    font-size: 13px;
+  }
 }
 
 /* La elegida ya lleva contorno turquesa: el foco de teclado tiene que verse distinto
