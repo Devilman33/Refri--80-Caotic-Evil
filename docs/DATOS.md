@@ -45,6 +45,12 @@ importador en local. Los tests usan un Excel **sintético** con la misma estruct
 | Fecha de salida | **si tiene valor, la muestra está retirada** | Mezcla fechas y notas (`revisar ubicación`, `no está`, `21-4-25 VF`, `21.02.23 (Cambio de Caja)`): extraer fecha e iniciales si existen y guardar el texto como nota del evento de retiro |
 | Comentarios | `sample.notes` | Texto libre |
 
+**Racks sembrados:** el importador **exige que el rack ya exista** en `layout.yaml`. No crea
+racks: una fila cuyo Rack no esté sembrado se reporta como anomalía y no se importa. Es
+deliberado, porque la columna Sección del Excel es inconsistente y dejar que el importador
+cree racks produciría duplicados con secciones contradictorias. Si el laboratorio confirma un
+rack nuevo, primero va a `backend/app/seed/layout.yaml` y después se reimporta.
+
 **Posiciones repetidas:** ~100 posiciones aparecen en más de una fila. Normalmente se explica
 por muestras retiradas que dejaron el lugar a otra. Regla: solo puede haber **una muestra activa
 por posición**. Los conflictos entre activas se importan como retirada-por-conflicto y se reportan.

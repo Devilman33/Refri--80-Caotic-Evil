@@ -32,7 +32,17 @@ motivo) para que el laboratorio las corrija.
 
 ## Cómo levantar el proyecto
 
-Requisitos: Docker y Docker Compose.
+### Requisitos
+
+| Herramienta | Versión | Por qué esa |
+|---|---|---|
+| Docker + Docker Compose | cualquiera reciente | levanta Postgres, backend y frontend |
+| Node | **22.12 o mayor** | `vitest@5` lo exige (`vite@8` pide `^20.19 \|\| >=22.12`, vitest es más estricto). Hay `.nvmrc`: `nvm use` |
+| Python | **3.12** | lo que usan la CI y `backend/Dockerfile`. En 3.11 el código compila igual, así que la divergencia aparece en silencio en vez de fallar |
+
+Para solo levantar el proyecto alcanza con Docker: Node y Python hacen falta para
+desarrollar o correr los tests fuera de los contenedores.
+
 
 ```bash
 cp .env.example .env
@@ -79,18 +89,53 @@ base separada de la que usa `docker compose up` (que tiene el inventario real). 
 tenés un Postgres disponible en `docker compose up db`; creá una base de test aparte y usala:
 
 ```bash
+docker compose up -d db                               # si no está levantada
 docker compose exec db createdb -U refri refri_test   # una sola vez
+
 cd backend
+python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt                   # sin esto: "pytest: command not found"
 DATABASE_URL=postgresql+psycopg://refri:refri@localhost:5432/refri_test pytest
+```
+
+En PowerShell la última línea es otra (`VAR=valor comando` no existe ahí):
+
+```powershell
+$env:DATABASE_URL = "postgresql+psycopg://refri:refri@localhost:5432/refri_test"
+pytest
+```
+
+`conftest.py` lee la **variable de entorno**, no el `.env` del backend: si falta, corta con
+un mensaje que dice exactamente qué exportar.
+
+Si no querés instalar Python 3.12 localmente, corré los tests dentro del contenedor, que ya
+tiene el intérprete y las versiones pineadas de la CI:
+
+```bash
+docker compose run --rm -v "$PWD/backend:/app" \
+  -e DATABASE_URL=postgresql+psycopg://refri:refri@db:5432/refri_test \
+  --entrypoint sh backend -c "pip install -q -r requirements-dev.txt && python -m pytest -q"
 ```
 
 CI (`.github/workflows/ci.yml`) hace lo mismo contra un servicio Postgres efímero con la base
 `refri_test`.
 
+> En los workflows de los agentes la variable ya viene exportada y los comandos compuestos
+> están bloqueados: ahí se corre `python -m pytest backend/tests/<archivo> -q` desde la raíz
+> (ver `CLAUDE.md`). Las dos formas son correctas, cada una en su contexto.
+
 ### Tests del frontend
 
 ```bash
 cd frontend
-npm test          # Vitest + Testing Library
+npm ci
+npm test           # Vitest + Testing Library
 npm run build      # type-check (tsc -b) + build de producción
 ```
+
+Si `npm ci` corta con `EBADENGINE`, tu Node es viejo: hace falta 22.12 o mayor (`nvm use`
+toma la versión de `.nvmrc`). Es deliberado que corte ahí y no más adelante con un error
+de vite que no menciona la versión.
+
+`docker compose up` **no** monta volúmenes: sirve para levantar el proyecto, no para
+desarrollarlo. Para el loop de desarrollo usá `npm run dev` y `uvicorn --reload`.
