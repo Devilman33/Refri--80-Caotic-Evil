@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { MovementResult, RackRead, UserRead } from "../../api/types";
+import type { MovementResult, RackRead, SectionRead, UserRead } from "../../api/types";
 import { MovementForm } from "../MovementForm";
 
 const { api, ApiError } = vi.hoisted(() => {
@@ -17,6 +17,7 @@ const { api, ApiError } = vi.hoisted(() => {
   return {
     api: {
       listRacks: vi.fn(),
+      listSections: vi.fn(),
       listBoxes: vi.fn(),
       getBoxPositions: vi.fn(),
       getAutocompleteSuggestions: vi.fn(),
@@ -29,6 +30,7 @@ const { api, ApiError } = vi.hoisted(() => {
 vi.mock("../../api/client", () => ({ api, ApiError }));
 
 const racks: RackRead[] = [{ id: 1, section_id: 1, letter: "A", slot: "center", capacity: 30 }];
+const sections: SectionRead[] = [{ id: 1, code: "I" }];
 const users: UserRead[] = [{ id: 1, initials: "GC", name: "Guillermo", active: true }];
 
 function baseMovementResult(overrides: Partial<MovementResult["sample"]> = {}): MovementResult {
@@ -79,6 +81,7 @@ async function fillRequiredFreezeFields(user: ReturnType<typeof userEvent.setup>
 beforeEach(() => {
   vi.clearAllMocks();
   api.listRacks.mockResolvedValue(racks);
+  api.listSections.mockResolvedValue(sections);
   api.listBoxes.mockResolvedValue([]);
   api.getBoxPositions.mockResolvedValue([]);
   api.getAutocompleteSuggestions.mockResolvedValue({
@@ -166,6 +169,18 @@ describe("MovementForm", () => {
     expect(api.createMovement).not.toHaveBeenCalled();
     expect(screen.getByText(/id environ es obligatorio/i)).toBeInTheDocument();
     expect(screen.getByText(/el tipo es obligatorio/i)).toBeInTheDocument();
+  });
+
+  it("rechaza el envío si la sección elegida no corresponde al rack de la caja", async () => {
+    const user = userEvent.setup();
+    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+
+    await fillRequiredFreezeFields(user);
+    await user.selectOptions(screen.getByLabelText(/sección/i), "II");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    expect(api.createMovement).not.toHaveBeenCalled();
+    expect(screen.getByText(/el rack 'a' pertenece a la sección i, no a ii/i)).toBeInTheDocument();
   });
 
   it("autocompletado: sugiere los datos de otras muestras con el mismo ID Environ", async () => {

@@ -14,6 +14,7 @@ import {
   type PositionConflict,
   type RackRead,
   type SampleType,
+  type SectionRead,
   type UserRead,
 } from "../api/types";
 import { nextFreePosition, parseBoxName } from "../utils/positions";
@@ -87,6 +88,7 @@ export function MovementForm({ users, onClose, onSubmitted }: MovementFormProps)
   const [lastOperator] = useState(() => localStorage.getItem(LAST_OPERATOR_KEY) ?? "");
   const [form, setForm] = useState<FormState>(() => emptyForm(lastOperator));
   const [racks, setRacks] = useState<RackRead[]>([]);
+  const [sections, setSections] = useState<SectionRead[]>([]);
   const [boxExists, setBoxExists] = useState(false);
   const [boxPositions, setBoxPositions] = useState<BoxPositionStatus[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -112,7 +114,16 @@ export function MovementForm({ users, onClose, onSubmitted }: MovementFormProps)
       .listRacks()
       .then(setRacks)
       .catch(() => setRacks([]));
+    api
+      .listSections()
+      .then(setSections)
+      .catch(() => setSections([]));
   }, []);
+
+  const sectionCodeByRackId = useMemo(
+    () => new Map(racks.map((rack) => [rack.id, sections.find((section) => section.id === rack.section_id)?.code])),
+    [racks, sections],
+  );
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -211,8 +222,16 @@ export function MovementForm({ users, onClose, onSubmitted }: MovementFormProps)
       errors.boxName = "El nombre de la caja es obligatorio";
     } else if (!parsedBox) {
       errors.boxName = "Formato inválido: letra de rack + N° de caja (p. ej. A12)";
-    } else if (!racks.some((rack) => rack.letter === parsedBox.rackLetter)) {
-      errors.boxName = `No existe el rack '${parsedBox.rackLetter}'`;
+    } else {
+      const rack = racks.find((entry) => entry.letter === parsedBox.rackLetter);
+      if (!rack) {
+        errors.boxName = `No existe el rack '${parsedBox.rackLetter}'`;
+      } else if (form.sectionCode) {
+        const rackSectionCode = sectionCodeByRackId.get(rack.id);
+        if (rackSectionCode && rackSectionCode !== form.sectionCode) {
+          errors.sectionCode = `El rack '${rack.letter}' pertenece a la sección ${rackSectionCode}, no a ${form.sectionCode}`;
+        }
+      }
     }
 
     if (!form.position) {
@@ -444,6 +463,7 @@ export function MovementForm({ users, onClose, onSubmitted }: MovementFormProps)
                 </option>
               ))}
             </select>
+            {fieldErrors.sectionCode && <p className="field-error">{fieldErrors.sectionCode}</p>}
           </div>
 
           <div className="field">
