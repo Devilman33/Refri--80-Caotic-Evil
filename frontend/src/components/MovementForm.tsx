@@ -24,7 +24,11 @@ const SAMPLE_TYPE_OPTIONS = Object.entries(SAMPLE_TYPE_LABELS) as [SampleType, s
 const ACTION_OPTIONS = Object.entries(MOVEMENT_ACTION_LABELS) as [MovementAction, string][];
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function mergeInitials(defaults: readonly string[], users: UserRead[]): string[] {
