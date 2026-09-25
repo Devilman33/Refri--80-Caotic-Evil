@@ -59,7 +59,17 @@ export function SamplesTable({ samples, ownerLookup, onSelect, sort, onSortChang
         </thead>
         <tbody>
           {samples.map((sample) => (
-            <tr key={sample.id} onClick={() => onSelect(sample)} data-testid={`sample-row-${sample.id}`}>
+            <tr
+              key={sample.id}
+              tabIndex={0}
+              onClick={() => onSelect(sample)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                onSelect(sample);
+              }}
+              data-testid={`sample-row-${sample.id}`}
+            >
               <td>
                 <code>{sample.environ_id ?? "—"}</code>
               </td>

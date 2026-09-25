@@ -54,6 +54,19 @@ describe("SamplesTable", () => {
     expect(onSelect).toHaveBeenCalledWith(samples[0]);
   });
 
+  it("llama a onSelect con la muestra al activar una fila con el teclado", async () => {
+    const onSelect = vi.fn();
+    render(
+      <SamplesTable samples={samples} ownerLookup={ownerLookup} onSelect={onSelect} sort={null} onSortChange={vi.fn()} />,
+    );
+    const user = userEvent.setup();
+
+    screen.getByTestId("sample-row-1").focus();
+    await user.keyboard("{Enter}");
+
+    expect(onSelect).toHaveBeenCalledWith(samples[0]);
+  });
+
   it("pide ordenar por ID Environ al hacer click en la columna, delegando en el backend", async () => {
     const onSortChange = vi.fn();
     render(
