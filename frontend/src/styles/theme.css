@@ -1531,23 +1531,28 @@ table.samples-table {
   cursor: pointer;
 }
 
-/* Congelar y descongelar se distinguen de un vistazo: turquesa para ingresar, óxido
-   para retirar. Compartían pantalla y se confundían. */
-.btn-thaw,
-.btn-danger {
-  background: var(--warn);
-  color: #ffffff;
+/* Congelar y descongelar se distinguen de un vistazo (compartían pantalla y se
+   confundían): congelar va relleno, descongelar con contorno, y cada uno con su signo.
+   No se usa naranja: en DESIGN.md el naranja es solo el warning de Núcleo, y retirar no
+   es destructivo (no se borra nada), así que tampoco va en rojo. */
+.btn-thaw {
+  background: var(--panel);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
-.btn-danger:disabled,
+.btn-thaw:hover {
+  background: var(--accent-soft);
+}
+
 .btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
 
 .btn-ghost--danger {
-  color: var(--warn);
-  border-color: var(--warn);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .movement-kind {
@@ -1569,13 +1574,13 @@ table.samples-table {
 }
 
 .movement-kind--thaw {
-  background: var(--warn-soft);
-  color: var(--warn);
+  background: var(--chip);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--field-border, var(--muted));
 }
 
 .thaw-sample {
-  border: 1px solid var(--warn);
-  border-left-width: 4px;
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px 14px;
   background: var(--panel);
