@@ -18,6 +18,7 @@ import {
   type UserRead,
 } from "../api/types";
 import { nextFreePosition, parseBoxName } from "../utils/positions";
+import { Modal } from "./Modal";
 import { PositionPicker } from "./PositionPicker";
 
 const LAST_OPERATOR_KEY = "refri:ultimo-operador";
@@ -358,16 +359,9 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
   const thawTarget = form.action === "thaw" && form.position ? occupantLabels.get(form.position) : undefined;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal modal--wide"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="mf-title"
-        onClick={(event) => event.stopPropagation()}
-      >
+    <Modal titleId="mf-title" onClose={onClose} wide>
         <div className="modal-header">
-          <h2 id="mf-title">Nuevo movimiento</h2>
+          <h2 id="mf-title" tabIndex={-1}>Nuevo movimiento</h2>
           <button className="btn-ghost" onClick={onClose} aria-label="Cerrar">
             Cerrar
           </button>
@@ -661,7 +655,6 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

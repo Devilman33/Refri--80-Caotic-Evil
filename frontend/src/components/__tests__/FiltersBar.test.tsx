@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { SampleSearchFilters } from "../../api/types";
@@ -22,14 +22,28 @@ function setup(filters: SampleSearchFilters = { page: 1, page_size: 25 }) {
 }
 
 describe("FiltersBar", () => {
-  it("actualiza el filtro de ID Environ y reinicia la página", () => {
+  it("actualiza el filtro de ID Environ y reinicia la página, con debounce", async () => {
     const { onChange } = setup({ page: 3, page_size: 25 });
 
     fireEvent.change(screen.getByLabelText(/id environ/i), { target: { value: "BP1" } });
 
-    expect(onChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ environ_id: "BP1", page: 1 }),
+    // Los campos de texto esperan 300 ms: cada tecla disparaba una búsqueda y la tabla
+    // parpadeaba. El input muestra lo tipeado al instante; solo la consulta espera.
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/id environ/i)).toHaveValue("BP1");
+
+    await waitFor(() =>
+      expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ environ_id: "BP1", page: 1 })),
     );
+  });
+
+  it("no debouncea los selects: un solo gesto se aplica al instante", async () => {
+    const { onChange } = setup();
+    const user = userEvent.setup();
+
+    await user.selectOptions(screen.getByLabelText(/^sección/i), "II");
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ section_code: "II", page: 1 }));
   });
 
   it("filtra por Núcleo = Sí", async () => {

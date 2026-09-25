@@ -43,6 +43,7 @@ export default function App() {
   const [focusTarget, setFocusTarget] = useState<FreezerFocusTarget | null>(null);
   const [thawSelection, setThawSelection] = useState<OccupiedPositionSelection | null>(null);
   const [freezerKey, setFreezerKey] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -57,8 +58,17 @@ export default function App() {
     api.listUsers().then(setUsers).catch(() => setUsers([]));
   }, []);
 
+  // "Cambiaron los filtros" y "se pidió un refetch" son dos cosas distintas. Antes el
+  // refresh posterior a un movimiento era `setFilters(current => ({ ...current }))`: un
+  // hack de identidad de objeto que funcionaba solo porque el efecto dependía de la
+  // referencia. Con el debounce de abajo eso se volvería un no-op silencioso (congelás una
+  // muestra y la tabla sigue mostrando la página vieja), así que el refetch explícito tiene
+  // su propio token.
   useEffect(() => {
     let cancelled = false;
+    // La primera carga usa el estado vacío; los refetch posteriores mantienen la tabla
+    // montada con aria-busy, para que escribir en un filtro no borre lo que se estaba
+    // leyendo.
     setLoading(true);
     setError(null);
     api
@@ -75,7 +85,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [filters]);
+  }, [filters, reloadToken]);
 
   const ownerLookup = useMemo(() => {
     const map: Record<number, string> = {};
@@ -221,14 +231,14 @@ export default function App() {
         )}
 
         {viewMode === "usage" && <OccupancyView key={freezerKey} onViewBox={handleViewBoxInFreezer} />}
-        {viewMode === "table" && loading && <div className="empty-state">Cargando muestras…</div>}
-        {viewMode === "table" && error && !loading && (
+        {viewMode === "table" && loading && !result && <div className="empty-state">Cargando muestras…</div>}
+        {viewMode === "table" && error && (
           <div className="empty-state" role="alert">
             {error}
           </div>
         )}
-        {!loading && !error && result && viewMode === "table" && (
-          <>
+        {!error && result && viewMode === "table" && (
+          <div aria-busy={loading} style={loading ? { opacity: 0.6 } : undefined}>
             <SamplesTable
               samples={result.items}
               ownerLookup={ownerLookup}
@@ -243,7 +253,7 @@ export default function App() {
               total={result.total}
               onPageChange={(page) => setFilters((current) => ({ ...current, page }))}
             />
-          </>
+          </div>
         )}
         {viewMode === "3d" && (
           <FreezerViewer
@@ -274,7 +284,7 @@ export default function App() {
           onClose={closeMovementForm}
           onSubmitted={() => {
             api.listUsers().then(setUsers).catch(() => undefined);
-            setFilters((current) => ({ ...current }));
+            setReloadToken((token) => token + 1);
             setFreezerKey((key) => key + 1);
           }}
         />

@@ -71,6 +71,8 @@ async function fillRequiredFreezeFields(user: ReturnType<typeof userEvent.setup>
   await user.type(screen.getByLabelText(/id environ/i), "BP001");
   await user.selectOptions(screen.getByLabelText(/^tipo$/i), "vial_celulas");
   await user.selectOptions(screen.getByLabelText(/operador/i), "GC");
+  // Campo 9 de docs/FORMULARIO.md: obligatorio. El rack A vive en la sección I.
+  await user.selectOptions(screen.getByLabelText(/sección/i), "I");
   await user.type(screen.getByLabelText(/nombre caja/i), "A1");
   await user.selectOptions(screen.getByLabelText(/núcleo environ/i), "true");
   await user.selectOptions(screen.getByLabelText(/caja está llena/i), "false");
@@ -269,4 +271,39 @@ describe("MovementForm", () => {
     expect(screen.getByLabelText(/nombre caja/i)).toHaveValue("A1");
     await waitFor(() => expect(screen.getByRole("button", { name: /^posición 1a,/i })).toHaveAttribute("aria-pressed", "true"));
   });
+
+  it("exige Sección antes de enviar", async () => {
+    const user = userEvent.setup();
+    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/id environ/i), "BP001");
+    await user.selectOptions(screen.getByLabelText(/^tipo$/i), "vial_celulas");
+    await user.selectOptions(screen.getByLabelText(/operador/i), "GC");
+    await user.type(screen.getByLabelText(/nombre caja/i), "A1");
+    await user.selectOptions(screen.getByLabelText(/núcleo environ/i), "true");
+    await user.selectOptions(screen.getByLabelText(/caja está llena/i), "false");
+
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    expect(await screen.findByText(/la sección es obligatoria/i)).toBeInTheDocument();
+    expect(api.createMovement).not.toHaveBeenCalled();
+  });
+
+  it("la grilla marca el núcleo y trae leyenda", async () => {
+    api.listBoxes.mockResolvedValue([{ id: 5, rack_id: 1, number: 1, box_type: "carton_81", label: null, owner_id: null, is_full: null }]);
+    api.getBoxPositions.mockResolvedValue([
+      { position: "1A", occupied: true, sample_id: 9, environ_id: "BP009", is_core: true },
+    ]);
+    const user = userEvent.setup();
+    render(<MovementForm users={users} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/nombre caja/i), "A1");
+    await waitFor(() => expect(api.getBoxPositions).toHaveBeenCalled());
+
+    // Regla no negociable: el warning de Núcleo es visible en TODAS las vistas.
+    const core = await screen.findByRole("button", { name: /^posición 1a, ocupada, núcleo$/i });
+    expect(core).toHaveClass("position-cell--core");
+    expect(screen.getByText(/ocupada/)).toBeInTheDocument();
+  });
 });
+
