@@ -260,6 +260,7 @@ export default function App() {
             onMyInitialsChange={setMyInitials}
             myFilterActive={myFilterActive}
             onToggleMyFilter={toggleMyFilter}
+            total={result?.total ?? 0}
           />
         )}
 

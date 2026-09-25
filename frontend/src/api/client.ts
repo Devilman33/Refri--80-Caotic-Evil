@@ -112,6 +112,24 @@ export const api = {
   listBoxOccupancy(): Promise<BoxOccupancy[]> {
     return request(`/occupancy/boxes`);
   },
+  /** Descarga el CSV de la búsqueda.
+   *
+   * Va por `fetch` y NO navegando a la URL: `request()` siempre hace `res.json()`, y una
+   * navegación entregaría el 422 del tope como un archivo `.csv` con un JSON adentro. Acá
+   * se ramifica sobre `res.ok` ANTES de tocar el cuerpo, así el error llega como ApiError
+   * y la UI lo muestra donde corresponde.
+   */
+  async downloadSamplesCsv(filters: SampleSearchFilters): Promise<{ blob: Blob; filename: string }> {
+    const res = await fetch(`${API_URL}/samples/export${buildQuery(filters)}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      const detail = body?.detail;
+      throw new ApiError(res.status, typeof detail === "string" ? detail : res.statusText, detail);
+    }
+    const disposition = res.headers.get("content-disposition") ?? "";
+    const match = /filename="?([^"]+)"?/.exec(disposition);
+    return { blob: await res.blob(), filename: match?.[1] ?? "muestras.csv" };
+  },
   getAlerts(): Promise<AlertsRead> {
     return request(`/alerts`);
   },

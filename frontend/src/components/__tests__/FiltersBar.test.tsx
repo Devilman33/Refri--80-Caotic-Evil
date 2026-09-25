@@ -1,8 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { api, ApiError } from "../../api/client";
 import type { SampleSearchFilters } from "../../api/types";
 import { FiltersBar } from "../FiltersBar";
+
+vi.mock("../../api/client", async () => {
+  const actual = await vi.importActual<typeof import("../../api/client")>("../../api/client");
+  return { ...actual, api: { ...actual.api, downloadSamplesCsv: vi.fn() } };
+});
 
 function setup(filters: SampleSearchFilters = { page: 1, page_size: 25 }) {
   const onChange = vi.fn();
@@ -16,6 +22,7 @@ function setup(filters: SampleSearchFilters = { page: 1, page_size: 25 }) {
       onMyInitialsChange={onMyInitialsChange}
       myFilterActive={false}
       onToggleMyFilter={onToggleMyFilter}
+      total={42}
     />,
   );
   return { onChange, onMyInitialsChange, onToggleMyFilter };
@@ -79,6 +86,7 @@ describe("FiltersBar", () => {
         onMyInitialsChange={vi.fn()}
         myFilterActive={false}
         onToggleMyFilter={onToggleMyFilter}
+        total={42}
       />,
     );
     const user = userEvent.setup();
@@ -97,4 +105,65 @@ describe("FiltersBar", () => {
 
     expect(onChange).toHaveBeenCalledWith({ page: 1, page_size: 25 });
   });
+
+  it("el botón de export muestra el total y se deshabilita sin resultados", () => {
+    const { rerender } = render(
+      <FiltersBar
+        filters={{ page: 1, page_size: 25 }}
+        onChange={vi.fn()}
+        myInitials=""
+        onMyInitialsChange={vi.fn()}
+        myFilterActive={false}
+        onToggleMyFilter={vi.fn()}
+        total={1284}
+      />,
+    );
+
+    // El conteo va en el botón para saber cuánto se baja ANTES de hacer clic.
+    expect(screen.getByRole("button", { name: /exportar csv \(1\.284\)/i })).toBeEnabled();
+
+    rerender(
+      <FiltersBar
+        filters={{ page: 1, page_size: 25 }}
+        onChange={vi.fn()}
+        myInitials=""
+        onMyInitialsChange={vi.fn()}
+        myFilterActive={false}
+        onToggleMyFilter={vi.fn()}
+        total={0}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /exportar csv \(0\)/i })).toBeDisabled();
+  });
+
+  it("el export pide todos los resultados del filtro, no la página visible", async () => {
+    const download = vi.spyOn(api, "downloadSamplesCsv").mockResolvedValue({
+      blob: new Blob(["x"], { type: "text/csv" }),
+      filename: "muestras.csv",
+    });
+    globalThis.URL.createObjectURL = vi.fn(() => "blob:x");
+    globalThis.URL.revokeObjectURL = vi.fn();
+
+    setup({ page: 3, page_size: 25, section_code: "II", sort_by: "location" });
+    await userEvent.click(screen.getByRole("button", { name: /exportar csv/i }));
+
+    await waitFor(() => expect(download).toHaveBeenCalledTimes(1));
+    const sent = download.mock.calls[0][0];
+    expect(sent).toEqual({ section_code: "II" });
+    expect(sent).not.toHaveProperty("page");
+    expect(sent).not.toHaveProperty("page_size");
+  });
+
+  it("un error del export se muestra inline y no borra la tabla", async () => {
+    vi.spyOn(api, "downloadSamplesCsv").mockRejectedValue(
+      new ApiError(422, "La búsqueda devuelve 30000 filas y el máximo exportable es 25000."),
+    );
+
+    setup();
+    await userEvent.click(screen.getByRole("button", { name: /exportar csv/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/máximo exportable/i);
+  });
 });
+

@@ -1,18 +1,37 @@
-from datetime import date
-
-from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import select
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 from app.api.deps import DbSession, get_or_404
+from app.config import get_settings
 from app.importer.cleaning import parse_posicion
 from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus, SampleType, Section, User
 from app.schemas.common import Page
 from app.schemas.movement import MovementRead
-from app.schemas.sample import SampleCreate, SampleRead, SampleUpdate, SampleWithLocation, check_type_other
+from app.schemas.sample import (
+    SampleCreate,
+    SampleRead,
+    SampleUpdate,
+    SampleWithLocation,
+    check_type_other,
+)
+from app.services import csv_export
 from app.services.location import sample_with_location
+from app.services.search import SampleFiltersDep, build_sample_query
 from app.services.users import NUCLEO_INITIALS, get_or_create_user
+
+_TYPE_LABELS = {
+    "vial_celulas": "Vial de Células",
+    "rna": "RNA",
+    "rna_later": "RNA later",
+    "proteinas": "Proteínas",
+    "medio_condicionado": "Medio Condicionado",
+    "reactivo": "Reactivo",
+    "plasma": "Plasma",
+    "otros": "Otros",
+}
+
+_STATUS_LABELS = {"active": "Activa", "withdrawn": "Retirada"}
 
 router = APIRouter(prefix="/samples", tags=["muestras"])
 
@@ -115,59 +134,19 @@ def list_samples(
 @router.get("/search", response_model=Page[SampleWithLocation])
 def search_samples(
     db: DbSession,
-    environ_id: str | None = None,
-    description: str | None = None,
-    owner_initials: str | None = None,
-    sample_type: SampleType | None = Query(default=None, alias="type"),
-    is_core: bool | None = None,
-    passage: int | None = None,
-    status_: SampleStatus | None = Query(default=None, alias="status"),
-    date_from: date | None = None,
-    date_to: date | None = None,
-    section_code: str | None = None,
-    rack_letter: str | None = None,
-    box_number: int | None = None,
+    filters: SampleFiltersDep,
     sort_by: str | None = Query(default=None),
     sort_dir: str = Query(default="asc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
 ) -> Page[SampleWithLocation]:
-    """Búsqueda con filtros combinables; cada resultado trae su ubicación legible."""
-    query = (
-        db.query(Sample)
-        .join(Box, Sample.box_id == Box.id)
-        .join(Rack, Box.rack_id == Rack.id)
-        .join(Section, Rack.section_id == Section.id)
-        .join(User, Sample.owner_id == User.id)
-        .options(_LOCATION_LOAD)
-    )
-    if environ_id:
-        query = query.filter(Sample.environ_id.ilike(f"%{environ_id}%"))
-    if description:
-        query = query.filter(Sample.description.ilike(f"%{description}%"))
-    if owner_initials:
-        query = query.filter(User.initials == owner_initials.strip().upper())
-    if sample_type is not None:
-        query = query.filter(Sample.type == sample_type.value)
-    if is_core is not None:
-        query = query.filter(Sample.is_core == is_core)
-    if passage is not None:
-        query = query.filter(Sample.passage == passage)
-    if status_ is not None:
-        query = query.filter(Sample.status == status_.value)
-    if section_code:
-        query = query.filter(Section.code == section_code.strip().upper())
-    if rack_letter:
-        query = query.filter(Rack.letter == rack_letter.strip().upper())
-    if box_number is not None:
-        query = query.filter(Box.number == box_number)
-    if date_from or date_to:
-        freeze_dates = select(Movement.sample_id).where(Movement.action == MovementAction.FREEZE.value)
-        if date_from:
-            freeze_dates = freeze_dates.where(Movement.date >= date_from)
-        if date_to:
-            freeze_dates = freeze_dates.where(Movement.date <= date_to)
-        query = query.filter(Sample.id.in_(freeze_dates))
+    """Búsqueda con filtros combinables; cada resultado trae su ubicación legible.
+
+    Los filtros viven en `services/search.py` y los comparte con el export: si se
+    declararan dos veces, olvidarse de un alias haría que un filtro afectara a uno y no al
+    otro, con un 200 y un CSV plausible.
+    """
+    query = build_sample_query(db, filters).options(_LOCATION_LOAD)
 
     total = query.count()
     if sort_by is not None:
@@ -181,6 +160,66 @@ def search_samples(
     samples = query.offset((page - 1) * page_size).limit(page_size).all()
     items = [sample_with_location(sample) for sample in samples]
     return Page[SampleWithLocation](items=items, total=total, page=page, page_size=page_size)
+
+
+# IMPORTANTE: esta ruta va ANTES de `/{sample_id}`. FastAPI resuelve por orden de
+# declaración, así que si estuviera después, `/samples/export` entraría por la ruta del id
+# e intentaría parsear "export" como entero: 422, y ningún test que llame a la función
+# directamente lo detectaría.
+@router.get("/export", response_class=Response)
+def export_samples(db: DbSession, filters: SampleFiltersDep) -> Response:
+    """El resultado de una búsqueda como CSV, con los mismos filtros que `/search`.
+
+    Devuelve `text/csv` y el nombre del archivo en `Content-Disposition`; por eso la ruta no
+    lleva extensión, a diferencia del resto de la API.
+    """
+    query = build_sample_query(db, filters)
+    total = query.count()
+    limit = get_settings().export_max_rows
+    if total > limit:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"La búsqueda devuelve {total} filas y el máximo exportable es {limit}. "
+            "Filtrá por sección, rack o encargado para achicarla.",
+        )
+
+    # Consulta de columnas, no de entidades: el CSV solo necesita texto, y traer modelos
+    # completos costaría dos validaciones de Pydantic por fila para tirarlas enseguida.
+    rows = (
+        query.with_entities(
+            Sample.environ_id,
+            Sample.description,
+            Sample.type,
+            Sample.type_other,
+            User.initials,
+            Sample.passage,
+            Sample.is_core,
+            Sample.status,
+            Section.code,
+            Rack.letter,
+            Box.number,
+            Sample.position,
+            Sample.created_at,
+        )
+        .order_by(Section.code, Rack.letter, Box.number, Sample.position)
+        .all()
+    )
+
+    body = csv_export.build_csv(rows, _TYPE_LABELS, _STATUS_LABELS)
+    filename = csv_export.export_filename(
+        {
+            "owner_initials": filters.owner_initials,
+            "section_code": filters.section_code,
+            "rack_letter": filters.rack_letter,
+            "status": filters.status_.value if filters.status_ else None,
+            "type": filters.sample_type.value if filters.sample_type else None,
+        }
+    )
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{sample_id}", response_model=SampleWithLocation)
