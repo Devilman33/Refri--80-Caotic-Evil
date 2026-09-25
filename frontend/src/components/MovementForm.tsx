@@ -296,7 +296,13 @@ export function MovementForm({ users, onClose, onSubmitted }: MovementFormProps)
         updatedOccupied.add(form.position);
         setBoxPositions((current) => [
           ...current.filter((entry) => entry.position !== form.position),
-          { position: form.position, occupied: true, sample_id: result.sample.id, environ_id: result.sample.environ_id },
+          {
+            position: form.position,
+            occupied: true,
+            sample_id: result.sample.id,
+            environ_id: result.sample.environ_id,
+            is_core: result.sample.is_core,
+          },
         ]);
         const next = nextFreePosition(form.boxType, updatedOccupied);
         setForm((current) => ({ ...current, position: next ?? "" }));
