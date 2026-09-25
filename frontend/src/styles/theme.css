@@ -2079,3 +2079,22 @@ h2[tabindex="-1"]:focus,
 h3[tabindex="-1"]:focus {
   outline: none;
 }
+
+/* F1: lo que se congeló desde que se abrió el formulario. */
+.freeze-batch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--chip);
+  font-size: 13px;
+}
+
+.freeze-batch span {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}

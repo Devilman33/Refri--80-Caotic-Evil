@@ -163,7 +163,7 @@ describe("FreezeForm", () => {
 
     await fillRequiredFreezeFields(user);
     await user.selectOptions(screen.getByLabelText(/encargados de la muestra/i), "DB");
-    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    await user.click(screen.getByRole("button", { name: /guardar y cerrar/i }));
 
     await waitFor(() =>
       expect(api.createMovement).toHaveBeenCalledWith(
@@ -190,7 +190,7 @@ describe("FreezeForm", () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    await user.click(screen.getByRole("button", { name: /guardar y cerrar/i }));
 
     expect(api.createMovement).not.toHaveBeenCalled();
     expect(screen.getByText(/id environ es obligatorio/i)).toBeInTheDocument();
@@ -202,7 +202,7 @@ describe("FreezeForm", () => {
     renderForm();
 
     await user.click(screen.getByRole("button", { name: /quitar a guillermo/i }));
-    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    await user.click(screen.getByRole("button", { name: /guardar y cerrar/i }));
 
     expect(screen.getByText(/al menos un encargado/i)).toBeInTheDocument();
     expect(api.createMovement).not.toHaveBeenCalled();
@@ -245,7 +245,7 @@ describe("FreezeForm", () => {
     expect(screen.getByLabelText(/nombre caja/i)).toHaveValue("A1");
   });
 
-  it('"Guardar y agregar otra del mismo set" conserva los datos y avanza a la siguiente posición libre', async () => {
+  it('"Guardar y siguiente" conserva los datos del set y avanza a la siguiente posición libre', async () => {
     api.createMovement.mockResolvedValue(baseMovementResult());
     const onSubmitted = vi.fn();
     const onClose = vi.fn();
@@ -254,7 +254,7 @@ describe("FreezeForm", () => {
 
     await fillRequiredFreezeFields(user);
 
-    await user.click(screen.getByRole("button", { name: /agregar otra del mismo set/i }));
+    await user.click(screen.getByRole("button", { name: /guardar y siguiente/i }));
 
     await waitFor(() => expect(api.createMovement).toHaveBeenCalledTimes(1));
     expect(api.createMovement).toHaveBeenCalledWith(expect.objectContaining({ position: "1A", environ_id: "BP001" }));
@@ -264,7 +264,7 @@ describe("FreezeForm", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /^posición 1b,/i })).toHaveAttribute("aria-pressed", "true"));
     expect(screen.getByLabelText(/id environ/i)).toHaveValue("BP001");
 
-    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    await user.click(screen.getByRole("button", { name: /guardar y cerrar/i }));
     await waitFor(() => expect(api.createMovement).toHaveBeenCalledTimes(2));
     expect(api.createMovement).toHaveBeenLastCalledWith(expect.objectContaining({ position: "1B", environ_id: "BP001" }));
   });
@@ -280,7 +280,7 @@ describe("FreezeForm", () => {
     renderForm();
 
     await fillRequiredFreezeFields(user);
-    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    await user.click(screen.getByRole("button", { name: /guardar y cerrar/i }));
 
     const useSuggested = await screen.findByRole("button", { name: /usar siguiente libre \(1b\)/i });
 
@@ -315,3 +315,66 @@ describe("FreezeForm", () => {
   });
 });
 
+
+describe("FreezeForm · tanda del mismo set (F1)", () => {
+  it("Enter guarda y sigue: tres muestras solo con teclado, con la lista de la tanda y el foco de vuelta en ID", async () => {
+    api.createMovement.mockResolvedValue(baseMovementResult());
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderForm({ onClose });
+    await fillRequiredFreezeFields(user);
+
+    const environId = screen.getByLabelText(/id environ/i);
+    await user.click(environId);
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(environId).toHaveFocus());
+    await user.keyboard("BP002{Enter}");
+    await waitFor(() => expect(api.createMovement).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(environId).toHaveFocus());
+    await user.keyboard("BP003{Enter}");
+    await waitFor(() => expect(api.createMovement).toHaveBeenCalledTimes(3));
+
+    expect(api.createMovement).toHaveBeenNthCalledWith(2, expect.objectContaining({ position: "1B", environ_id: "BP002" }));
+    expect(api.createMovement).toHaveBeenNthCalledWith(3, expect.objectContaining({ position: "1C", environ_id: "BP003" }));
+    expect(screen.getByText(/en esta tanda: 3/i).parentElement).toHaveTextContent("1A 1B 1C");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("al terminar deja el resumen de la tanda", async () => {
+    api.createMovement.mockResolvedValue(baseMovementResult());
+    const onFinished = vi.fn();
+    const user = userEvent.setup();
+    renderForm({ onFinished });
+    await fillRequiredFreezeFields(user);
+
+    await user.click(screen.getByRole("button", { name: /guardar y siguiente/i }));
+    await waitFor(() => expect(api.createMovement).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("button", { name: /guardar y siguiente/i }));
+    await waitFor(() => expect(api.createMovement).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole("button", { name: /terminar/i }));
+
+    expect(onFinished).toHaveBeenCalledWith("2 muestras congeladas en I · A1 (1A, 1B).");
+  });
+
+  it("si la caja se llena a mitad de tanda lo dice y lleva el foco a Nombre Caja, sin saltar de caja", async () => {
+    const allButLast = Array.from({ length: 9 }, (_, c) => "ABCDEFGHI".split("").map((r) => `${c + 1}${r}`))
+      .flat()
+      .filter((position) => position !== "9I")
+      .map((position) => ({ position, occupied: true, sample_id: 1, environ_id: "X", is_core: false, owners: [] }));
+    api.listBoxes.mockResolvedValue([{ id: 7, rack_id: 1, number: 1, box_type: "carton_81" }]);
+    api.getBoxPositions.mockResolvedValue(allButLast);
+    api.createMovement.mockResolvedValue(baseMovementResult());
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText(/id environ/i), "BP001");
+    await user.selectOptions(screen.getByLabelText(/^tipo$/i), "vial_celulas");
+    await user.type(screen.getByLabelText(/nombre caja/i), "A1");
+    await user.selectOptions(screen.getByLabelText(/núcleo environ/i), "true");
+    await user.click(await screen.findByRole("button", { name: /^posición 9i,/i }));
+    await user.click(screen.getByRole("button", { name: /guardar y siguiente/i }));
+
+    expect(await screen.findByText(/la caja A1 está llena: elige otra caja/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/nombre caja/i)).toHaveFocus());
+  });
+});

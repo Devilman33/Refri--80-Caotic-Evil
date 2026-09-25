@@ -614,6 +614,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
             onUsersChanged();
             refreshInventory();
           }}
+          onFinished={setNotice}
         />
       )}
 

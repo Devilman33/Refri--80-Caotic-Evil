@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
 import {
   SAMPLE_TYPE_LABELS,
@@ -72,6 +72,8 @@ export interface FreezeFormProps {
   initial?: LocationPrefill;
   onClose: () => void;
   onSubmitted: (result: MovementResult) => void;
+  /** Al cerrar después de guardar al menos una: el resumen de la tanda para el aviso. */
+  onFinished?: (summary: string) => void;
 }
 
 /**
@@ -79,7 +81,7 @@ export interface FreezeFormProps {
  * desviaciones acordadas de docs/FORMULARIO.md. El descongelamiento es `ThawForm`, a
  * propósito un formulario aparte: compartían pantalla y se confundían.
  */
-export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitted }: FreezeFormProps) {
+export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitted, onFinished }: FreezeFormProps) {
   const [form, setForm] = useState<FormState>(() => emptyForm(sessionInitials, initial));
   const [racks, setRacks] = useState<RackRead[]>([]);
   const [sections, setSections] = useState<SectionRead[]>([]);
@@ -90,6 +92,10 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
   const [conflict, setConflict] = useState<PositionConflict | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Muestras guardadas desde que se abrió el formulario (docs/PLAN_FRONTEND.md, F1).
+  const [batch, setBatch] = useState<{ location: string; position: string }[]>([]);
+  const environIdRef = useRef<HTMLInputElement | null>(null);
+  const boxNameRef = useRef<HTMLInputElement | null>(null);
 
   const occupied = useMemo(
     () => new Set(boxPositions.filter((entry) => entry.occupied).map((entry) => entry.position)),
@@ -250,6 +256,20 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
     };
   }
 
+  /** Cerrar por cualquier vía (botón, Esc, fondo): si hubo guardados, deja el resumen. */
+  function close() {
+    if (batch.length > 0 && onFinished) {
+      const boxes = [...new Set(batch.map((entry) => entry.location))].join(", ");
+      const positions = batch.map((entry) => entry.position).join(", ");
+      onFinished(
+        batch.length === 1
+          ? `Muestra congelada en ${boxes} · ${positions}.`
+          : `${batch.length} muestras congeladas en ${boxes} (${positions}).`,
+      );
+    }
+    onClose();
+  }
+
   async function submit(sameSet: boolean) {
     const errors = validate();
     setFieldErrors(errors);
@@ -263,6 +283,8 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
       const payload = buildPayload();
       const result = await api.createMovement(payload);
       onSubmitted(result);
+      const saved = { location: `${sectionCode ?? "?"} · ${form.boxName.trim().toUpperCase()}`, position: form.position };
+      setBatch((current) => [...current, saved]);
 
       if (sameSet) {
         const updatedOccupied = new Set(occupied);
@@ -280,11 +302,21 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
         ]);
         const next = nextFreePosition(form.boxType, updatedOccupied);
         setForm((current) => ({ ...current, position: next ?? "" }));
-        setNotice(
-          next ? `Muestra guardada. Siguiente posición libre: ${next}.` : "Muestra guardada. No quedan posiciones libres en esta caja.",
-        );
+        if (next) {
+          setNotice(`Muestra guardada en ${form.position}. Siguiente posición libre: ${next}.`);
+          // Lo siguiente que cambia en un set es el ID: foco ahí, con el texto listo para
+          // sobrescribir. Así una tanda se hace solo con teclado.
+          window.setTimeout(() => {
+            environIdRef.current?.focus();
+            environIdRef.current?.select();
+          }, 0);
+        } else {
+          // No se salta de caja solo: elegir otra caja es una decisión de quien congela.
+          setNotice(`Muestra guardada en ${form.position}. La caja ${form.boxName.trim().toUpperCase()} está llena: elige otra caja para seguir.`);
+          window.setTimeout(() => boxNameRef.current?.focus(), 0);
+        }
       } else {
-        onClose();
+        close();
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 409 && err.detail && typeof err.detail === "object") {
@@ -300,12 +332,12 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
   }
 
   return (
-    <Modal titleId="mf-title" onClose={onClose} wide>
+    <Modal titleId="mf-title" onClose={close} wide>
         <div className="modal-header">
           <h2 id="mf-title" tabIndex={-1}>
             <span className="movement-kind movement-kind--freeze">Congelamiento</span> Ingresar muestra
           </h2>
-          <button className="btn-ghost" onClick={onClose} aria-label="Cerrar">
+          <button className="btn-ghost" onClick={close} aria-label="Cerrar">
             Cerrar
           </button>
         </div>
@@ -314,7 +346,9 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
           className="movement-form"
           onSubmit={(event) => {
             event.preventDefault();
-            void submit(false);
+            // Enter = guardar y seguir con la siguiente del set: la mayoría de los ingresos
+            // son tandas (docs/PLAN_FRONTEND.md, F1). Cerrar es la acción secundaria.
+            void submit(true);
           }}
         >
           <div className="field">
@@ -332,6 +366,7 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
             <label htmlFor="mf-environ-id">ID Environ</label>
             <input
               id="mf-environ-id"
+              ref={environIdRef}
               value={form.environId}
               onChange={(event) => set("environId", event.target.value)}
               placeholder="p. ej. BP1234"
@@ -405,6 +440,7 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
             <label htmlFor="mf-box-name">Nombre Caja (Letra rack y N° de caja)</label>
             <input
               id="mf-box-name"
+              ref={boxNameRef}
               value={form.boxName}
               onChange={(event) => set("boxName", event.target.value)}
               placeholder="p. ej. A12"
@@ -520,15 +556,22 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
             </p>
           )}
 
+          {batch.length > 0 && (
+            <p className="freeze-batch field--full" aria-live="polite">
+              <strong>En esta tanda: {batch.length}</strong>
+              <span>{batch.map((entry) => entry.position).join(" ")}</span>
+            </p>
+          )}
+
           <div className="form-actions field--full">
-            <button type="button" className="btn-ghost" onClick={onClose} disabled={submitting}>
-              Cancelar
+            <button type="button" className="btn-ghost" onClick={close} disabled={submitting}>
+              {batch.length > 0 ? "Terminar" : "Cancelar"}
             </button>
-            <button type="button" className="btn-ghost" disabled={submitting} onClick={() => void submit(true)}>
-              Guardar y agregar otra del mismo set
+            <button type="button" className="btn-ghost" disabled={submitting} onClick={() => void submit(false)}>
+              Guardar y cerrar
             </button>
             <button type="submit" className="btn" disabled={submitting}>
-              Guardar
+              {submitting ? "Guardando…" : "Guardar y siguiente"}
             </button>
           </div>
         </form>
