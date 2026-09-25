@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 from app.api.deps import DbSession, get_or_404
+from app.importer.cleaning import parse_posicion
 from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus, SampleType, Section, User
 from app.schemas.common import Page
 from app.schemas.movement import MovementRead
@@ -23,7 +24,17 @@ def create_sample(payload: SampleCreate, db: DbSession) -> Sample:
     """Alta directa de una muestra: registra además el movimiento de congelamiento
     (igual que `POST /movements`) para no dejar el historial vacío."""
     get_or_404(db, User, payload.owner_id, "Usuario encargado no encontrado")
-    get_or_404(db, Box, payload.box_id, "Caja no encontrada")
+    box = get_or_404(db, Box, payload.box_id, "Caja no encontrada")
+
+    position, inferred_box_type, reason = parse_posicion(payload.position)
+    if reason:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Posición inválida: {reason}")
+    if inferred_box_type != box.box_type:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"La posición '{payload.position}' no es válida para una caja de tipo '{box.box_type}'",
+        )
+
     operator = get_or_create_user(db, payload.operator_initials)
     sample = Sample(
         environ_id=payload.environ_id,
@@ -34,7 +45,7 @@ def create_sample(payload: SampleCreate, db: DbSession) -> Sample:
         passage=payload.passage,
         is_core=payload.is_core,
         box_id=payload.box_id,
-        position=payload.position,
+        position=position,
         notes=payload.notes,
     )
     db.add(sample)
@@ -52,7 +63,7 @@ def create_sample(payload: SampleCreate, db: DbSession) -> Sample:
         date=payload.date,
         operator_id=operator.id,
         box_id=payload.box_id,
-        position=payload.position,
+        position=position,
         note=payload.note,
     )
     db.add(movement)

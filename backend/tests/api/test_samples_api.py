@@ -20,6 +20,31 @@ def test_create_sample_conflicts_on_occupied_position(client, db_session):
     assert response.status_code == 409
 
 
+def test_create_sample_normalizes_carton_position_case(client, db_session):
+    _, _, box = make_freezer(client)
+    owner = create_user(client, initials="GC")
+    created = create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1a")
+    assert created["position"] == "1A"
+
+
+def test_create_sample_rejects_position_for_wrong_box_type(client, db_session):
+    _, _, box = make_freezer(client, box_type="plastic_100")
+    owner = create_user(client, initials="GC")
+
+    response = client.post(
+        "/samples",
+        json={
+            "type": "vial_celulas",
+            "owner_id": owner["id"],
+            "box_id": box["id"],
+            "position": "1A",
+            "operator_initials": "GC",
+            "date": "2026-01-15",
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_get_sample_includes_readable_location(client, db_session):
     _, rack, box = make_freezer(client, section_code="III", rack_letter="F", box_number=12)
     owner = create_user(client, initials="GC")
