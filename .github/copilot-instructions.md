@@ -19,7 +19,8 @@ llama "Caja": de cartón 9×9 (posiciones `1A`…`9I`) o plástica 10×10 (`1`�
   el laboratorio ya usa (mismos campos, orden y opciones). Cada envío es un movimiento.
 - **`docs/DATOS.md`**: estructura del Excel de origen, reglas de limpieza e importador.
   El Excel real **no está en el repo** y nunca debe subirse. Los tests usan un Excel sintético
-  generado por código.
+  generado por código. Ese Excel es **histórico**: los datos actuales llegarán después, así que
+  no ajustes la distribución de racks (`layout.yaml`, provisoria) ni el importador para calzar con él.
 
 ## Reglas de dominio (no negociables)
 

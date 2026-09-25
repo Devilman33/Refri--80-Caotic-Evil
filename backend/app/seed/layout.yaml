@@ -1,6 +1,9 @@
 # Distribución física del freezer: qué rack va en qué sección y en qué posición
 # del estante (centro o derecha), y cuántas subcajas caben en cada uno.
 #
+# PROVISORIA: se confirmará con los datos actuales del laboratorio (el Excel disponible
+# es histórico, ver docs/DATOS.md). No ajustarla a partir del Excel histórico.
+#
 # Editable a mano sin tocar código. El importador (docs/DATOS.md) reporta en vez de
 # crear racks duplicados cuando el Excel trae una sección inconsistente para un rack
 # que ya está acá.
