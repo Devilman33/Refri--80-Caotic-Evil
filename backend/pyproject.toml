@@ -1,0 +1,10 @@
+# Solo declara el intérprete. Las dependencias siguen en requirements.txt /
+# requirements-dev.txt, que es lo que instalan el Dockerfile y la CI.
+[project]
+name = "refri-80-backend"
+version = "0.1.0"
+description = "Inventario del freezer de -80 °C"
+# La CI usa 3.12 y el Dockerfile parte de python:3.12-slim. Sin esta línea nada en el
+# repo decía qué intérprete hace falta, y en 3.11 el código compila igual: la
+# divergencia con la CI aparecía en silencio en vez de fallar.
+requires-python = ">=3.12"

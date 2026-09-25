@@ -363,6 +363,10 @@ def _parse_row(
             Anomaly(row_num, "Fecha de entrada", _raw_str(values.get("Fecha de entrada")), entry_reason)
         )
 
+    passage, passage_reason = parse_pasaje(values.get("Pasaje"))
+    if passage_reason:
+        anomalies.append(Anomaly(row_num, "Pasaje", _raw_str(values.get("Pasaje")), passage_reason))
+
     exit_date, exit_initials, exit_note, exit_reason = parse_fecha_salida(values.get("Fecha de salida"))
     if exit_reason:
         anomalies.append(
@@ -407,7 +411,7 @@ def _parse_row(
         sample_type=sample_type,
         type_other=type_other,
         owner_initials=owner_initials,
-        passage=parse_pasaje(values.get("Pasaje")),
+        passage=passage,
         is_core=is_core,
         rack_letter=rack_letter,
         box_number=box_number,

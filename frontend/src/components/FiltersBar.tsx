@@ -1,4 +1,4 @@
-import type { ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   RACK_LETTERS,
   SAMPLE_TYPE_LABELS,
@@ -39,7 +39,57 @@ export function FiltersBar({
     onChange({ ...filters, [key]: value, page: 1 });
   }
 
-  function handleText(key: keyof SampleSearchFilters) {
+  // Los campos de texto se escriben letra por letra, y cada pulsación disparaba una
+  // búsqueda: escribir "BP" hacía dos requests y la tabla parpadeaba. 300 ms es el mismo
+  // valor que ya usa MovementForm para resolver la caja, así que es el patrón de la casa.
+  // Los selects y las fechas NO se debouncean: son un solo gesto, esperar los haría
+  // sentir rotos.
+  const [text, setText] = useState({
+    environ_id: filters.environ_id ?? "",
+    description: filters.description ?? "",
+    owner_initials: filters.owner_initials ?? "",
+  });
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
+  // Cuando los filtros cambian desde afuera (limpiar, "Mis muestras"), el estado local
+  // tiene que seguirlos o el input mostraría lo viejo.
+  useEffect(() => {
+    setText({
+      environ_id: filters.environ_id ?? "",
+      description: filters.description ?? "",
+      owner_initials: filters.owner_initials ?? "",
+    });
+  }, [filters.environ_id, filters.description, filters.owner_initials]);
+
+  useEffect(() => {
+    const current = filtersRef.current;
+    const changed =
+      (current.environ_id ?? "") !== text.environ_id ||
+      (current.description ?? "") !== text.description ||
+      (current.owner_initials ?? "") !== text.owner_initials;
+    if (!changed) return;
+
+    const timer = setTimeout(() => {
+      onChange({
+        ...filtersRef.current,
+        environ_id: toOptionalString(text.environ_id),
+        description: toOptionalString(text.description),
+        owner_initials: toOptionalString(text.owner_initials),
+        page: 1,
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [text, onChange]);
+
+  function handleText(key: "environ_id" | "description" | "owner_initials") {
+    return (event: ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      setText((current) => ({ ...current, [key]: value }));
+    };
+  }
+
+  function handleDate(key: keyof SampleSearchFilters) {
     return (event: ChangeEvent<HTMLInputElement>) => set(key, toOptionalString(event.target.value) as never);
   }
 
@@ -58,7 +108,7 @@ export function FiltersBar({
           <label htmlFor="filter-environ-id">ID Environ</label>
           <input
             id="filter-environ-id"
-            value={filters.environ_id ?? ""}
+            value={text.environ_id}
             onChange={handleText("environ_id")}
             placeholder="p. ej. BP1234"
           />
@@ -68,7 +118,7 @@ export function FiltersBar({
           <label htmlFor="filter-description">ID Origen / Descripción</label>
           <input
             id="filter-description"
-            value={filters.description ?? ""}
+            value={text.description}
             onChange={handleText("description")}
           />
         </div>
@@ -77,7 +127,7 @@ export function FiltersBar({
           <label htmlFor="filter-owner">Encargado</label>
           <input
             id="filter-owner"
-            value={filters.owner_initials ?? ""}
+            value={text.owner_initials}
             onChange={handleText("owner_initials")}
             placeholder="Iniciales"
           />
@@ -144,7 +194,7 @@ export function FiltersBar({
             id="filter-date-from"
             type="date"
             value={filters.date_from ?? ""}
-            onChange={handleText("date_from")}
+            onChange={handleDate("date_from")}
           />
         </div>
 
@@ -154,7 +204,7 @@ export function FiltersBar({
             id="filter-date-to"
             type="date"
             value={filters.date_to ?? ""}
-            onChange={handleText("date_to")}
+            onChange={handleDate("date_to")}
           />
         </div>
 

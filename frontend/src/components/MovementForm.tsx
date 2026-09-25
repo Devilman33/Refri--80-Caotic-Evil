@@ -18,11 +18,19 @@ import {
   type UserRead,
 } from "../api/types";
 import { nextFreePosition, parseBoxName } from "../utils/positions";
+import { Modal } from "./Modal";
 import { PositionPicker } from "./PositionPicker";
 
 const LAST_OPERATOR_KEY = "refri:ultimo-operador";
 const SAMPLE_TYPE_OPTIONS = Object.entries(SAMPLE_TYPE_LABELS) as [SampleType, string][];
-const ACTION_OPTIONS = Object.entries(MOVEMENT_ACTION_LABELS) as [MovementAction, string][];
+// Literal a propósito, NO derivado de MOVEMENT_ACTION_LABELS. Ese mapa tiene que crecer
+// con cada acción nueva para que el historial la sepa renderizar, pero este formulario
+// solo sabe registrar congelamientos y descongelamientos: derivarlo de ahí hacía aparecer
+// en el desplegable acciones que este endpoint no implementa.
+const ACTION_OPTIONS: [MovementAction, string][] = [
+  ["freeze", MOVEMENT_ACTION_LABELS.freeze],
+  ["thaw", MOVEMENT_ACTION_LABELS.thaw],
+];
 
 function todayIso(): string {
   const now = new Date();
@@ -118,6 +126,12 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
   );
   const occupantLabels = useMemo(
     () => new Map(boxPositions.filter((entry) => entry.occupied).map((entry) => [entry.position, entry.environ_id])),
+    [boxPositions],
+  );
+  // `is_core` ya venía en la respuesta de /boxes/{id}/positions y se descartaba, así que la
+  // grilla del formulario era la única vista sin el warning de Núcleo (regla no negociable).
+  const corePositions = useMemo(
+    () => new Set(boxPositions.filter((entry) => entry.occupied && entry.is_core).map((entry) => entry.position)),
     [boxPositions],
   );
 
@@ -228,6 +242,11 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
     const errors: Record<string, string> = {};
     if (!form.date) errors.date = "La fecha es obligatoria";
     if (!form.operatorInitials.trim()) errors.operatorInitials = "El operador es obligatorio";
+
+    // Campo 9 de docs/FORMULARIO.md: Sección es obligatoria. Antes solo se validaba la
+    // coherencia con el rack *si* ya habías elegido una, así que se podía enviar sin sección
+    // y el formulario dejaba de ser idéntico al Google Form.
+    if (!form.sectionCode) errors.sectionCode = "La sección es obligatoria";
 
     const parsedBox = parseBoxName(form.boxName);
     if (!form.boxName.trim()) {
@@ -340,16 +359,9 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
   const thawTarget = form.action === "thaw" && form.position ? occupantLabels.get(form.position) : undefined;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal modal--wide"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="mf-title"
-        onClick={(event) => event.stopPropagation()}
-      >
+    <Modal titleId="mf-title" onClose={onClose} wide>
         <div className="modal-header">
-          <h2 id="mf-title">Nuevo movimiento</h2>
+          <h2 id="mf-title" tabIndex={-1}>Nuevo movimiento</h2>
           <button className="btn-ghost" onClick={onClose} aria-label="Cerrar">
             Cerrar
           </button>
@@ -540,6 +552,7 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
               boxType={form.boxType}
               occupied={occupied}
               occupantLabels={occupantLabels}
+              corePositions={corePositions}
               value={form.position || null}
               onChange={(position) => set("position", position)}
               selectMode={form.action === "thaw" ? "occupied" : "free"}
@@ -642,7 +655,6 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

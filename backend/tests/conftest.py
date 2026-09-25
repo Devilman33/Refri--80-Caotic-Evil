@@ -13,7 +13,6 @@ from sqlalchemy import create_engine, make_url, text
 from sqlalchemy.orm import sessionmaker
 
 BACKEND_DIR = pathlib.Path(__file__).resolve().parent.parent
-DATABASE_URL = os.environ["DATABASE_URL"]
 
 _TABLES = "movements, samples, boxes, racks, sections, users"
 
@@ -22,6 +21,36 @@ _TABLES = "movements, samples, boxes, racks, sections, users"
 # "latest-test"; exigimos el nombre exacto (o el opt-in explícito de abajo)
 # porque este fixture borra el schema "public" completo.
 _TEST_DATABASE_NAME = "refri_test"
+
+
+def _require_database_url() -> str:
+    """El error mas probable de la primera corrida es olvidar la variable.
+
+    Antes esto era `os.environ["DATABASE_URL"]` a nivel de modulo, asi que
+    `pytest` moria con un `KeyError: 'DATABASE_URL'` pelado durante la coleccion: sin
+    decir que variable, con que valor ni como crear la base. Unas lineas mas abajo vive
+    el mejor mensaje de error del repo (`_check_is_test_database`); este ahora esta a
+    su altura.
+    """
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        return url
+    raise RuntimeError(
+        "Falta la variable de entorno DATABASE_URL.\n"
+        f"  Los tests corren contra un Postgres real y usan la base '{_TEST_DATABASE_NAME}',\n"
+        "  que borran y recrean entera.\n"
+        "  Crearla una sola vez:\n"
+        "    docker compose exec db createdb -U refri refri_test\n"
+        "  Y despues, desde backend/:\n"
+        "    POSIX:      DATABASE_URL=postgresql+psycopg://refri:refri@localhost:5432/refri_test pytest\n"
+        "    PowerShell: $env:DATABASE_URL=\"postgresql+psycopg://refri:refri@localhost:5432/refri_test\"; pytest\n"
+        "  Ojo: conftest lee la VARIABLE DE ENTORNO, no el .env del backend."
+    )
+
+
+DATABASE_URL = _require_database_url()
+
+
 
 
 def _check_is_test_database(database_url: str) -> None:

@@ -6,6 +6,11 @@ export interface PositionPickerProps {
   occupied: ReadonlySet<string>;
   /** ID Environ de la muestra activa en cada posición ocupada, para el modo "occupied". */
   occupantLabels?: ReadonlyMap<string, string | null>;
+  /** Posiciones cuya muestra activa es del Núcleo Environ. La regla de dominio exige el
+   * warning "visible en todas las vistas" (.github/copilot-instructions.md), y esta grilla
+   * era la única que no lo mostraba: el dato ya venía en `BoxPositionStatus.is_core` y se
+   * descartaba. */
+  corePositions?: ReadonlySet<string>;
   value: string | null;
   onChange: (position: string) => void;
   disabled?: boolean;
@@ -22,6 +27,7 @@ function Cell({
   position,
   label,
   occupied,
+  isCore,
   selected,
   disabled,
   title,
@@ -30,6 +36,7 @@ function Cell({
   position: string;
   label: string;
   occupied: boolean;
+  isCore: boolean;
   selected: boolean;
   disabled: boolean;
   title?: string;
@@ -39,8 +46,8 @@ function Cell({
   return (
     <button
       type="button"
-      className={`position-cell position-cell--${state}${selected ? " position-cell--selected" : ""}`}
-      aria-label={`Posición ${position}${occupied ? ", ocupada" : ", libre"}`}
+      className={`position-cell position-cell--${state}${isCore ? " position-cell--core" : ""}${selected ? " position-cell--selected" : ""}`}
+      aria-label={`Posición ${position}${occupied ? ", ocupada" : ", libre"}${isCore ? ", núcleo" : ""}`}
       aria-pressed={selected}
       title={title}
       disabled={disabled}
@@ -51,10 +58,29 @@ function Cell({
   );
 }
 
+/** Leyenda de la grilla: es la superficie donde la convención rojo/verde se enseña.
+ * El visor 3D ya tenía una (`.bv-legend`); el formulario no. */
+function Legend() {
+  return (
+    <div className="position-cell-legend">
+      <span>
+        <i className="legend-occupied" /> ocupada
+      </span>
+      <span>
+        <i className="legend-free" /> libre
+      </span>
+      <span>
+        <i className="legend-core" /> núcleo
+      </span>
+    </div>
+  );
+}
+
 export function PositionPicker({
   boxType,
   occupied,
   occupantLabels,
+  corePositions,
   value,
   onChange,
   disabled,
@@ -75,6 +101,7 @@ export function PositionPicker({
 
   if (boxType === "carton_81") {
     return (
+      <>
       <div
         className="position-grid position-grid--carton"
         role="group"
@@ -90,6 +117,7 @@ export function PositionPicker({
                 position={position}
                 label={position}
                 occupied={isOccupied}
+                isCore={corePositions?.has(position) ?? false}
                 selected={value === position}
                 disabled={isDisabled(isOccupied)}
                 title={titleFor(position, isOccupied)}
@@ -99,10 +127,13 @@ export function PositionPicker({
           }),
         )}
       </div>
+      <Legend />
+      </>
     );
   }
 
   return (
+    <>
     <div
       className="position-grid position-grid--plastic"
       role="group"
@@ -116,6 +147,7 @@ export function PositionPicker({
             position={position}
             label={position}
             occupied={isOccupied}
+            isCore={corePositions?.has(position) ?? false}
             selected={value === position}
             disabled={isDisabled(isOccupied)}
             title={titleFor(position, isOccupied)}
@@ -124,5 +156,7 @@ export function PositionPicker({
         );
       })}
     </div>
+    <Legend />
+    </>
   );
 }

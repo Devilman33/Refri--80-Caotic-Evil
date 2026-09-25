@@ -19,8 +19,11 @@ class Rack(Base):
 
     __tablename__ = "racks"
     __table_args__ = (
-        UniqueConstraint("section_id", "slot", name="uq_racks_section_slot"),
+        # DEFERRABLE para que el seed pueda permutar slots dentro de su transacción
+        # (ver migración 0003). INITIALLY IMMEDIATE: la API sigue fallando en el instante.
+        UniqueConstraint("section_id", "slot", name="uq_racks_section_slot", deferrable=True, initially="IMMEDIATE"),
         CheckConstraint("slot in ('center', 'right')", name="ck_racks_slot"),
+        CheckConstraint("letter in ('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H')", name="ck_racks_letter"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

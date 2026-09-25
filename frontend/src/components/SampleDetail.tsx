@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { MOVEMENT_ACTION_LABELS, SAMPLE_TYPE_LABELS, type MovementRead, type SampleWithLocation } from "../api/types";
 import { formatBoolean, formatDate } from "../utils/format";
+import { Modal } from "./Modal";
 import { NucleoWarning } from "./NucleoWarning";
 
 export interface SampleDetailProps {
@@ -35,16 +36,9 @@ export function SampleDetail({ sample, ownerLabel, onClose, onThaw }: SampleDeta
   }, [sample.id]);
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="sd-title"
-        onClick={(event) => event.stopPropagation()}
-      >
+    <Modal titleId="sd-title" onClose={onClose}>
         <div className="modal-header">
-          <h2 id="sd-title">
+          <h2 id="sd-title" tabIndex={-1}>
             <code>{sample.environ_id ?? `Muestra #${sample.id}`}</code>
           </h2>
           <div style={{ display: "flex", gap: 8 }}>
@@ -113,7 +107,6 @@ export function SampleDetail({ sample, ownerLabel, onClose, onThaw }: SampleDeta
             ))}
           </ul>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
