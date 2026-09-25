@@ -33,8 +33,46 @@ export const MOVEMENT_ACTION_LABELS: Record<MovementAction, string> = {
   thaw: "Descongelamiento",
 };
 
+export type BoxType = "carton_81" | "plastic_100";
+
+export const BOX_TYPE_LABELS: Record<BoxType, string> = {
+  carton_81: "Caja de cartón (9×9)",
+  plastic_100: "Caja plástica (10×10)",
+};
+
 export const SECTION_CODES = ["I", "II", "III", "IV"] as const;
 export const RACK_LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
+
+// Carga inicial de las listas desplegables (docs/FORMULARIO.md); la tabla de
+// usuarios (administrable vía GET /users) puede agregar más con el tiempo.
+export const DEFAULT_OPERATOR_INITIALS = [
+  "BPG",
+  "DB",
+  "DM",
+  "EV",
+  "GC",
+  "JCI",
+  "MN",
+  "MS",
+  "RL",
+  "VC",
+  "JF",
+] as const;
+
+export const DEFAULT_OWNER_INITIALS = [
+  "BPG",
+  "DB",
+  "DM",
+  "GC",
+  "JCI",
+  "MN",
+  "MS",
+  "APS",
+  "VF",
+  "DRZ",
+  "VC",
+  "JF",
+] as const;
 
 export interface SampleWithLocation {
   id: number;
@@ -78,6 +116,81 @@ export interface UserRead {
   initials: string;
   name: string | null;
   active: boolean;
+}
+
+export interface SectionRead {
+  id: number;
+  code: string;
+}
+
+export interface RackRead {
+  id: number;
+  section_id: number;
+  letter: string;
+  slot: "center" | "right";
+  capacity: number;
+}
+
+export interface BoxRead {
+  id: number;
+  rack_id: number;
+  number: number;
+  box_type: BoxType;
+  label: string | null;
+  owner_id: number | null;
+  is_full: boolean | null;
+}
+
+export interface BoxPositionStatus {
+  position: string;
+  occupied: boolean;
+  sample_id: number | null;
+  environ_id: string | null;
+}
+
+// Campos del formulario de movimientos (docs/FORMULARIO.md). `rack_letter` +
+// `box_number` corresponden a "Nombre Caja"; el frontend parte el texto
+// combinado (p. ej. `A12`) en estos dos campos antes de enviarlos.
+export interface MovementCreate {
+  action: MovementAction;
+  date: string;
+  operator_initials: string;
+  rack_letter: string;
+  box_number: number;
+  position: string;
+  environ_id?: string | null;
+  description?: string | null;
+  sample_type?: SampleType | null;
+  type_other?: string | null;
+  passage?: number | null;
+  is_core?: boolean | null;
+  non_core_owner_initials?: string | null;
+  box_is_full?: boolean | null;
+  note?: string | null;
+}
+
+export interface MovementResult {
+  sample: SampleWithLocation;
+  movement: MovementRead;
+}
+
+export interface PositionConflict {
+  message: string;
+  next_free_position: string | null;
+}
+
+export interface AutocompleteSuggestion {
+  environ_id: string | null;
+  description: string | null;
+  sample_type: SampleType | null;
+  type_other: string | null;
+  passage: number | null;
+  is_core: boolean | null;
+  owner_initials: string | null;
+  rack_letter: string | null;
+  box_number: number | null;
+  box_id: number | null;
+  next_free_position: string | null;
 }
 
 export interface SampleSearchFilters {

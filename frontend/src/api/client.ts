@@ -1,8 +1,16 @@
 import type {
+  AutocompleteSuggestion,
+  BoxPositionStatus,
+  BoxRead,
+  MovementCreate,
   MovementRead,
+  MovementResult,
   Page,
+  PositionConflict,
+  RackRead,
   SampleSearchFilters,
   SampleWithLocation,
+  SectionRead,
   UserRead,
 } from "./types";
 
@@ -11,11 +19,14 @@ const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\
 
 export class ApiError extends Error {
   status: number;
+  /** Cuerpo `detail` crudo de la respuesta, p. ej. `PositionConflict` en un 409. */
+  detail: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, detail?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -29,16 +40,27 @@ function buildQuery<T extends object>(params: T): string {
   return qs ? `?${qs}` : "";
 }
 
-async function request<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`);
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, init);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
+    const detail = body?.detail;
     const message =
-      (typeof body?.detail === "string" ? body.detail : undefined) ?? res.statusText;
-    throw new ApiError(res.status, message);
+      (typeof detail === "string" ? detail : undefined) ??
+      (typeof detail?.message === "string" ? detail.message : undefined) ??
+      res.statusText;
+    throw new ApiError(res.status, message, detail);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+function post<T>(path: string, body: unknown): Promise<T> {
+  return request(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 export const api = {
@@ -54,4 +76,27 @@ export const api = {
   listUsers(): Promise<UserRead[]> {
     return request(`/users`);
   },
+  listSections(): Promise<SectionRead[]> {
+    return request(`/sections`);
+  },
+  listRacks(): Promise<RackRead[]> {
+    return request(`/racks`);
+  },
+  listBoxes(params: { rack_id?: number } = {}): Promise<BoxRead[]> {
+    return request(`/boxes${buildQuery(params)}`);
+  },
+  getBoxPositions(boxId: number): Promise<BoxPositionStatus[]> {
+    return request(`/boxes/${boxId}/positions`);
+  },
+  getAutocompleteSuggestions(params: {
+    environ_id?: string;
+    owner_initials?: string;
+  }): Promise<AutocompleteSuggestion> {
+    return request(`/autocomplete/suggestions${buildQuery(params)}`);
+  },
+  createMovement(payload: MovementCreate): Promise<MovementResult> {
+    return post(`/movements`, payload);
+  },
 };
+
+export type { PositionConflict };

@@ -3,6 +3,7 @@ import { api, ApiError } from "./api/client";
 import type { Page, SampleSearchFilters, SampleWithLocation, UserRead } from "./api/types";
 import { FiltersBar } from "./components/FiltersBar";
 import { Header } from "./components/Header";
+import { MovementForm } from "./components/MovementForm";
 import { Pagination } from "./components/Pagination";
 import { SampleDetail } from "./components/SampleDetail";
 import { SamplesTable, type SortState } from "./components/SamplesTable";
@@ -28,6 +29,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [myInitials, setMyInitials] = useState(() => localStorage.getItem(MY_INITIALS_KEY) ?? "");
+  const [showMovementForm, setShowMovementForm] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -97,6 +99,12 @@ export default function App() {
     <div className="app">
       <Header theme={theme} onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} />
       <main className="app-main">
+        <div className="filters-actions">
+          <button type="button" className="btn" onClick={() => setShowMovementForm(true)}>
+            + Nuevo movimiento
+          </button>
+        </div>
+
         <FiltersBar
           filters={filters}
           onChange={setFilters}
@@ -136,6 +144,17 @@ export default function App() {
           sample={selected}
           ownerLabel={ownerLookup[selected.owner_id] ?? "—"}
           onClose={() => setSelected(null)}
+        />
+      )}
+
+      {showMovementForm && (
+        <MovementForm
+          users={users}
+          onClose={() => setShowMovementForm(false)}
+          onSubmitted={() => {
+            api.listUsers().then(setUsers).catch(() => undefined);
+            setFilters((current) => ({ ...current }));
+          }}
         />
       )}
     </div>
