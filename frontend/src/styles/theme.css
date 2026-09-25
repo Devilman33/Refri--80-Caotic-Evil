@@ -475,6 +475,13 @@ table.samples-table {
   color: var(--muted);
 }
 
+/* La línea de contexto bajo el título de un modal ("Desde II · D14 · 5E") es lo que dice
+   sobre qué se está actuando: se separa del primer campo en vez de pegarse a su etiqueta. */
+.modal-header + .field-hint {
+  margin: -4px 0 16px;
+  font-size: 13px;
+}
+
 .field-error {
   margin: 0;
   font-size: 12px;
