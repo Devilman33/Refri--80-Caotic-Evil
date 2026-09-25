@@ -39,13 +39,24 @@ cp .env.example .env
 docker compose up
 ```
 
-Esto levanta Postgres y el backend (FastAPI). El backend, al arrancar, corre las migraciones
-de Alembic y siembra la distribución física del freezer (`backend/app/seed/layout.yaml`).
-Verificá que quedó arriba con:
+Esto levanta Postgres, el backend (FastAPI) y el frontend (React, servido con nginx). El
+backend, al arrancar, corre las migraciones de Alembic y siembra la distribución física del
+freezer (`backend/app/seed/layout.yaml`). Verificá que quedó arriba con:
 
 ```bash
 curl http://localhost:8000/health
 # {"status":"ok"}
+```
+
+El frontend queda disponible en <http://localhost:5173>.
+
+### Frontend en local (sin Docker)
+
+```bash
+cd frontend
+npm install
+cp .env.example .env   # ajustá VITE_API_URL si el backend no corre en localhost:8000
+npm run dev
 ```
 
 ### Backend en local (sin Docker)
@@ -60,7 +71,7 @@ python -m app.seed.seed
 uvicorn app.main:app --reload
 ```
 
-### Tests
+### Tests del backend
 
 Los tests corren contra un Postgres real (no mocks: la restricción de posición única vive en
 la base de datos) y **borran el schema `public` entero** antes de correr, así que necesitan una
@@ -75,3 +86,11 @@ DATABASE_URL=postgresql+psycopg://refri:refri@localhost:5432/refri_test pytest
 
 CI (`.github/workflows/ci.yml`) hace lo mismo contra un servicio Postgres efímero con la base
 `refri_test`.
+
+### Tests del frontend
+
+```bash
+cd frontend
+npm test          # Vitest + Testing Library
+npm run build      # type-check (tsc -b) + build de producción
+```
