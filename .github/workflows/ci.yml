@@ -61,6 +61,29 @@ jobs:
         working-directory: backend
         run: python -m pytest -q
 
+      # Un script de restauracion que nunca se ejecuto no es un procedimiento de
+      # recuperacion, es un archivo. Este paso lo corre de verdad contra una base scratch:
+      # respalda, restaura y comprueba que las tablas llegaron del otro lado.
+      #
+      # No reusa refri_test: conftest.apply_migrations le borra el schema public entero.
+      - name: Instalar cliente de PostgreSQL 16
+        if: steps.det.outputs.existe == 'true'
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-16
+          pg_dump --version
+
+      - name: Respaldo y restauracion verificados
+        if: steps.det.outputs.existe == 'true'
+        env:
+          PGPASSWORD: refri
+          DATABASE_URL: postgresql://refri:refri@localhost:5432/refri_backup_check
+        run: |
+          createdb -h localhost -U refri refri_backup_check
+          ./scripts/verificar-respaldo.sh
+
   frontend:
     runs-on: ubuntu-latest
     steps:

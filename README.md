@@ -30,6 +30,20 @@ Es idempotente (reimportar el mismo archivo no duplica) y nunca aborta por una f
 terminar deja un reporte de anomalías en `<ruta>.anomalias.csv` (fila, columna, valor original,
 motivo) para que el laboratorio las corrija.
 
+## Respaldo
+
+El inventario vive en un solo lugar: la base del contenedor `db`. Si ese volumen se pierde,
+se pierde todo — el Excel es histórico y no tiene los movimientos registrados desde la web.
+
+```bash
+DATABASE_URL=postgresql://refri:refri@localhost:5432/refri ./scripts/backup.sh
+```
+
+El procedimiento completo (restauración, automatización con cron y con el Programador de
+tareas de Windows, rotación, y cómo salir de un loop de reinicio por una migración) está en
+[`docs/RESPALDO.md`](docs/RESPALDO.md). La CI ejercita el ciclo entero en cada PR: respalda,
+borra un dato a propósito y comprueba que la restauración lo trae de vuelta.
+
 ## Cómo levantar el proyecto
 
 ### Requisitos
