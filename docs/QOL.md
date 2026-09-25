@@ -116,8 +116,8 @@ hallazgos de los comentarios del issue contra `main`. Quedaban tres: el importad
 `Caja` por encima de 30, la tabla mostraba "—" en vez de la marca "sin ID", y el retiro
 relajaba campos del Google Form sin que estuviera escrito en `docs/FORMULARIO.md`. Los dos
 primeros se arreglaron y el tercero quedó documentado como desviación deliberada. De los
-demás, el único que no se implementó es el reingreso de una muestra retirada (punto 4 de
-arriba), y la fecha de salida con formato de fecha en Excel no se guarda como nota porque
+demás, los dos que no se implementaron son el reingreso de una muestra retirada (punto 4 de
+arriba) y la fecha de salida con formato de fecha en Excel, que no se guarda como nota porque
 no trae texto que guardar.
 
 ## Cómo seguir
