@@ -23,7 +23,7 @@ def test_search_filters_by_environ_id_partial_match(client, db_session):
 def test_search_filters_by_owner_and_core(client, db_session):
     _, rack, box = make_freezer(client)
     _freeze(client, rack, box, position="1A", is_core=True)
-    _freeze(client, rack, box, position="1B", is_core=False, owner_initials="DB")
+    _freeze(client, rack, box, position="1B", is_core=False, owner_initials=["DB"])
 
     response = client.get("/samples/search", params={"owner_initials": "DB"})
     assert response.status_code == 200
@@ -110,3 +110,15 @@ def test_search_sort_applies_before_pagination(client, db_session):
 def test_search_sort_rejects_unknown_column(client, db_session):
     response = client.get("/samples/search", params={"sort_by": "not_a_column"})
     assert response.status_code == 422
+
+
+def test_search_by_owner_finds_samples_shared_with_others(client, db_session):
+    """Buscar por MN encuentra también las muestras que MN comparte con AS."""
+    _, rack, box = make_freezer(client)
+    _freeze(client, rack, box, position="1A", owner_initials=["AS", "MN"])
+    _freeze(client, rack, box, position="1B", owner_initials=["AS"])
+
+    assert client.get("/samples/search", params={"owner_initials": "MN"}).json()["total"] == 1
+    assert client.get("/samples/search", params={"owner_initials": "AS"}).json()["total"] == 2
+    ordered = client.get("/samples/search", params={"sort_by": "owner", "sort_dir": "desc"}).json()
+    assert [item["position"] for item in ordered["items"]] == ["1A", "1B"]

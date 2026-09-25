@@ -4,11 +4,13 @@ from datetime import datetime
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Column,
     DateTime,
     ForeignKey,
     Index,
     Integer,
     String,
+    Table,
     Text,
     UniqueConstraint,
     func,
@@ -17,6 +19,16 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+
+# Una muestra puede tener más de un encargado (en el Excel: `AS/MN`, `BPG-JCI`). Todos
+# valen lo mismo: cualquiera de ellos puede modificarla (docs/adr/0002-autenticacion.md).
+sample_owners = Table(
+    "sample_owners",
+    Base.metadata,
+    Column("sample_id", ForeignKey("samples.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", ForeignKey("users.id"), primary_key=True, index=True),
+)
 
 
 class SampleType(str, enum.Enum):
@@ -74,7 +86,6 @@ class Sample(Base):
     source_row: Mapped[int | None] = mapped_column(Integer, nullable=True)
     type: Mapped[str] = mapped_column(String(30), nullable=False)
     type_other: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     passage: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_core: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=SampleStatus.ACTIVE.value)
@@ -86,9 +97,13 @@ class Sample(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    owner: Mapped["User"] = relationship(foreign_keys=[owner_id])
+    owners: Mapped[list["User"]] = relationship(secondary=sample_owners, order_by="User.initials")
     box: Mapped["Box"] = relationship(back_populates="samples")
     movements: Mapped[list["Movement"]] = relationship(back_populates="sample")
+
+    @property
+    def owner_ids(self) -> list[int]:
+        return [owner.id for owner in self.owners]
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"Sample(id={self.id!r}, environ_id={self.environ_id!r}, status={self.status!r})"

@@ -26,8 +26,8 @@ laboratorio lo confirmó ("con el nombre está bien").
 - El backend exige ese header (`CurrentUser` en `app/api/deps.py`) en las escrituras sobre
   muestras: `POST /movements`, `PATCH /samples/{id}`, `POST /samples/{id}/movements` y
   `POST /boxes/{id}/move`. Sin él, o con un usuario desactivado, responde 401.
-- **Solo el encargado** de una muestra puede editarla, trasladarla o retirarla
-  (`app/services/permissions.py`, 403 en otro caso). Las muestras sin encargado (`SIN_ASIG`,
+- **Solo sus encargados** (una muestra puede tener varios; cualquiera de ellos) pueden editarla,
+  trasladarla o retirarla (`app/services/permissions.py`, 403 en otro caso). Las muestras sin encargado (`SIN_ASIG`,
   centinela del importador) las puede tocar cualquiera, para poder asignarles uno.
 - **Congelar** lo puede hacer cualquier persona identificada, para sí o para otro encargado.
 - **Trasladar una subcaja entera** lo puede hacer cualquier persona identificada: una caja

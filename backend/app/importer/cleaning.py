@@ -220,16 +220,28 @@ def parse_posicion(raw: object) -> tuple[str | None, str | None, str | None]:
     return None, None, "Posición inválida"
 
 
-def parse_encargado(raw: object) -> tuple[str, str | None, str | None]:
-    """Devuelve (iniciales, motivo, valor_original_combinado)."""
+# Separadores entre encargados de una misma muestra: `AS/MN`, `BPG-JCI`, `JCI BPG`,
+# `GC, VF`, `GC y VF`, `GC+VF`, `GC&VF`.
+_OWNER_SEPARATORS_RE = re.compile(r"\s+[yY]\s+|[\s/,;+&-]+")
+
+
+def split_owner_initials(text: str) -> list[str]:
+    """Iniciales de cada encargado, en mayúsculas, sin repetir y en el orden en que vienen."""
+    seen: list[str] = []
+    for part in _OWNER_SEPARATORS_RE.split(text.strip()):
+        initials = part.strip().upper()
+        if initials and initials not in seen:
+            seen.append(initials)
+    return seen
+
+
+def parse_encargado(raw: object) -> list[str]:
+    """Encargados de una muestra. Una muestra puede tener varios (`AS/MN`); sin dato, el
+    centinela `SIN_ASIG`."""
     text = clean_text(raw)
     if text is None:
-        return "SIN_ASIG", None, None
-    parts = text.split()
-    first = parts[0].upper()
-    if len(parts) > 1:
-        return first, "Encargado combinado, se tomó el primero", text
-    return first, None, None
+        return ["SIN_ASIG"]
+    return split_owner_initials(text) or ["SIN_ASIG"]
 
 
 def _validate_date_range(value: date) -> tuple[date | None, str | None]:

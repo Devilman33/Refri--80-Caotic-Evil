@@ -22,7 +22,7 @@ de ahí sale la trazabilidad.
 | 11 | **Posición en la caja (81 espacios caja cartón)** | Grilla | Una de 11 o 12 | Filas `A`–`I` × columnas `1`–`9` |
 | 12 | **Posición en la caja (100 espacios caja plástica)** | Opción única | Una de 11 o 12 | `1`–`100` |
 | 13 | **¿Pertenece al Núcleo Environ?** | Opción única | Sí | `Si`, `No` |
-| 14 | **Encargado de la muestra** | Lista desplegable | Sí | Usuarios registrados (carga inicial: `BPG`, `DB`, `DM`, `GC`, `JCI`, `MN`, `MS`, `APS`, `VF`, `DRZ`, `VC`, `JF`) |
+| 14 | **Encargados de la muestra** | Lista de selección múltiple | Sí, al menos uno | Usuarios registrados (carga inicial: `BPG`, `DB`, `DM`, `GC`, `JCI`, `MN`, `MS`, `APS`, `VF`, `DRZ`, `VC`, `JF`) |
 
 Instrucciones que el formulario muestra y que la página debe mantener:
 - **Caja de cartón:** el orden de los tubos se lee de arriba hacia abajo y de izquierda a derecha.
@@ -32,8 +32,8 @@ Instrucciones que el formulario muestra y que la página debe mantener:
 
 - **Núcleo es una marca, no un encargado.** En el Google Form el campo 14 ("Si la respuesta es
   no, indicar propietario") solo aparecía cuando Núcleo = `No`, porque la muestra de Núcleo
-  quedaba a cargo del Núcleo. Ahora toda muestra tiene como encargado a **una persona** y el
-  campo 14 se pide siempre. Núcleo = `Si` solo agrega el **warning** visible en todas las vistas.
+  quedaba a cargo del Núcleo. Ahora toda muestra tiene como encargados a **una o más personas**
+  (en el Excel, `AS/MN`) y el campo 14 se pide siempre. Núcleo = `Si` solo agrega el **warning** visible en todas las vistas.
 - **"¿La caja está llena?" ya no se pregunta:** se calcula (llena = todas las posiciones de la
   caja ocupadas) después de cada ingreso, retiro o traslado.
 - **Sección se completa sola** a partir de la letra del rack de "Nombre Caja": pedirla aparte
@@ -44,7 +44,7 @@ Instrucciones que el formulario muestra y que la página debe mantener:
 
 ## Comportamiento en la página
 
-- **Mapeo con `requirements.md`:** Operador = usuario que registra; Encargado = dueño de la muestra
+- **Mapeo con `requirements.md`:** Operador = usuario que registra; Encargados = dueños de la muestra (uno o varios)
   (campo 14). Si una muestra es de Núcleo, la UI muestra el **warning**.
 - **Congelamiento:** crea la muestra (o la vuelve a ingresar) en la posición indicada. Rechaza
   posiciones ocupadas por una muestra activa y ofrece la siguiente libre.
@@ -57,7 +57,7 @@ Instrucciones que el formulario muestra y que la página debe mantener:
   - Los demás campos del Google Form (ID Environ, Descripción, Tipo, Pasaje, Núcleo, Encargado)
     se **muestran** con los datos de la muestra elegida, sin editarse: la muestra ya queda
     identificada por su posición, y pedirlos de nuevo solo permitiría que no coincidan.
-  - Solo el encargado de la muestra puede retirarla (ver `docs/adr/0002-autenticacion.md`).
+  - Solo un encargado de la muestra puede retirarla (ver `docs/adr/0002-autenticacion.md`).
 - **Campos 11 y 12:** se muestra solo el que corresponde al tipo de la caja elegida (cartón 9×9 o plástica 10×10).
 - **Posición desde el visor:** hacer clic en una posición libre del visor abre este formulario prellenado.
 - **Autocompletado (QOL):**

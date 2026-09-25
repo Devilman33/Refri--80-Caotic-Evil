@@ -95,7 +95,7 @@ class _RowRecord:
     description: str | None
     sample_type: str
     type_other: str | None
-    owner_initials: str
+    owner_initials: list[str]
     passage: int | None
     is_core: bool | None
     rack_letter: str
@@ -255,13 +255,12 @@ def import_inventory(path: str | Path, session: Session, *, dry_run: bool = Fals
     _resolve_conflicts_with_existing_active(session, records, anomalies, summary)
 
     for record in records:
-        owner = get_or_create_user(record.owner_initials)
         sample = Sample(
             environ_id=record.environ_id,
             description=record.description,
             type=record.sample_type,
             type_other=record.type_other,
-            owner_id=owner.id,
+            owners=[get_or_create_user(initials) for initials in record.owner_initials],
             passage=record.passage,
             is_core=record.is_core,
             status=record.status,
@@ -358,9 +357,7 @@ def _parse_row(
     if sample_type is None:
         return None
 
-    owner_initials, reason, original_combinado = parse_encargado(values.get("Encargado"))
-    if reason:
-        anomalies.append(Anomaly(row_num, "Encargado", original_combinado or "", reason))
+    owner_initials = parse_encargado(values.get("Encargado"))
 
     is_core = parse_si_no(values.get("Nucleo"))
     if is_core is None:
@@ -442,7 +439,7 @@ def _parse_row(
             ("ID Origen o Descripción", description, 255),
             ("Tipo", type_other, 120),
             ("Caja origen", box_label, 120),
-            ("Encargado", owner_initials, 10),
+            *(("Encargado", initials, 10) for initials in owner_initials),
             ("Propietario de Caja", box_owner_initials, 10),
             ("Fecha de salida", exit_initials, 10),
         ]

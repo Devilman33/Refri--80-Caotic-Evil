@@ -33,9 +33,10 @@ def create_box(client: TestClient, *, rack_id: int, number: int = 1, box_type: s
 
 
 def create_sample(client: TestClient, *, owner_id: int, box_id: int, position: str = "1A", **overrides) -> dict:
+    """`owner_id` es el encargado principal del test; `owner_ids` en overrides pone varios."""
     payload = {
         "type": "vial_celulas",
-        "owner_id": owner_id,
+        "owner_ids": [owner_id],
         "box_id": box_id,
         "position": position,
         "operator_initials": "GC",
@@ -75,7 +76,7 @@ def freeze_payload(*, rack_letter: str, box_number: int, position: str, **overri
         "description": "Biopsia de próstata",
         "sample_type": "vial_celulas",
         "is_core": True,
-        "owner_initials": "GC",
+        "owner_initials": ["GC"],
     }
     payload.update(overrides)
     return payload

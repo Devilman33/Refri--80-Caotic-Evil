@@ -13,6 +13,7 @@ from app.services.alerts import (
     is_nearly_full,
 )
 from app.services.occupancy import box_capacity, percent
+from app.services.owners import has_owner
 
 router = APIRouter(prefix="/alerts", tags=["alertas"])
 
@@ -31,8 +32,7 @@ def alerts(db: DbSession) -> AlertsRead:
     """
     unassigned = (
         db.query(Sample)
-        .join(User, Sample.owner_id == User.id)
-        .filter(User.initials == UNASSIGNED_INITIALS, Sample.status == SampleStatus.ACTIVE.value)
+        .filter(has_owner(UNASSIGNED_INITIALS), Sample.status == SampleStatus.ACTIVE.value)
         .count()
     )
 

@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.api.deps import DbSession
-from app.models import Box, Sample, SampleStatus, SampleType, User
+from app.models import Box, Sample, SampleStatus, SampleType
 from app.schemas.autocomplete import AutocompleteSuggestion
+from app.services.owners import has_owner
 from app.services.positions import next_free_position
 
 router = APIRouter(prefix="/autocomplete", tags=["autocompletado"])
@@ -16,15 +17,11 @@ def suggestions(db: DbSession, environ_id: str | None = None, owner_initials: st
     if not environ_id and not owner_initials:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Se requiere environ_id y/o owner_initials")
 
-    query = (
-        db.query(Sample)
-        .join(User, Sample.owner_id == User.id)
-        .options(joinedload(Sample.box).joinedload(Box.rack), joinedload(Sample.owner))
-    )
+    query = db.query(Sample).options(joinedload(Sample.box).joinedload(Box.rack), selectinload(Sample.owners))
     if environ_id:
         query = query.filter(Sample.environ_id == environ_id)
     if owner_initials:
-        query = query.filter(User.initials == owner_initials.strip().upper())
+        query = query.filter(has_owner(owner_initials))
 
     sample = query.order_by(Sample.created_at.desc(), Sample.id.desc()).first()
     if sample is None:
@@ -44,7 +41,7 @@ def suggestions(db: DbSession, environ_id: str | None = None, owner_initials: st
         type_other=sample.type_other,
         passage=sample.passage,
         is_core=sample.is_core,
-        owner_initials=sample.owner.initials,
+        owner_initials=[owner.initials for owner in sample.owners],
         rack_letter=box.rack.letter,
         box_number=box.number,
         box_id=box.id,

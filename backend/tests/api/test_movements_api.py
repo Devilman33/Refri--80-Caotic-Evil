@@ -85,14 +85,15 @@ def test_core_sample_keeps_its_person_as_owner(client, db_session):
     _, rack, box = make_freezer(client)
 
     payload = freeze_payload(
-        rack_letter=rack["letter"], box_number=box["number"], position="1A", is_core=True, owner_initials="DB"
+        rack_letter=rack["letter"], box_number=box["number"], position="1A", is_core=True, owner_initials=["DB"]
     )
     response = client.post("/movements", json=payload)
     assert response.status_code == 201
 
     sample = response.json()["sample"]
     assert sample["is_core"] is True
-    owner = client.get(f"/users/{sample['owner_id']}").json()
+    [owner_id] = sample["owner_ids"]
+    owner = client.get(f"/users/{owner_id}").json()
     assert owner["initials"] == "DB"
 
 
@@ -202,7 +203,7 @@ def test_only_the_owner_can_thaw_a_sample(client, db_session):
     _, rack, box = make_freezer(client)
     client.post(
         "/movements",
-        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", owner_initials="DB"),
+        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", owner_initials=["DB"]),
     )
     other = create_user(client, initials="VF", name="Valentina Fuentes")
     owner = next(user for user in client.get("/users").json() if user["initials"] == "DB")

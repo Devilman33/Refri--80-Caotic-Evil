@@ -36,7 +36,7 @@ def _make_sample(box: Box, owner: User, position: str, status: str = SampleStatu
         type=SampleType.VIAL_CELULAS.value,
         status=status,
         box_id=box.id,
-        owner_id=owner.id,
+        owners=[owner],
         position=position,
     )
 

@@ -93,7 +93,7 @@ def test_box_positions_report_is_core_for_the_nucleo_warning(client, db_session)
             position="1B",
             environ_id="BP002",
             is_core=False,
-            owner_initials="DB",
+            owner_initials=["DB"],
         ),
     )
 
@@ -142,7 +142,7 @@ def test_delete_box_with_samples_conflicts(client, db_session):
         "/samples",
         json={
             "type": "vial_celulas",
-            "owner_id": owner["id"],
+            "owner_ids": [owner["id"]],
             "box_id": box["id"],
             "position": "1A",
             "operator_initials": "GC",

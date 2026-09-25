@@ -16,7 +16,7 @@ def test_autocomplete_returns_empty_suggestion_when_no_match(client, db_session)
         "type_other": None,
         "passage": None,
         "is_core": None,
-        "owner_initials": None,
+        "owner_initials": [],
         "rack_letter": None,
         "box_number": None,
         "box_id": None,

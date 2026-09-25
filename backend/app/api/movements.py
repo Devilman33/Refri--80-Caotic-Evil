@@ -146,16 +146,16 @@ def _freeze(
             },
         )
 
-    # Núcleo es una marca sobre la muestra, no su encargado: el encargado es siempre una
-    # persona, sea o no de Núcleo.
-    owner = get_or_create_user(db, payload.owner_initials)
+    # Núcleo es una marca sobre la muestra, no su encargado: los encargados son siempre
+    # personas (una o varias), sea o no de Núcleo.
+    owners = [get_or_create_user(db, initials) for initials in dict.fromkeys(payload.owner_initials)]
 
     sample = Sample(
         environ_id=payload.environ_id,
         description=payload.description,
         type=payload.sample_type.value,
         type_other=payload.type_other,
-        owner_id=owner.id,
+        owners=owners,
         passage=payload.passage,
         is_core=payload.is_core,
         status=SampleStatus.ACTIVE.value,

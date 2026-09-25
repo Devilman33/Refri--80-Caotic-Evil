@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -31,8 +32,8 @@ class MovementCreate(BaseModel):
     passage: int | None = None
     #: Marca de Núcleo Environ. Es solo una marca: el encargado sigue siendo una persona.
     is_core: bool | None = None
-    #: Encargado de la muestra. Se pide siempre, sea o no de Núcleo.
-    owner_initials: str | None = Field(default=None, max_length=10)
+    #: Encargados de la muestra (uno o varios). Se piden siempre, sea o no de Núcleo.
+    owner_initials: list[Annotated[str, Field(min_length=1, max_length=10)]] = Field(default_factory=list)
     #: En un descongelamiento, el motivo del retiro.
     note: str | None = Field(default=None, max_length=255)
 
@@ -48,8 +49,9 @@ class MovementCreate(BaseModel):
             raise ValueError("type_other es obligatorio cuando sample_type es 'otros'")
         if self.is_core is None:
             raise ValueError("is_core es obligatorio para un congelamiento")
-        if not self.owner_initials or not self.owner_initials.strip():
-            raise ValueError("owner_initials (encargado) es obligatorio para un congelamiento")
+        self.owner_initials = [initials.strip().upper() for initials in self.owner_initials if initials.strip()]
+        if not self.owner_initials:
+            raise ValueError("owner_initials (al menos un encargado) es obligatorio para un congelamiento")
         return self
 
 

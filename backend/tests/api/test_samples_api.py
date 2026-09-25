@@ -10,7 +10,7 @@ def test_create_sample_conflicts_on_occupied_position(client, db_session):
         "/samples",
         json={
             "type": "vial_celulas",
-            "owner_id": owner["id"],
+            "owner_ids": [owner["id"]],
             "box_id": box["id"],
             "position": "1A",
             "operator_initials": "GC",
@@ -35,7 +35,7 @@ def test_create_sample_rejects_position_for_wrong_box_type(client, db_session):
         "/samples",
         json={
             "type": "vial_celulas",
-            "owner_id": owner["id"],
+            "owner_ids": [owner["id"]],
             "box_id": box["id"],
             "position": "1A",
             "operator_initials": "GC",
@@ -53,7 +53,7 @@ def test_create_sample_requires_type_other_for_otros(client, db_session):
         "/samples",
         json={
             "type": "otros",
-            "owner_id": owner["id"],
+            "owner_ids": [owner["id"]],
             "box_id": box["id"],
             "position": "1A",
             "operator_initials": "GC",
@@ -69,7 +69,7 @@ def test_core_sample_can_be_owned_by_a_person(client, db_session):
     owner = create_user(client, initials="GC")
     created = create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1A", is_core=True)
     assert created["is_core"] is True
-    assert created["owner_id"] == owner["id"]
+    assert created["owner_ids"] == [owner["id"]]
 
     response = client.patch(f"/samples/{created['id']}", json={"is_core": False})
     assert response.status_code == 200
@@ -121,12 +121,12 @@ def test_update_sample_rejects_clearing_type_other_while_type_is_otros(client, d
     assert response.status_code == 422
 
 
-def test_update_sample_rejects_null_owner_id(client, db_session):
+def test_update_sample_rejects_removing_all_owners(client, db_session):
     _, _, box = make_freezer(client)
     owner = create_user(client, initials="GC")
     created = create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1A")
 
-    response = client.patch(f"/samples/{created['id']}", json={"owner_id": None})
+    response = client.patch(f"/samples/{created['id']}", json={"owner_ids": []})
     assert response.status_code == 422
 
 
@@ -192,3 +192,37 @@ def test_sample_movements_history_starts_with_freeze(client, db_session):
 def test_get_missing_sample_404(client, db_session):
     response = client.get("/samples/999999")
     assert response.status_code == 404
+
+
+def test_a_sample_can_have_several_owners_and_any_of_them_can_edit_it(client, db_session):
+    _, _, box = make_freezer(client)
+    first = create_user(client, initials="AS", name="Ana Soto")
+    second = create_user(client, initials="MN")
+    other = create_user(client, initials="VF")
+    created = create_sample(
+        client, owner_id=first["id"], box_id=box["id"], position="1A", owner_ids=[first["id"], second["id"]]
+    )
+    assert created["owner_ids"] == [first["id"], second["id"]]
+
+    for owner in (first, second):
+        response = client.patch(f"/samples/{created['id']}", json={"passage": 2}, headers=as_user(owner["id"]))
+        assert response.status_code == 200
+
+    rejected = client.patch(f"/samples/{created['id']}", json={"passage": 3}, headers=as_user(other["id"]))
+    assert rejected.status_code == 403
+    assert "Ana Soto" in rejected.json()["detail"] and "MN" in rejected.json()["detail"]
+
+
+def test_owners_can_be_replaced(client, db_session):
+    _, _, box = make_freezer(client)
+    first = create_user(client, initials="AS")
+    second = create_user(client, initials="MN")
+    created = create_sample(client, owner_id=first["id"], box_id=box["id"], position="1A")
+
+    response = client.patch(
+        f"/samples/{created['id']}", json={"owner_ids": [second["id"], first["id"]]}, headers=as_user(first["id"])
+    )
+
+    assert response.status_code == 200
+    # Se devuelven ordenados por iniciales, no en el orden pedido.
+    assert response.json()["owner_ids"] == [first["id"], second["id"]]

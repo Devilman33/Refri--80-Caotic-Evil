@@ -44,12 +44,12 @@ def test_import_normalizes_fields_and_creates_sample(db_session, tmp_path):
     assert sample.is_core is True
     assert sample.passage is None
     assert sample.status == SampleStatus.ACTIVE.value
-    assert sample.owner.initials == "JCI"
+    # "JCI BPG" son dos encargados, no uno: se guardan los dos y no es una anomalía.
+    assert [owner.initials for owner in sample.owners] == ["BPG", "JCI"]
 
     # "Seccion" = "1" normaliza a "I", que es la sección real del rack A sembrado.
     assert not any(a.column == "Seccion" for a in result.anomalies)
-    # El encargado combinado se reporta aunque se haya podido resolver.
-    assert any(a.column == "Encargado" and a.value == "JCI BPG" for a in result.anomalies)
+    assert not any(a.column == "Encargado" for a in result.anomalies)
 
 
 def test_import_missing_type_is_skipped_and_reported(db_session, tmp_path):
@@ -192,7 +192,7 @@ def test_import_conflict_against_previously_active_sample(db_session, tmp_path):
     db_session.flush()
     existing = Sample(
         type=SampleType.VIAL_CELULAS.value,
-        owner_id=owner.id,
+        owners=[owner],
         status=SampleStatus.ACTIVE.value,
         box_id=box.id,
         position="2B",

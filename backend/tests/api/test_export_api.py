@@ -128,3 +128,16 @@ def test_export_filename_includes_enumerated_filters_only(client, db_session):
     assert "seccion-I" in disposition
     # El texto libre NO entra en el encabezado: solo filtros de valores cerrados.
     assert "malicioso" not in disposition
+
+
+def test_export_joins_several_owners_like_the_excel(client, db_session):
+    _, rack, box = make_freezer(client)
+    response = client.post(
+        "/movements",
+        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", owner_initials=["MN", "AS"]),
+    )
+    assert response.status_code == 201, response.text
+
+    body = client.get("/samples/export").content.decode("utf-8-sig")
+
+    assert "AS/MN" in body

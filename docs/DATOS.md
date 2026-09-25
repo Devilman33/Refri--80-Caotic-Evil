@@ -32,7 +32,7 @@ importador en local. Los tests usan un Excel **sintético** con la misma estruct
 | ID Origen o Descripción | `sample.description` | Texto libre; `-` = vacío |
 | Caja origen | `box.label` (nombre histórico) | Texto libre; informativo |
 | Tipo | `sample.type` | Normalizar variantes: `Medio condicionado`/`Medio Condicionado`/`MC` → Medio Condicionado; `RNA later`/`RNA-later`/`RNA Later` → RNA later; `Vial` → Vial de Células; `Linea celular`/`Lineas celulares` → Línea celular. Recortar espacios |
-| Encargado | `sample.owner` (usuario) | Iniciales (GC, DB, VC, APS, MN, MS, DM, VF, JCI, …). Hay combinados como `JCI BPG` o `AA RZ`: tomar el primero como encargado y guardar el valor original. Vacío (~20 %) → "Sin asignar" |
+| Encargado | `sample.owners` (uno o varios usuarios, tabla `sample_owners`) | Iniciales (GC, DB, VC, APS, MN, MS, DM, VF, JCI, …). Una muestra puede tener **varios encargados**: `AS/MN`, `BPG-JCI`, `JCI BPG` son dos personas cada uno y se guardan las dos (separadores: espacio, `/`, `-`, `,`, `;`, `+`, `&`, ` y `). Vacío (~20 %) → "Sin asignar" |
 | Pasaje | `sample.passage` (entero o nulo) | Números mezclados con `-` y `N/A` → nulo |
 | Nucleo | `sample.is_core` | `Si`/`SI`/`si` → true; `No`/`NO` → false; `-` o vacío → desconocido (reportar) |
 | Seccion | `section` | `I`–`IV`; `1` → `I`; `!` o vacío → ubicación inválida (reportar) |

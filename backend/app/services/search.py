@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Query as OrmQuery, Session
 
 from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus, SampleType, Section, User
+from app.services.owners import has_owner
 
 # Tope de IDs que se pueden pegar de una vez. Una lista más larga que esto casi siempre es
 # un pegado accidental de una columna entera del Excel.
@@ -142,7 +143,6 @@ def build_sample_query(db: Session, filters: SampleFilters) -> OrmQuery:
         .join(Box, Sample.box_id == Box.id)
         .join(Rack, Box.rack_id == Rack.id)
         .join(Section, Rack.section_id == Section.id)
-        .join(User, Sample.owner_id == User.id)
     )
     if filters.environ_id:
         query = query.filter(Sample.environ_id.ilike(f"%{filters.environ_id}%"))
@@ -153,7 +153,7 @@ def build_sample_query(db: Session, filters: SampleFilters) -> OrmQuery:
     if filters.description:
         query = query.filter(Sample.description.ilike(f"%{filters.description}%"))
     if filters.owner_initials:
-        query = query.filter(User.initials == filters.owner_initials.strip().upper())
+        query = query.filter(has_owner(filters.owner_initials))
     if filters.sample_type is not None:
         query = query.filter(Sample.type == filters.sample_type.value)
     if filters.is_core is not None:

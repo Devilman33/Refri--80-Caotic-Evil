@@ -146,19 +146,22 @@ def test_parse_posicion_out_of_range_is_reported(raw):
 
 
 def test_parse_encargado_simple():
-    assert parse_encargado("GC") == ("GC", None, None)
+    assert parse_encargado("GC") == ["GC"]
 
 
-def test_parse_encargado_combined_keeps_first_and_reports_original():
-    initials, reason, original = parse_encargado("JCI BPG")
-    assert initials == "JCI"
-    assert reason is not None
-    assert original == "JCI BPG"
+def test_parse_encargado_splits_every_owner():
+    """Una muestra puede tener varios encargados, escritos con distintos separadores."""
+    assert parse_encargado("JCI BPG") == ["JCI", "BPG"]
+    assert parse_encargado("AS/MN") == ["AS", "MN"]
+    assert parse_encargado("BPG-JCI") == ["BPG", "JCI"]
+    assert parse_encargado("gc, vf") == ["GC", "VF"]
+    assert parse_encargado("GC y VF") == ["GC", "VF"]
+    assert parse_encargado("GC/GC") == ["GC"]
 
 
 def test_parse_encargado_empty_is_sin_asignar():
-    assert parse_encargado(None) == ("SIN_ASIG", None, None)
-    assert parse_encargado("-") == ("SIN_ASIG", None, None)
+    assert parse_encargado(None) == ["SIN_ASIG"]
+    assert parse_encargado("-") == ["SIN_ASIG"]
 
 
 def test_clean_environ_id_empty_is_reported():

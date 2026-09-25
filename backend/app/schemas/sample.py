@@ -15,7 +15,8 @@ class SampleBase(BaseModel):
     description: str | None = Field(default=None, max_length=255)
     type: SampleType
     type_other: str | None = Field(default=None, max_length=120)
-    owner_id: int
+    #: Encargados: una muestra puede tener varios (en el Excel, `AS/MN`).
+    owner_ids: list[int] = Field(min_length=1)
     passage: int | None = None
     is_core: bool | None = None
     box_id: int
@@ -48,7 +49,7 @@ class SampleUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=255)
     type: SampleType | None = None
     type_other: str | None = Field(default=None, max_length=120)
-    owner_id: int | None = None
+    owner_ids: list[int] | None = None
     passage: int | None = None
     is_core: bool | None = None
     notes: str | None = None

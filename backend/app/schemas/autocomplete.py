@@ -13,7 +13,7 @@ class AutocompleteSuggestion(BaseModel):
     type_other: str | None = None
     passage: int | None = None
     is_core: bool | None = None
-    owner_initials: str | None = None
+    owner_initials: list[str] = []
     rack_letter: str | None = None
     box_number: int | None = None
     box_id: int | None = None

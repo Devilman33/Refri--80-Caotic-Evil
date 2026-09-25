@@ -19,6 +19,7 @@ from app.schemas.sample import (
 from app.services import csv_export
 from app.services.location import sample_with_location
 from app.services.occupancy import refresh_box_full
+from app.services.owners import owners_label
 from app.services.permissions import ensure_can_modify
 from app.services.positions import next_free_position
 from app.services.racks import ensure_box_number_within_capacity
@@ -49,7 +50,7 @@ _SORT_COLUMNS = {
     "environ_id": (Sample.environ_id,),
     "description": (Sample.description,),
     "type": (Sample.type,),
-    "owner": (User.initials,),
+    "owner": (owners_label(),),
     "passage": (Sample.passage,),
     "status": (Sample.status,),
     "location": (Section.code, Rack.letter, Box.number, Sample.position),
@@ -57,11 +58,19 @@ _SORT_COLUMNS = {
 }
 
 
+def _load_owners(db, owner_ids: list[int]) -> list[User]:
+    """Los encargados pedidos, sin repetir y en orden; 404 si alguno no existe."""
+    owners = [get_or_404(db, User, owner_id, "Usuario encargado no encontrado") for owner_id in dict.fromkeys(owner_ids)]
+    if not owners:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "La muestra necesita al menos un encargado")
+    return owners
+
+
 @router.post("", response_model=SampleRead, status_code=status.HTTP_201_CREATED)
 def create_sample(payload: SampleCreate, db: DbSession) -> Sample:
     """Alta directa de una muestra: registra además el movimiento de congelamiento
     (igual que `POST /movements`) para no dejar el historial vacío."""
-    get_or_404(db, User, payload.owner_id, "Usuario encargado no encontrado")
+    owners = _load_owners(db, payload.owner_ids)
     box = get_or_404(db, Box, payload.box_id, "Caja no encontrada")
 
     position, inferred_box_type, reason = parse_posicion(payload.position)
@@ -79,7 +88,7 @@ def create_sample(payload: SampleCreate, db: DbSession) -> Sample:
         description=payload.description,
         type=payload.type.value,
         type_other=payload.type_other,
-        owner_id=payload.owner_id,
+        owners=owners,
         passage=payload.passage,
         is_core=payload.is_core,
         box_id=payload.box_id,
@@ -220,7 +229,7 @@ def export_samples(db: DbSession, filters: SampleFiltersDep) -> Response:
             Sample.description,
             Sample.type,
             Sample.type_other,
-            User.initials,
+            owners_label(),
             Sample.passage,
             Sample.is_core,
             Sample.status,
@@ -264,12 +273,12 @@ def update_sample(sample_id: int, payload: SampleUpdate, db: DbSession, current_
     sample = get_or_404(db, Sample, sample_id, "Muestra no encontrada")
     ensure_can_modify(sample, current_user)
     data = payload.model_dump(exclude_unset=True)
-    if "owner_id" in data and data["owner_id"] is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "owner_id no puede ser nulo")
+    if "owner_ids" in data and not data["owner_ids"]:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "La muestra necesita al menos un encargado")
     if "type" in data and data["type"] is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "type no puede ser nulo")
-    if data.get("owner_id") is not None:
-        get_or_404(db, User, data["owner_id"], "Usuario encargado no encontrado")
+    if data.get("owner_ids"):
+        data["owners"] = _load_owners(db, data.pop("owner_ids"))
     effective_type = SampleType(data["type"].value) if data.get("type") is not None else SampleType(sample.type)
     effective_type_other = data.get("type_other", sample.type_other)
     try:
