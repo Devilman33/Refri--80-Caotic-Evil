@@ -21,6 +21,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://refri:refri@db:5432/refri}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
     ports:
       - "8000:8000"
     depends_on:
