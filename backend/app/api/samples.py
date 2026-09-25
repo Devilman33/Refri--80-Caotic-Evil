@@ -18,6 +18,20 @@ router = APIRouter(prefix="/samples", tags=["muestras"])
 
 _LOCATION_LOAD = joinedload(Sample.box).joinedload(Box.rack).joinedload(Rack.section)
 
+# Columnas que la tabla del frontend permite ordenar (SamplesTable.tsx). El orden
+# se aplica en la consulta paginada: ordenar solo la página ya traída daría un
+# resultado engañoso con más de una página.
+_SORT_COLUMNS = {
+    "environ_id": (Sample.environ_id,),
+    "description": (Sample.description,),
+    "type": (Sample.type,),
+    "owner": (User.initials,),
+    "passage": (Sample.passage,),
+    "status": (Sample.status,),
+    "location": (Section.code, Rack.letter, Box.number, Sample.position),
+    "created_at": (Sample.created_at,),
+}
+
 
 def _check_nucleo_owner(owner: User, *, is_core: bool | None) -> None:
     """Si Núcleo = Sí, el encargado debe ser el usuario reservado Núcleo Environ
@@ -113,6 +127,8 @@ def search_samples(
     section_code: str | None = None,
     rack_letter: str | None = None,
     box_number: int | None = None,
+    sort_by: str | None = Query(default=None),
+    sort_dir: str = Query(default="asc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
 ) -> Page[SampleWithLocation]:
@@ -154,7 +170,15 @@ def search_samples(
         query = query.filter(Sample.id.in_(freeze_dates))
 
     total = query.count()
-    samples = query.order_by(Sample.id).offset((page - 1) * page_size).limit(page_size).all()
+    if sort_by is not None:
+        if sort_by not in _SORT_COLUMNS:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"sort_by inválido: {sort_by}")
+        columns = _SORT_COLUMNS[sort_by]
+        order = [column.desc() if sort_dir == "desc" else column.asc() for column in columns]
+        query = query.order_by(*order, Sample.id)
+    else:
+        query = query.order_by(Sample.id)
+    samples = query.offset((page - 1) * page_size).limit(page_size).all()
     items = [sample_with_location(sample) for sample in samples]
     return Page[SampleWithLocation](items=items, total=total, page=page, page_size=page_size)
 
