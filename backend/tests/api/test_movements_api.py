@@ -90,6 +90,30 @@ def test_freeze_not_core_uses_declared_owner(client, db_session):
     assert sample_id
 
 
+def test_freeze_without_box_is_full_is_rejected(client, db_session):
+    _, rack, box = make_freezer(client)
+
+    payload = freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A")
+    del payload["box_is_full"]
+
+    response = client.post("/movements", json=payload)
+    assert response.status_code == 422
+
+
+def test_freeze_rejects_whitespace_only_type_other(client, db_session):
+    _, rack, box = make_freezer(client)
+
+    payload = freeze_payload(
+        rack_letter=rack["letter"],
+        box_number=box["number"],
+        position="1A",
+        sample_type="otros",
+        type_other="   ",
+    )
+    response = client.post("/movements", json=payload)
+    assert response.status_code == 422
+
+
 def test_thaw_withdraws_sample_without_deleting_it(client, db_session):
     _, rack, box = make_freezer(client)
     freeze_response = client.post(

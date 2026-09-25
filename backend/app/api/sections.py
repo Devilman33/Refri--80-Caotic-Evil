@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import DbSession, get_or_404
-from app.models import Section
+from app.models import Box, Rack, Sample, Section
 from app.schemas.section import SectionCreate, SectionRead, SectionUpdate
 
 router = APIRouter(prefix="/sections", tags=["secciones"])
@@ -39,6 +39,20 @@ def update_section(section_id: int, payload: SectionUpdate, db: DbSession) -> Se
     data = payload.model_dump(exclude_unset=True)
     if "code" in data and data["code"] is not None:
         data["code"] = data["code"].strip().upper()
+    if data.get("code") is not None and data["code"] != section.code:
+        has_samples = (
+            db.query(Sample)
+            .join(Box, Sample.box_id == Box.id)
+            .join(Rack, Box.rack_id == Rack.id)
+            .filter(Rack.section_id == section.id)
+            .first()
+            is not None
+        )
+        if has_samples:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "No se puede cambiar el código de una sección que ya tiene muestras asociadas",
+            )
     for field, value in data.items():
         setattr(section, field, value)
     try:

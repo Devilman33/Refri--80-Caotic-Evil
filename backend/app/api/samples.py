@@ -171,6 +171,10 @@ def get_sample(sample_id: int, db: DbSession) -> SampleWithLocation:
 def update_sample(sample_id: int, payload: SampleUpdate, db: DbSession) -> Sample:
     sample = get_or_404(db, Sample, sample_id, "Muestra no encontrada")
     data = payload.model_dump(exclude_unset=True)
+    if "owner_id" in data and data["owner_id"] is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "owner_id no puede ser nulo")
+    if "type" in data and data["type"] is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "type no puede ser nulo")
     owner = sample.owner
     if data.get("owner_id") is not None:
         owner = get_or_404(db, User, data["owner_id"], "Usuario encargado no encontrado")

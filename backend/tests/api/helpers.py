@@ -75,6 +75,7 @@ def freeze_payload(*, rack_letter: str, box_number: int, position: str, **overri
         "description": "Biopsia de próstata",
         "sample_type": "vial_celulas",
         "is_core": True,
+        "box_is_full": False,
     }
     payload.update(overrides)
     return payload

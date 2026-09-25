@@ -111,6 +111,24 @@ def test_update_sample_rejects_clearing_type_other_while_type_is_otros(client, d
     assert response.status_code == 422
 
 
+def test_update_sample_rejects_null_owner_id(client, db_session):
+    _, _, box = make_freezer(client)
+    owner = create_user(client, initials="GC")
+    created = create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1A")
+
+    response = client.patch(f"/samples/{created['id']}", json={"owner_id": None})
+    assert response.status_code == 422
+
+
+def test_update_sample_rejects_null_type(client, db_session):
+    _, _, box = make_freezer(client)
+    owner = create_user(client, initials="GC")
+    created = create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1A")
+
+    response = client.patch(f"/samples/{created['id']}", json={"type": None})
+    assert response.status_code == 422
+
+
 def test_get_sample_includes_readable_location(client, db_session):
     _, rack, box = make_freezer(client, section_code="III", rack_letter="F", box_number=12)
     owner = create_user(client, initials="GC")

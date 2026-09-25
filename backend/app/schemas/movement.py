@@ -42,12 +42,14 @@ class MovementCreate(BaseModel):
             raise ValueError("environ_id es obligatorio para un congelamiento")
         if self.sample_type is None:
             raise ValueError("sample_type es obligatorio para un congelamiento")
-        if self.sample_type == SampleType.OTROS and not self.type_other:
+        if self.sample_type == SampleType.OTROS and not (self.type_other and self.type_other.strip()):
             raise ValueError("type_other es obligatorio cuando sample_type es 'otros'")
         if self.is_core is None:
             raise ValueError("is_core es obligatorio para un congelamiento")
         if self.is_core is False and not self.non_core_owner_initials:
             raise ValueError("non_core_owner_initials es obligatorio cuando is_core es false")
+        if self.box_is_full is None:
+            raise ValueError("box_is_full es obligatorio para un congelamiento")
         return self
 
 
