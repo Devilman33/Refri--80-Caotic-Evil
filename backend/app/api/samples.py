@@ -10,7 +10,7 @@ from app.importer.cleaning import parse_posicion
 from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus, SampleType, Section, User
 from app.schemas.common import Page
 from app.schemas.movement import MovementRead
-from app.schemas.sample import SampleCreate, SampleRead, SampleUpdate, SampleWithLocation
+from app.schemas.sample import SampleCreate, SampleRead, SampleUpdate, SampleWithLocation, check_type_other
 from app.services.location import sample_with_location
 from app.services.users import NUCLEO_INITIALS, get_or_create_user
 
@@ -174,6 +174,12 @@ def update_sample(sample_id: int, payload: SampleUpdate, db: DbSession) -> Sampl
     owner = sample.owner
     if data.get("owner_id") is not None:
         owner = get_or_404(db, User, data["owner_id"], "Usuario encargado no encontrado")
+    effective_type = SampleType(data["type"].value) if data.get("type") is not None else SampleType(sample.type)
+    effective_type_other = data.get("type_other", sample.type_other)
+    try:
+        check_type_other(effective_type, effective_type_other)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     if data.get("type") is not None:
         data["type"] = data["type"].value
     _check_nucleo_owner(owner, is_core=data.get("is_core", sample.is_core))

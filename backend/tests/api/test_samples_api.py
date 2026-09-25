@@ -45,6 +45,24 @@ def test_create_sample_rejects_position_for_wrong_box_type(client, db_session):
     assert response.status_code == 422
 
 
+def test_create_sample_requires_type_other_for_otros(client, db_session):
+    _, _, box = make_freezer(client)
+    owner = create_user(client, initials="GC")
+
+    response = client.post(
+        "/samples",
+        json={
+            "type": "otros",
+            "owner_id": owner["id"],
+            "box_id": box["id"],
+            "position": "1A",
+            "operator_initials": "GC",
+            "date": "2026-01-15",
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_create_core_sample_requires_nucleo_owner(client, db_session):
     _, _, box = make_freezer(client)
     owner = create_user(client, initials="GC")
@@ -70,6 +88,26 @@ def test_update_sample_rejects_setting_is_core_without_nucleo_owner(client, db_s
     created = create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1A")
 
     response = client.patch(f"/samples/{created['id']}", json={"is_core": True})
+    assert response.status_code == 422
+
+
+def test_update_sample_rejects_type_otros_without_type_other(client, db_session):
+    _, _, box = make_freezer(client)
+    owner = create_user(client, initials="GC")
+    created = create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1A")
+
+    response = client.patch(f"/samples/{created['id']}", json={"type": "otros"})
+    assert response.status_code == 422
+
+
+def test_update_sample_rejects_clearing_type_other_while_type_is_otros(client, db_session):
+    _, _, box = make_freezer(client)
+    owner = create_user(client, initials="GC")
+    created = create_sample(
+        client, owner_id=owner["id"], box_id=box["id"], position="1A", type="otros", type_other="Congelado especial"
+    )
+
+    response = client.patch(f"/samples/{created['id']}", json={"type_other": None})
     assert response.status_code == 422
 
 
