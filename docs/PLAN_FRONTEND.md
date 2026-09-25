@@ -22,7 +22,8 @@ Referencia visual: **`DESIGN.md`** (tokens, tipografía, semántica de estados, 
 Vienen de `requirements.md`, `docs/FORMULARIO.md`, `.github/copilot-instructions.md` y `DESIGN.md`:
 
 - Luces: **rojo = ocupada, verde = libre**, más relleno/hueco para daltónicos.
-- **Warning de Núcleo** visible en todas las vistas (hoy **falta en el visor 3D**, ver T6).
+- **Warning de Núcleo** visible en todas las vistas (el visor 3D ya lo muestra en la vista de
+  caja, el tooltip y la tapa de la posición; falta en el buscador nuevo, ver T2).
 - Formulario de congelamiento con los campos, el orden y las opciones del Google Form, más las
   desviaciones escritas en `docs/FORMULARIO.md`. Cambiar el aspecto sí, los campos no.
 - Mantener la estética e interacciones del visor 3D de `demo.html`.
@@ -178,20 +179,30 @@ Salida: `DESIGN.md` en la raíz.
 ### Fase 2 · Revisar el plan → `/plan-design-review` ✔
 
 Salida: este documento, con la arquitectura de información y los flujos cerrados.
-Siguiente: `/plan-eng-review` sobre la división de `App.tsx` (el panel de contexto y el buscador
-global cambian quién es dueño de `selected` y `focusTarget`) antes de la fase 3.
+
+### Fase 2b · Revisión de ingeniería → `/plan-eng-review` ✔
+
+Salida: la sección "Revisión de ingeniería" de abajo (decisiones D1–D5, flujo de datos, pruebas,
+modos de falla) y las tareas T9–T12.
 
 ### Fase 3 · Implementar y auditar → `/design-review`
 
 Un PR por bloque, en este orden (cada uno deja la app usable):
 
+0. **Datos y recarga** (T9, T10, T11): parámetro `q` y ubicación estructurada en la API, visor sin
+   remontar. Va primero porque T2, T4 y T7 dependen de él. `backend/app/services/search.py`,
+   `backend/app/schemas/sample.py`, `App.tsx`, `FreezerViewer`, `OccupancyView`.
 1. **Tokens y base** (T1): cambios pendientes de `theme.css` listados en `DESIGN.md`.
 2. **Barra superior y navegación** (T2, T3): buscador global, Congelar/Descongelar fijos, menú de
    usuario, avisos que se cierran. `Header`, `App.tsx`, `FiltersBar`.
 3. **Detalle como panel** (T4): `SampleDetail`, `FreezerViewer` (panel), `SamplesTable`.
 4. **Tareas** (T5, T7, T8): `FreezeForm` (tanda), `ThawForm` (ID primero), `BoxMoveModal`.
-5. **Visor y ocupación** (T6): Núcleo en el 3D, `OccupancyView`, `PositionPicker`.
+   La auditoría visual de estos cuatro modales ya está en la rama `claude/rediseno-bloque-2`
+   (grilla con flechas, foco, 44px, color de descongelar, diálogos apilados, texto 12px).
+5. **Visor y ocupación** (T6): verificar Núcleo en el 3D, `OccupancyView`, `PositionPicker`.
 6. **Administración**: `UsersModal`, `AnomaliesView` (solo auditoría visual).
+
+Cada bloque que toque un flujo agrega su test de integración en `App.test.tsx` (T12).
 
 ### Fase 4 · Verificar los flujos → `/qa`
 
@@ -211,13 +222,17 @@ Recorre F1–F4 de punta a punta en PC y en viewport de tablet, en claro y oscur
 ## Tareas
 
 - [ ] **T1 (P1)** — `theme.css` — Aplicar "Cambios pendientes" de `DESIGN.md` (`--warn`, `--field-border`, 12px mínimo, 44px táctil, logo en oscuro automático, sombras).
-- [ ] **T2 (P1)** — `Header`, `App.tsx` — Buscador global con sugerencias y las tres salidas (1 resultado / varios / ubicación); quitar "Buscar posición" del panel 3D. Backend: verificar que `searchSamples` filtre por prefijo de ID Environ e ID Origen; si no, issue aparte.
+- [ ] **T2 (P1)** — `Header`, `App.tsx` — Buscador global con sugerencias y las tres salidas (1 resultado / varios / ubicación); quitar "Buscar posición" del panel 3D. Usa `q` (T9) para IDs y `parseViewerQuery` para ubicaciones; debounce de 300 ms y se descarta la respuesta de un pedido viejo (ver modos de falla). Las sugerencias muestran el aviso de Núcleo. Depende de T9 y T10.
 - [ ] **T3 (P1)** — `Header`, `App.tsx` — Congelar/Descongelar en la barra; menú de usuario (Usuarios, tema, Cambiar usuario); avisos que se cierran solos.
 - [ ] **T4 (P1)** — `SampleDetail`, `FreezerViewer`, `App.tsx` — Detalle como panel/hoja inferior; botón "Ver en el refri" fuera del 3D; Descongelar como primario.
 - [ ] **T5 (P1)** — `FreezeForm` — "Guardar y siguiente" como primario (Enter), foco a ID Environ, franja "En esta tanda", caja llena a mitad de tanda.
-- [ ] **T6 (P1)** — `FreezerViewer` — Warning de Núcleo en el 3D (triángulo en la posición de la vista de caja + aviso en el panel). Hoy no aparece.
+- [ ] **T6 (P3)** — `FreezerViewer` — Verificar el warning de Núcleo en el 3D contra `DESIGN.md` (ya existe: aviso en la vista de caja `FreezerViewer.tsx:552`, en la posición `:644`, tapa en estado `core` en `three/freezerScene.ts:322`). Solo ajustes visuales si no calzan; la revisión de diseño anterior lo dio por faltante por error.
 - [ ] **T7 (P2)** — `ThawForm` — Campo ID Environ primero con sugerencias de muestras activas; botón primario turquesa "Descongelar"; motivo del bloqueo cuando no es encargado.
 - [ ] **T8 (P2)** — `BoxMoveModal` — Validación en vivo del destino (vacía / ocupada / no existe); tras mover, enfocar el 3D en el lugar nuevo.
+- [ ] **T9 (P1, backend)** — `services/search.py` — Filtro `q`: `OR` de `environ_id ILIKE %q%` y `description ILIKE %q%`; combinable con los demás filtros (AND), incompatible con `environ_id_exact` (422, como el par actual). Lo usan `/samples/search` y el export porque ambos pasan por `build_sample_query`. Tests pytest: coincide por ID, por descripción, por ambos sin duplicar, con `status`, vacío, 422 con `environ_id_exact`.
+- [ ] **T10 (P1, backend)** — `schemas/sample.py`, `sample_with_location` — `SampleWithLocation` suma `section_code`, `rack_letter`, `box_number` (aditivo; `location` se mantiene). Frontend: `types.ts` y borrar `locationPrefill` de `App.tsx`. Tests: pytest de la forma del JSON; vitest de "Descongelar" desde el detalle prellenando sin regex.
+- [ ] **T11 (P1)** — `App.tsx`, `FreezerViewer`, `OccupancyView` — Reemplazar `key={freezerKey}` por un prop `reloadToken`: el visor vuelve a pedir ocupación y luces sin reconstruir la escena ni mover la cámara; se mantiene la caja seleccionada. Test: cambiar el token no desmonta (el mock de escena no se recrea) y sí vuelve a llamar a la api.
+- [ ] **T12 (P1)** — `src/__tests__/App.test.tsx` (nuevo) — Integración con api mockeada y `FreezerViewer` reemplazado por un doble sin WebGL: F1 tanda de 3, F2 descongelar por ID, F3 buscador (1 / varios / ubicación / 0 / error de red), F4 mover caja con destino ocupado, y "Mover" desde el detalle no apila diálogos (regresión de FINDING-005). Se escribe por partes, junto con cada bloque.
 
 ## Fuera de alcance
 
@@ -235,13 +250,102 @@ Recorre F1–F4 de punta a punta en PC y en viewport de tablet, en claro y oscur
 - `focusTarget` del visor ("Ver en el refri") para el salto desde el buscador.
 - `parseViewerQuery` del visor para reconocer ubicaciones en el buscador global.
 
+## Revisión de ingeniería
+
+### Decisiones
+
+| # | Decisión | Por qué |
+|---|---|---|
+| D1 | T2 y T4 van **directo sobre `App.tsx`**, sin refactor previo del estado | Elegido por el equipo: diff inicial menor. Consecuencia aceptada: `App.tsx` crece; lo compensa T12 (tests de integración de App). |
+| D2 | La búsqueda "ID Environ o ID Origen" es un parámetro **`q` en el backend** (T9) | Hoy `environ_id` y `description` se combinan con AND (`services/search.py:147-154`); dos pedidos en el cliente romperían total y paginación. El export lo hereda gratis. |
+| D3 | El visor **no se remonta** tras cada movimiento; recibe `reloadToken` (T11) | `refreshInventory()` cambia `freezerKey` y `key={freezerKey}` reconstruye three.js y resetea la cámara en cada guardado; con la tanda de F1 serían N reconstrucciones. |
+| D4 | La API entrega la **ubicación estructurada** (T10) | `locationPrefill` (`App.tsx:56`) parsea el texto `III · F12 · 3B` con una regex; T2, T4 y T7 necesitan esos campos y un cambio de formato fallaría en silencio. |
+| D5 | Los flujos se prueban con **integración de App en Testing Library** (T12), no Playwright | Corre en la CI actual sin infraestructura nueva; el visor se reemplaza por un doble sin WebGL. |
+
+### Flujo de datos del buscador global (T2)
+
+```
+tecla ──► debounce 300 ms ──► ¿parece ubicación? (parseViewerQuery)
+                                 │ sí                         │ no
+                                 ▼                            ▼
+                      focusTarget {boxId,pos}        GET /samples/search?q=…&status=active&page_size=8
+                      viewMode = "3d"                          │  (respuesta vieja → se descarta)
+                                                               ▼
+                                          0 ── "No hay muestras activas con «q»" + ver retiradas
+                                          1 ── viewMode="3d", focusTarget, selected = muestra
+                                          N ── viewMode="table", filters.q = q, chip "ID: q ×"
+                                          error ── mensaje bajo el campo + Reintentar
+```
+
+### Cobertura de pruebas planificada
+
+```
+CÓDIGO                                            FLUJOS
+[+] backend services/search.py  q (T9)            [+] F1 congelar tanda (T5)
+  ├── [GAP→T9] por ID / por descripción / ambos     ├── [GAP→T12] 3 seguidas, foco vuelve a ID
+  ├── [GAP→T9] con status y otros filtros           └── [GAP→T12] caja llena a mitad de tanda
+  └── [GAP→T9] 422 con environ_id_exact           [+] F2 descongelar por ID (T7)
+[+] backend schemas SampleWithLocation (T10)        ├── [GAP→T12] ID con 1 y con varias activas
+  └── [GAP→T10] campos section/rack/box             └── [GAP→T12] no encargado: botón bloqueado
+[+] PositionPicker (hecho en bloque 2)            [+] F3 buscador (T2)
+  └── [★★★ TESTED] PositionPicker.test.tsx          ├── [GAP→T12] 1 / N / ubicación / 0
+[+] FreezerViewer reloadToken (T11)                 └── [GAP→T12] error de red, respuesta vieja
+  └── [GAP→T11] no desmonta, sí recarga           [+] F4 mover caja (T8)
+[+] App "Mover" sin diálogos apilados               └── [GAP→T12] destino ocupado / inexistente
+  └── [GAP→T12] regresión de FINDING-005
+
+COBERTURA HOY: 1/14 caminos  ·  todos los GAP tienen tarea asignada
+```
+
+### Modos de falla
+
+| Camino nuevo | Falla realista | ¿Test? | ¿Manejo? | ¿Lo ve el usuario? |
+|---|---|---|---|---|
+| Buscador (T2) | Respuestas fuera de orden: escribir `ENV-02` y luego `ENV-021` y que llegue primero la segunda | T12 | Descartar respuestas de pedidos viejos | Sin manejo, mostraría resultados de otro texto: **brecha si no se implementa** |
+| Buscador (T2) | Backend caído | T12 | Mensaje bajo el campo | Sí |
+| `q` (T9) | `%` o `_` en el texto se interpretan como comodines de ILIKE | T9 | Escapar comodines | Resultados de más, no silencioso |
+| Visor (T11) | La recarga llega mientras la cámara vuela a otra caja | T11 | La recarga solo cambia luces, no la cámara | No |
+| Ubicación (T10) | Frontend nuevo con backend viejo sin los campos | T10 | Campos opcionales en `types.ts`, prellenado vacío | Formulario sin prellenar, visible |
+| Tanda (T5) | Doble Enter guarda dos veces la misma posición | T12 | Botón deshabilitado mientras guarda (ya existe `submitting`) + restricción de BD | Error de posición ocupada, visible |
+
+Ninguna falla queda a la vez sin test, sin manejo y silenciosa si se implementan T2 y T9 como están escritos.
+
+### Fuera de alcance
+
+- Refactor del estado de `App.tsx` a un reducer: descartado en D1.
+- Playwright / E2E contra docker compose: descartado en D5.
+- Índice trigram para `ILIKE %q%`: con ~6.700 muestras no hace falta; revisar si supera ~100.000.
+- Estado en la URL (vista, filtros, muestra seleccionada): útil para compartir enlaces, no lo pide ningún flujo.
+- Lector de códigos de barras con cámara (ya estaba fuera).
+
+### Qué ya existe y se reutiliza (ingeniería)
+
+- `build_sample_query` (`services/search.py`) ya es compartido por búsqueda y export: `q` va ahí una sola vez.
+- `focusTarget` con `token` ya permite re-enfocar la misma caja: el buscador lo reutiliza.
+- `parseViewerQuery` del visor reconoce `A5` / `A5-3B`.
+- `Modal` (foco atrapado, Esc) y `submitting` en los formularios contra doble envío.
+
+### Paralelización
+
+| Paso | Módulos | Depende de |
+|---|---|---|
+| T9, T10 | `backend/app/services`, `backend/app/schemas` | — |
+| T1 | `frontend/src/styles` | — |
+| T11 | `frontend/src/components` (visor, ocupación), `App.tsx` | — |
+| T2, T3, T4 | `App.tsx`, `components` | T9, T10, T11 |
+| T5, T7, T8 | `components` (formularios) | T10 (T7) |
+
+Carril A: T9 → T10 (backend). Carril B: T1 (CSS). Carril C: T11. Se pueden hacer en paralelo;
+después T2–T4 en secuencia (todos tocan `App.tsx`), y T5/T7/T8 en paralelo con ellos salvo por
+`App.tsx` en T7. Conflicto: T3 y T11 tocan `App.tsx`; conviene T11 primero.
+
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| Design Review | `/plan-design-review` | UI/UX gaps | 1 | CLEAR | score: 4/10 → 9/10, 4 decisiones (D1–D4) + 8 tareas |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (PLAN) | 7 hallazgos, 0 brechas críticas; decisiones D1–D5, tareas T9–T12, T6 corregida |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | CLEAR (FULL) | score: 4/10 → 9/10, 4 decisiones |
 
-- **VERDICT:** Design CLEARED. Falta eng review (división de `App.tsx` por el panel de contexto y el buscador global).
+- **VERDICT:** ENG + DESIGN CLEARED — listo para implementar, empezando por el bloque 0 (T9, T10, T11).
 
 NO UNRESOLVED DECISIONS
