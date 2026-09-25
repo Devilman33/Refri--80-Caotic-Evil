@@ -27,8 +27,8 @@ const { api, ApiError } = vi.hoisted(() => {
 vi.mock("../../api/client", () => ({ api, ApiError }));
 
 const racks: RackRead[] = [
-  { id: 1, section_id: 1, letter: "A", slot: "center", capacity: 28 },
-  { id: 4, section_id: 2, letter: "D", slot: "right", capacity: 28 },
+  { id: 1, section_id: 1, letter: "A", slot: "center", capacity: 28, active: true },
+  { id: 4, section_id: 2, letter: "D", slot: "right", capacity: 28, active: true },
 ];
 const sections: SectionRead[] = [
   { id: 1, code: "I" },
@@ -67,7 +67,7 @@ describe("BoxMoveModal · destino en vivo (F4)", () => {
 
   it("avisa si en el destino ya hay una caja con muestras y no deja mover", async () => {
     api.listBoxes.mockResolvedValue([
-      { id: 9, rack_id: 4, number: 7, box_type: "carton_81", label: null, owner_id: null, is_full: false },
+      { id: 9, rack_id: 4, number: 7, box_type: "carton_81", label: null, owner_id: null, is_full: false, active: true },
     ]);
     api.getBoxPositions.mockResolvedValue([
       { position: "1A", occupied: true, sample_id: 1, environ_id: "X", is_core: false, owners: [] },

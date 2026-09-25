@@ -19,6 +19,8 @@ export interface HeaderProps {
   viewMode: HeaderViewMode;
   sessionUser: UserRead;
   onOpenUsers: () => void;
+  /** Racks y estantes: mover, dar de baja, crear (parte 3). */
+  onOpenFreezerAdmin: () => void;
   onLogout: () => void;
   /** Buscador global (docs/PLAN_FRONTEND.md, D1). */
   search: ReactNode;
@@ -36,8 +38,9 @@ function UserMenu({
   theme,
   onToggleTheme,
   onOpenUsers,
+  onOpenFreezerAdmin,
   onLogout,
-}: Pick<HeaderProps, "sessionUser" | "theme" | "onToggleTheme" | "onOpenUsers" | "onLogout">) {
+}: Pick<HeaderProps, "sessionUser" | "theme" | "onToggleTheme" | "onOpenUsers" | "onOpenFreezerAdmin" | "onLogout">) {
   const menuId = useId();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -84,6 +87,9 @@ function UserMenu({
         <div id={menuId} className="user-menu__list" role="group" aria-label="Menú de usuario">
           <button type="button" onClick={() => run(onOpenUsers)}>
             Usuarios
+          </button>
+          <button type="button" onClick={() => run(onOpenFreezerAdmin)}>
+            Administrar freezer
           </button>
           <button type="button" onClick={() => run(onToggleTheme)}>
             {theme === "dark" ? "Modo claro" : "Modo oscuro"}

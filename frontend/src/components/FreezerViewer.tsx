@@ -69,6 +69,8 @@ export interface FreezerViewerProps {
   onSelectOccupiedPosition: (selection: OccupiedPositionSelection) => void;
   /** "Mover caja": traslada la subcaja seleccionada con todas sus muestras. */
   onMoveBox?: (request: BoxMoveRequest) => void;
+  /** Se registró o se dio de baja una caja desde el panel: la app recarga y avisa. */
+  onBoxChanged?: (notice: string) => void;
   /** Cambia después de cada movimiento. El visor vuelve a pedir ocupación y luces sin
    * desmontarse: remontarlo reconstruía la escena three.js y devolvía la cámara al inicio
    * en cada guardado (con una tanda de congelamiento, en cada muestra). */
@@ -115,6 +117,7 @@ export function FreezerViewer({
   onSelectFreePosition,
   onSelectOccupiedPosition,
   onMoveBox,
+  onBoxChanged,
   reloadToken = 0,
   locationQuery,
   onQueryMessage,
@@ -137,6 +140,22 @@ export function FreezerViewer({
   const [extract, setExtract] = useState(true);
   const [sel, setSel] = useState<Selection>(EMPTY_SELECTION);
   const [boxViewOpen, setBoxViewOpen] = useState(false);
+  const [newBoxType, setNewBoxType] = useState<BoxType>("carton_81");
+  const [boxActionError, setBoxActionError] = useState<string | null>(null);
+  const [boxActionBusy, setBoxActionBusy] = useState(false);
+
+  async function runBoxAction(action: () => Promise<string>) {
+    setBoxActionBusy(true);
+    setBoxActionError(null);
+    try {
+      const notice = await action();
+      onBoxChanged?.(notice);
+    } catch (err) {
+      setBoxActionError(err instanceof ApiError ? err.message : "No se pudo guardar el cambio");
+    } finally {
+      setBoxActionBusy(false);
+    }
+  }
   const [slot, setSlot] = useState<string | null>(null);
   const [lights, setLights] = useState<PositionLight[] | null>(null);
 
@@ -886,6 +905,54 @@ export function FreezerViewer({
                 >
                   Abrir caja {formatLabel(selSlot.boxType)}
                 </button>
+              )}
+              {onBoxChanged && !selSlot.box && (
+                <div className="fv-newbox">
+                  <label htmlFor="fv-newbox-type">Registrar caja en este lugar</label>
+                  <div>
+                    <select
+                      id="fv-newbox-type"
+                      value={newBoxType}
+                      onChange={(event) => setNewBoxType(event.target.value as BoxType)}
+                    >
+                      <option value="carton_81">Cartón 9 × 9</option>
+                      <option value="plastic_100">Plástica 10 × 10</option>
+                    </select>
+                    <button
+                      type="button"
+                      className="fv-btn"
+                      disabled={boxActionBusy}
+                      onClick={() =>
+                        runBoxAction(async () => {
+                          await api.createBox({ rack_id: selRack.rack.id, number: selSlot.number, box_type: newBoxType });
+                          return `Caja ${selRack.rack.letter}${selSlot.number} registrada (${formatLabel(newBoxType)}).`;
+                        })
+                      }
+                    >
+                      Registrar caja
+                    </button>
+                  </div>
+                </div>
+              )}
+              {onBoxChanged && selSlot.box && lights !== null && occupiedCount === 0 && (
+                <button
+                  type="button"
+                  className="fv-btn fv-btn--quiet"
+                  disabled={boxActionBusy}
+                  onClick={() =>
+                    runBoxAction(async () => {
+                      await api.deactivateBox(selSlot.box!.id);
+                      return `Caja ${selRack.rack.letter}${selSlot.number} dada de baja. Su historial se conserva y el lugar quedó libre.`;
+                    })
+                  }
+                >
+                  Dar de baja caja
+                </button>
+              )}
+              {boxActionError && (
+                <p className="field-error" role="alert">
+                  {boxActionError}
+                </p>
               )}
               {onMoveBox && selSlot.box && occupiedCount > 0 && (
                 <button

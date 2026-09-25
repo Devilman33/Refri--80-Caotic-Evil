@@ -6,6 +6,7 @@ import { AlertsPanel, alertTotal, type AlertDestination } from "./components/Ale
 import { AnomaliesView } from "./components/AnomaliesView";
 import { BoxMoveModal, type BoxMoveTarget } from "./components/BoxMoveModal";
 import { FiltersBar } from "./components/FiltersBar";
+import { FreezerAdminModal } from "./components/FreezerAdminModal";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { FreezeForm, type LocationPrefill } from "./components/FreezeForm";
 import {
@@ -158,6 +159,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
   const [boxFilter, setBoxFilter] = useState<BoxFilter>("all");
   const [moving, setMoving] = useState<SampleWithLocation | null>(null);
   const [movingBox, setMovingBox] = useState<BoxMoveTarget | null>(null);
+  const [showFreezerAdmin, setShowFreezerAdmin] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [idListMode, setIdListMode] = useState(false);
@@ -369,6 +371,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
         viewMode={viewMode}
         sessionUser={sessionUser}
         onOpenUsers={() => setShowUsers(true)}
+        onOpenFreezerAdmin={() => setShowFreezerAdmin(true)}
         onLogout={onLogout}
         search={
           <GlobalSearch
@@ -552,6 +555,10 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
             onSelectFreePosition={handleSelectFreePosition}
             onSelectOccupiedPosition={handleSelectOccupiedPosition}
             onMoveBox={setMovingBox}
+            onBoxChanged={(message) => {
+              setNotice(message);
+              refreshInventory();
+            }}
             detailSlot={detailPanel}
           />
         )}
@@ -631,6 +638,18 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
           onClose={() => setMovementDialog(null)}
           onSubmitted={(movement) => {
             setNotice(`Muestra retirada: ${movement.sample.environ_id ?? "sin ID"} (${movement.sample.location}).`);
+            refreshInventory();
+          }}
+        />
+      )}
+
+      {showFreezerAdmin && (
+        <FreezerAdminModal
+          users={users}
+          sessionInitials={sessionUser.initials}
+          onClose={() => setShowFreezerAdmin(false)}
+          onChanged={(message) => {
+            setNotice(message);
             refreshInventory();
           }}
         />

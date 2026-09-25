@@ -2115,3 +2115,110 @@ h3[tabindex="-1"]:focus {
 .thaw-id__loc {
   color: var(--muted);
 }
+
+/* ---------- Parte 3: administrar el freezer ---------- */
+
+.freezer-admin th[scope="row"] {
+  font-family: var(--display);
+  font-size: 18px;
+  width: 80px;
+}
+
+.freezer-admin td {
+  vertical-align: top;
+}
+
+.freezer-admin__rack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.freezer-admin__letter {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.freezer-admin__actions {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.freezer-admin__inactive {
+  margin-top: 16px;
+}
+
+.freezer-admin__inactive ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.freezer-admin__inactive li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.freezer-admin__task {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.freezer-admin__task h3 small {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.freezer-admin__swap {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.fv-newbox {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fv-newbox label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.fv-newbox > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fv-newbox .fv-btn {
+  margin-top: 0;
+}
+
+.fv-btn--quiet {
+  background: var(--chip);
+  color: var(--ink);
+  border: 1px solid var(--field-border);
+}

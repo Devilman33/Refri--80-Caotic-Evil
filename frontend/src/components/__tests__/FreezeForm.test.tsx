@@ -29,7 +29,7 @@ const { api, ApiError } = vi.hoisted(() => {
 
 vi.mock("../../api/client", () => ({ api, ApiError }));
 
-const racks: RackRead[] = [{ id: 1, section_id: 1, letter: "A", slot: "center", capacity: 30 }];
+const racks: RackRead[] = [{ id: 1, section_id: 1, letter: "A", slot: "center", capacity: 30, active: true }];
 const sections: SectionRead[] = [{ id: 1, code: "I" }];
 const users: UserRead[] = [
   { id: 1, initials: "GC", name: "Guillermo", active: true },
@@ -298,7 +298,7 @@ describe("FreezeForm", () => {
   });
 
   it("la grilla marca el núcleo y trae leyenda", async () => {
-    api.listBoxes.mockResolvedValue([{ id: 5, rack_id: 1, number: 1, box_type: "carton_81", label: null, owner_id: null, is_full: null }]);
+    api.listBoxes.mockResolvedValue([{ id: 5, rack_id: 1, number: 1, box_type: "carton_81", label: null, owner_id: null, is_full: null, active: true }]);
     api.getBoxPositions.mockResolvedValue([
       { position: "1A", occupied: true, sample_id: 9, environ_id: "BP009", is_core: true },
     ]);

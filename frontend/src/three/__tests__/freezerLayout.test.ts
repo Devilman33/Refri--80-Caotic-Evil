@@ -21,17 +21,17 @@ const sections: SectionRead[] = [
 ];
 
 const racks: RackRead[] = [
-  { id: 10, section_id: 1, letter: "A", slot: "center", capacity: 30 },
-  { id: 11, section_id: 1, letter: "B", slot: "right", capacity: 30 },
-  { id: 12, section_id: 2, letter: "C", slot: "center", capacity: 30 },
+  { id: 10, section_id: 1, letter: "A", slot: "center", capacity: 30, active: true },
+  { id: 11, section_id: 1, letter: "B", slot: "right", capacity: 30, active: true },
+  { id: 12, section_id: 2, letter: "C", slot: "center", capacity: 30, active: true },
   // Sección III solo tiene el rack del centro: el de la derecha aún no existe.
-  { id: 13, section_id: 3, letter: "E", slot: "center", capacity: 30 },
+  { id: 13, section_id: 3, letter: "E", slot: "center", capacity: 30, active: true },
 ];
 
 const boxes: BoxRead[] = [
-  { id: 100, rack_id: 10, number: 2, box_type: "carton_81", label: null, owner_id: null, is_full: null },
-  { id: 101, rack_id: 10, number: 1, box_type: "carton_81", label: null, owner_id: null, is_full: null },
-  { id: 102, rack_id: 11, number: 1, box_type: "plastic_100", label: null, owner_id: null, is_full: null },
+  { id: 100, rack_id: 10, number: 2, box_type: "carton_81", label: null, owner_id: null, is_full: null, active: true },
+  { id: 101, rack_id: 10, number: 1, box_type: "carton_81", label: null, owner_id: null, is_full: null, active: true },
+  { id: 102, rack_id: 11, number: 1, box_type: "plastic_100", label: null, owner_id: null, is_full: null, active: true },
 ];
 
 describe("buildFreezerLayout", () => {

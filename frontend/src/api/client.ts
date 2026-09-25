@@ -7,6 +7,7 @@ import type {
   ImportRunRead,
   BoxPositionStatus,
   BoxOccupancy,
+  BoxCreate,
   BoxMoveCreate,
   BoxMoveResult,
   BoxRead,
@@ -17,13 +18,19 @@ import type {
   Page,
   PositionConflict,
   RackOccupancy,
+  RackCreate,
+  RackMoveCreate,
+  RackMoveResult,
   RackRead,
+  RackSlot,
   SampleMoveCreate,
+  SampleReturnCreate,
   SampleSearchFilters,
   SampleUpdate,
   SampleWithLocation,
   SectionOccupancy,
   SectionRead,
+  ThawBatchCreate,
   UserCreate,
   UserRead,
   UserUpdate,
@@ -118,8 +125,32 @@ export const api = {
   listSections(): Promise<SectionRead[]> {
     return request(`/sections`);
   },
-  listRacks(): Promise<RackRead[]> {
-    return request(`/racks`);
+  listRacks(params: { include_inactive?: boolean } = {}): Promise<RackRead[]> {
+    return request(`/racks${buildQuery(params)}`);
+  },
+  createRack(payload: RackCreate): Promise<RackRead> {
+    return post(`/racks`, payload);
+  },
+  moveRack(rackId: number, payload: RackMoveCreate): Promise<RackMoveResult> {
+    return post(`/racks/${rackId}/move`, payload);
+  },
+  deactivateRack(rackId: number): Promise<RackRead> {
+    return post(`/racks/${rackId}/deactivate`, {});
+  },
+  activateRack(rackId: number, payload: { section_code: string; slot: RackSlot }): Promise<RackRead> {
+    return post(`/racks/${rackId}/activate`, payload);
+  },
+  createBox(payload: BoxCreate): Promise<BoxRead> {
+    return post(`/boxes`, payload);
+  },
+  deactivateBox(boxId: number): Promise<BoxRead> {
+    return post(`/boxes/${boxId}/deactivate`, {});
+  },
+  thawBatch(payload: ThawBatchCreate): Promise<MovementResult[]> {
+    return post(`/movements/thaw-batch`, payload);
+  },
+  returnSample(sampleId: number, payload: SampleReturnCreate): Promise<MovementResult> {
+    return post(`/samples/${sampleId}/return`, payload);
   },
   listBoxes(params: { rack_id?: number } = {}): Promise<BoxRead[]> {
     return request(`/boxes${buildQuery(params)}`);

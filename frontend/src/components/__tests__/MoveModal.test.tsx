@@ -21,7 +21,7 @@ vi.mock("../../api/client", async () => {
 
 const { api } = await import("../../api/client");
 
-const racks: RackRead[] = [{ id: 1, section_id: 1, letter: "A", slot: "center", capacity: 30 }];
+const racks: RackRead[] = [{ id: 1, section_id: 1, letter: "A", slot: "center", capacity: 30, active: true }];
 const sections: SectionRead[] = [{ id: 1, code: "I" }];
 const users: UserRead[] = [{ id: 1, initials: "MN", name: null, active: true }];
 
@@ -51,7 +51,7 @@ beforeEach(() => {
   vi.mocked(api.listRacks).mockResolvedValue(racks);
   vi.mocked(api.listSections).mockResolvedValue(sections);
   vi.mocked(api.listBoxes).mockResolvedValue([
-    { id: 1, rack_id: 1, number: 2, box_type: "carton_81", label: null, owner_id: null, is_full: null },
+    { id: 1, rack_id: 1, number: 2, box_type: "carton_81", label: null, owner_id: null, is_full: null, active: true },
   ]);
   vi.mocked(api.getBoxPositions).mockResolvedValue([]);
 });

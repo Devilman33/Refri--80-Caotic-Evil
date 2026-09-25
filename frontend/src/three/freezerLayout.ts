@@ -41,7 +41,8 @@ export function buildFreezerLayout(
   boxes: BoxRead[],
 ): FreezerLayout {
   const boxesByRack = new Map<number, LayoutBox[]>();
-  for (const box of boxes) {
+  // Las cajas y racks dados de baja no se dibujan: su lugar queda libre (parte 3).
+  for (const box of boxes.filter((entry) => entry.active !== false)) {
     const list = boxesByRack.get(box.rack_id) ?? [];
     list.push({ id: box.id, number: box.number, boxType: box.box_type });
     boxesByRack.set(box.rack_id, list);
@@ -50,7 +51,7 @@ export function buildFreezerLayout(
     list.sort((a, b) => a.number - b.number);
 
   const racksBySection = new Map<number, RackRead[]>();
-  for (const rack of racks) {
+  for (const rack of racks.filter((entry) => entry.active !== false && entry.slot !== null)) {
     const list = racksBySection.get(rack.section_id) ?? [];
     list.push(rack);
     racksBySection.set(rack.section_id, list);
@@ -59,7 +60,7 @@ export function buildFreezerLayout(
   const toLayoutRack = (rack: RackRead): LayoutRack => ({
     id: rack.id,
     letter: rack.letter,
-    slot: rack.slot,
+    slot: rack.slot!,
     capacity: rack.capacity,
     boxes: boxesByRack.get(rack.id) ?? [],
   });

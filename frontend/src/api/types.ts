@@ -26,7 +26,7 @@ export const SAMPLE_STATUS_LABELS: Record<SampleStatus, string> = {
   withdrawn: "Retirada",
 };
 
-export type MovementAction = "freeze" | "thaw" | "move";
+export type MovementAction = "freeze" | "thaw" | "move" | "return";
 
 /** OJO: este mapa TIENE que crecer con cada acción para que el historial la renderice,
  * pero el desplegable del formulario NO se deriva de él (ver ACTION_OPTIONS en
@@ -37,6 +37,7 @@ export const MOVEMENT_ACTION_LABELS: Record<MovementAction, string> = {
   freeze: "Congelamiento",
   thaw: "Descongelamiento",
   move: "Traslado",
+  return: "Reingreso",
 };
 
 export type BoxType = "carton_81" | "plastic_100";
@@ -168,12 +169,67 @@ export interface SectionRead {
   code: string;
 }
 
+export type RackSlot = "center" | "right";
+
+export const RACK_SLOT_LABELS: Record<RackSlot, string> = { center: "Centro", right: "Derecha" };
+
 export interface RackRead {
   id: number;
   section_id: number;
   letter: string;
-  slot: "center" | "right";
+  /** `null` si el rack está dado de baja: libera su lugar en el estante. */
+  slot: RackSlot | null;
   capacity: number;
+  active: boolean;
+}
+
+export interface RackCreate {
+  section_id: number;
+  letter: string;
+  slot: RackSlot;
+  capacity?: number;
+}
+
+/** Llevar un rack a otro estante/lugar. La letra no cambia. */
+export interface RackMoveCreate {
+  section_code: string;
+  slot: RackSlot;
+  /** Si el lugar está ocupado, intercambiar los dos racks. */
+  swap?: boolean;
+  date: string;
+  operator_initials: string;
+  note?: string | null;
+}
+
+export interface RackMoveResult {
+  rack: RackRead;
+  swapped_with: RackRead | null;
+  moved_samples: number;
+}
+
+export interface BoxCreate {
+  rack_id: number;
+  number: number;
+  box_type: BoxType;
+  label?: string | null;
+}
+
+/** Retirar varias muestras de una vez, con una sola fecha y motivo. */
+export interface ThawBatchCreate {
+  date: string;
+  operator_initials: string;
+  sample_ids: number[];
+  note?: string | null;
+}
+
+/** Devolver al freezer una muestra retirada. Sin ubicación, vuelve a su lugar de antes. */
+export interface SampleReturnCreate {
+  date: string;
+  operator_initials: string;
+  rack_letter?: string;
+  box_number?: number;
+  position?: string;
+  note?: string | null;
 }
 
 export interface BoxRead {
@@ -184,6 +240,7 @@ export interface BoxRead {
   label: string | null;
   owner_id: number | null;
   is_full: boolean | null;
+  active: boolean;
 }
 
 // % de uso (GET /occupancy/*, issue #7). `percent` viene redondeado a 2 decimales.
