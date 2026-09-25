@@ -69,6 +69,10 @@ export interface FreezerViewerProps {
   onSelectOccupiedPosition: (selection: OccupiedPositionSelection) => void;
   /** "Mover caja": traslada la subcaja seleccionada con todas sus muestras. */
   onMoveBox?: (request: BoxMoveRequest) => void;
+  /** Cambia después de cada movimiento. El visor vuelve a pedir ocupación y luces sin
+   * desmontarse: remontarlo reconstruía la escena three.js y devolvía la cámara al inicio
+   * en cada guardado (con una tanda de congelamiento, en cada muestra). */
+  reloadToken?: number;
 }
 
 interface RackInfo {
@@ -104,6 +108,7 @@ export function FreezerViewer({
   onSelectFreePosition,
   onSelectOccupiedPosition,
   onMoveBox,
+  reloadToken = 0,
 }: FreezerViewerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
@@ -128,11 +133,20 @@ export function FreezerViewer({
   const [queryMsg, setQueryMsg] = useState("");
 
   // ---------- Datos ----------
+  // La escena se reconstruye cada vez que cambia `layout`, así que en una recarga solo se
+  // reemplaza si la estructura cambió de verdad (una caja nueva o una caja movida). La
+  // ocupación y las luces sí se recargan siempre.
+  const layoutSignature = useRef<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     Promise.all([api.listSections(), api.listRacks(), api.listBoxes()])
       .then(([sections, racks, boxes]) => {
-        if (!cancelled) setLayout(buildFreezerLayout(sections, racks, boxes));
+        if (cancelled) return;
+        const next = buildFreezerLayout(sections, racks, boxes);
+        const signature = JSON.stringify(next);
+        if (signature === layoutSignature.current) return;
+        layoutSignature.current = signature;
+        setLayout(next);
       })
       .catch((err: unknown) => {
         if (!cancelled)
@@ -158,7 +172,7 @@ export function FreezerViewer({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadToken]);
 
   const racksByLetter = useMemo(() => {
     const map = new Map<string, RackInfo>();
@@ -355,7 +369,7 @@ export function FreezerViewer({
     return () => {
       cancelled = true;
     };
-  }, [sel.rack, sel.box, selBoxId, selBoxType]);
+  }, [sel.rack, sel.box, selBoxId, selBoxType, reloadToken]);
 
   useEffect(() => {
     if (sel.box === null) {

@@ -38,6 +38,7 @@ vi.mock("../components/FreezerViewer", async () => {
     FreezerViewer: (props: {
       focusTarget?: { boxId: number; position: string | null } | null;
       reloadToken?: number;
+      onSelectOccupiedPosition: (selection: { sampleId: number }) => void;
     }) => {
       useEffect(() => {
         viewerMounts.count += 1;
@@ -48,6 +49,9 @@ vi.mock("../components/FreezerViewer", async () => {
             {props.focusTarget ? `${props.focusTarget.boxId}:${props.focusTarget.position ?? "-"}` : "sin foco"}
           </p>
           <p data-testid="viewer-reload">{props.reloadToken ?? "sin token"}</p>
+          <button type="button" onClick={() => props.onSelectOccupiedPosition({ sampleId: 9 })}>
+            Posición ocupada 3B
+          </button>
         </section>
       );
     },
@@ -81,6 +85,22 @@ function sample(overrides: Partial<SampleWithLocation> = {}): SampleWithLocation
   };
 }
 
+const occupiedBox = {
+  box_id: 5,
+  number: 12,
+  rack_id: 3,
+  rack_letter: "F",
+  section_code: "III",
+  box_type: "carton_81",
+  is_full: false,
+  active: 1,
+  capacity: 81,
+  percent: 1.2,
+};
+const occupiedPositions = [
+  { position: "3B", occupied: true, sample_id: 9, environ_id: "BP009", is_core: false, owners: ["Gonzalo Carrasco"] },
+];
+
 function page(items: SampleWithLocation[]) {
   return { items, total: items.length, page: 1, page_size: 25 };
 }
@@ -99,23 +119,8 @@ beforeEach(() => {
 describe("App · descongelar desde el detalle", () => {
   it("prellena la caja y la posición con la ubicación por partes, sin parsear el texto", async () => {
     const user = userEvent.setup();
-    api.listBoxOccupancy.mockResolvedValue([
-      {
-        box_id: 5,
-        number: 12,
-        rack_id: 3,
-        rack_letter: "F",
-        section_code: "III",
-        box_type: "carton_81",
-        is_full: false,
-        active: 1,
-        capacity: 81,
-        percent: 1.2,
-      },
-    ]);
-    api.getBoxPositions.mockResolvedValue([
-      { position: "3B", occupied: true, sample_id: 9, environ_id: "BP009", is_core: false, owners: ["Gonzalo Carrasco"] },
-    ]);
+    api.listBoxOccupancy.mockResolvedValue([occupiedBox]);
+    api.getBoxPositions.mockResolvedValue(occupiedPositions);
     // El texto no se puede parsear: si la app todavía lo usara, el formulario abriría vacío.
     api.searchSamples.mockResolvedValue(page([sample({ location: "ubicación sin formato" })]));
     render(<App />);
@@ -128,5 +133,26 @@ describe("App · descongelar desde el detalle", () => {
     const thaw = await screen.findByRole("dialog", { name: /retirar muestra/i });
     await waitFor(() => expect(within(thaw).getByLabelText(/sección/i)).toHaveValue("III"));
     await waitFor(() => expect(within(thaw).getByLabelText(/^rack$/i)).toHaveValue("F"));
+  });
+});
+
+describe("App · recarga del visor", () => {
+  it("después de un movimiento el visor recarga sus datos sin desmontarse", async () => {
+    const user = userEvent.setup();
+    api.listBoxOccupancy.mockResolvedValue([occupiedBox]);
+    api.getBoxPositions.mockResolvedValue(occupiedPositions);
+    api.createMovement.mockResolvedValue({ sample: sample({ status: "withdrawn" }), movement: {} });
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: /posición ocupada 3b/i }));
+    const detail = await screen.findByRole("dialog");
+    await user.click(within(detail).getByRole("button", { name: /^descongelar$/i }));
+    const thaw = await screen.findByRole("dialog", { name: /retirar muestra/i });
+    await within(thaw).findByRole("region", { name: /muestra a retirar/i });
+    await user.type(within(thaw).getByLabelText(/motivo del retiro/i), "Extracción de RNA");
+    await user.click(within(thaw).getByRole("button", { name: /retirar muestra/i }));
+
+    await waitFor(() => expect(screen.getByTestId("viewer-reload")).toHaveTextContent("1"));
+    expect(viewerMounts.count).toBe(1);
   });
 });

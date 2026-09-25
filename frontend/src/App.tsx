@@ -149,7 +149,6 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
   // El visor 3D es la primera vista: es la que el laboratorio usa para ubicarse.
   const [viewMode, setViewMode] = useState<ViewMode>("3d");
   const [focusTarget, setFocusTarget] = useState<FreezerFocusTarget | null>(null);
-  const [freezerKey, setFreezerKey] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
   const [editing, setEditing] = useState<SampleWithLocation | null>(null);
   const [alertCount, setAlertCount] = useState(0);
@@ -220,10 +219,10 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
     }));
   }
 
-  /** Después de cualquier cambio de inventario: tabla, visor y alertas se recargan. */
+  /** Después de cualquier cambio de inventario: tabla, visor, % de uso y alertas vuelven a
+   * pedir sus datos con `reloadToken`, sin desmontarse. */
   function refreshInventory() {
     setReloadToken((token) => token + 1);
-    setFreezerKey((key) => key + 1);
   }
 
   // Clic en una posición libre del visor 3D (issue #6): abre el congelamiento con la caja
@@ -407,7 +406,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
 
         {viewMode === "usage" && (
           <OccupancyView
-            key={freezerKey}
+            reloadToken={reloadToken}
             onViewBox={handleViewBoxInFreezer}
             onMoveBox={(box) =>
               setMovingBox({
@@ -458,7 +457,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
         )}
         {viewMode === "3d" && (
           <FreezerViewer
-            key={freezerKey}
+            reloadToken={reloadToken}
             focusTarget={focusTarget}
             onSelectFreePosition={handleSelectFreePosition}
             onSelectOccupiedPosition={handleSelectOccupiedPosition}

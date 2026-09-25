@@ -24,6 +24,9 @@ export interface OccupancyViewProps {
   /** Estado inicial del filtro. Cada contador del panel de alertas entra con el suyo:
    * sin esto, "llenas" y "casi llenas" llevarían a la misma pantalla. */
   initialFilter?: BoxFilter;
+  /** Cambia después de cada movimiento: vuelve a pedir los datos sin desmontar la vista
+   * (se conservan el filtro y el orden elegidos). */
+  reloadToken?: number;
 }
 
 interface OccupancyData {
@@ -57,7 +60,7 @@ const SORT_LABELS: Record<BoxSortKey, string> = {
 
 // Vista de almacenamiento (issue #7): % de uso del freezer, por sección, por rack
 // y por subcaja (la cajita 9×9 o 10×10), con las llenas y casi llenas destacadas.
-export function OccupancyView({ onViewBox, onMoveBox, initialFilter = "all" }: OccupancyViewProps) {
+export function OccupancyView({ onViewBox, onMoveBox, initialFilter = "all", reloadToken = 0 }: OccupancyViewProps) {
   const [data, setData] = useState<OccupancyData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<BoxSortKey>("percent");
@@ -85,7 +88,7 @@ export function OccupancyView({ onViewBox, onMoveBox, initialFilter = "all" }: O
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadToken]);
 
   const boxes = useMemo(() => {
     if (!data) return [];
