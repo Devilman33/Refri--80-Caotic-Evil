@@ -23,6 +23,13 @@
   --slot-line: #a8936b;
   --led-on: #e5484d;
   --led-off: #2bb673;
+  /* Superficies de las grillas de posiciones. Los --led-* son colores de EMISION para las
+     mallas 3D del visor; usarlos como fondo de una etiqueta mono de 10px no pasa contraste.
+     Estos derivan de esas tonalidades y mantienen >=4.5:1 contra el texto. */
+  --free-soft: #d9f2e4;
+  --free-ink: #0f5f3c;
+  --occupied-soft: #fbdcdd;
+  --occupied-ink: #9c1f23;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -49,6 +56,10 @@
     --slot-line: #8a7652;
     --led-on: #ff6369;
     --led-off: #3dd68c;
+    --free-soft: #143026;
+    --free-ink: #6ee7a8;
+    --occupied-soft: #3a1a1d;
+    --occupied-ink: #ff9b9e;
   }
 }
 
@@ -75,6 +86,10 @@
   --slot-line: #8a7652;
   --led-on: #ff6369;
   --led-off: #3dd68c;
+  --free-soft: #143026;
+  --free-ink: #6ee7a8;
+  --occupied-soft: #3a1a1d;
+  --occupied-ink: #ff9b9e;
 }
 
 * {
@@ -476,19 +491,77 @@ table.samples-table {
   text-align: center;
 }
 
+/* Regla de dominio no negociable: roja = ocupada, verde = libre
+   (.github/copilot-instructions.md). Antes esta grilla usaba turquesa para libre y
+   naranja para ocupada, mientras el visor 3D si cumplia: el operador aprendia una
+   convencion en una vista y veia otra en el formulario.
+
+   Segundo canal para daltonismo: ~8% de los hombres no separa rojo de verde, y las
+   tonalidades no se pueden cambiar porque son la regla. Asi que la forma tambien
+   distingue: ocupada = rellena, libre = hueca. La leyenda dice "● ocupada / ○ libre". */
 .position-cell--free {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: transparent;
+  border-color: var(--free-ink);
+  color: var(--free-ink);
+}
+
+.position-cell--free:hover:not(:disabled) {
+  background: var(--free-soft);
 }
 
 .position-cell--occupied {
-  background: var(--warn-soft);
-  color: var(--danger);
+  background: var(--occupied-soft);
+  border-color: var(--occupied-ink);
+  color: var(--occupied-ink);
 }
 
+/* Sin opacity: en modo congelamiento TODAS las ocupadas estan deshabilitadas, y al 55%
+   dejaban de leerse como rojas. Una celda ocupada sigue siendo inconfundiblemente roja
+   aunque no se pueda clickear. */
 .position-cell:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  border-style: dashed;
+}
+
+.position-cell-legend {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.position-cell-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.position-cell-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+}
+
+.position-cell-legend .legend-free {
+  color: var(--free-ink);
+  background: transparent;
+}
+
+.position-cell-legend .legend-occupied {
+  color: var(--occupied-ink);
+  background: var(--occupied-soft);
+}
+
+.position-cell-legend .legend-core {
+  color: var(--warn);
+  background: transparent;
+  box-shadow: 0 0 0 2px var(--warn);
+}
+
+.position-cell--core {
+  box-shadow: 0 0 0 2px var(--warn);
 }
 
 .position-cell--selected {

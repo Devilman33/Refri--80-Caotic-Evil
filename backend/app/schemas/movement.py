@@ -54,6 +54,14 @@ class MovementCreate(BaseModel):
 
 
 class MovementRead(BaseModel):
+    """Un evento del historial.
+
+    `operator_initials` se deriva de la relación `Movement.operator`: la regla de dominio
+    exige registrar *quién* retiró una muestra (ver .github/copilot-instructions.md), y el
+    id numérico solo no deja mostrarlo. Los movimientos que vienen del importador no tienen
+    operador (el Excel histórico no lo traía) y quedan en `None`.
+    """
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -61,6 +69,7 @@ class MovementRead(BaseModel):
     action: MovementAction
     date: date
     operator_id: int | None
+    operator_initials: str | None = None
     box_id: int
     position: str
     note: str | None

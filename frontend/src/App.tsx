@@ -171,7 +171,11 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header theme={theme} onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} />
+      <Header
+        theme={theme}
+        onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+        viewMode={viewMode}
+      />
       <main className="app-main">
         <div className="filters-actions">
           <button type="button" className="btn" onClick={() => openMovementForm(undefined)}>

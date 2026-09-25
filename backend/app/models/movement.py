@@ -37,5 +37,14 @@ class Movement(Base):
     operator: Mapped["User | None"] = relationship(foreign_keys=[operator_id])
     box: Mapped["Box"] = relationship()
 
+    @property
+    def operator_initials(self) -> str | None:
+        """Iniciales de quien registró el evento, o `None` si vino del importador.
+
+        `MovementRead` la lee con `from_attributes`. La regla de dominio exige registrar
+        *quién* retiró una muestra; el `operator_id` numérico solo no deja mostrarlo.
+        """
+        return self.operator.initials if self.operator is not None else None
+
     def __repr__(self) -> str:  # pragma: no cover
         return f"Movement(id={self.id!r}, sample_id={self.sample_id!r}, action={self.action!r})"

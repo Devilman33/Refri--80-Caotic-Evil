@@ -157,3 +157,60 @@ def test_freeze_can_reuse_position_after_thaw(client, db_session):
     )
     assert response.status_code == 201
     assert response.json()["sample"]["environ_id"] == "BP002"
+
+
+def test_thaw_clears_box_is_full(client, db_session):
+    """C1: `_freeze` sube `box.is_full` desde el formulario y nadie lo bajaba al retirar,
+    así que la vista de % de uso seguía mostrando "Llena" con posiciones libres."""
+    _, rack, box = make_freezer(client)
+    client.post(
+        "/movements",
+        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", box_is_full=True),
+    )
+    assert client.get(f"/boxes/{box['id']}").json()["is_full"] is True
+
+    client.post("/movements", json=thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A"))
+
+    assert client.get(f"/boxes/{box['id']}").json()["is_full"] is False
+
+
+def test_thaw_on_box_not_marked_full_keeps_is_full_unchanged(client, db_session):
+    _, rack, box = make_freezer(client)
+    client.post(
+        "/movements",
+        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", box_is_full=False),
+    )
+
+    client.post("/movements", json=thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A"))
+
+    assert client.get(f"/boxes/{box['id']}").json()["is_full"] is False
+
+
+def test_movement_history_exposes_operator_initials(client, db_session):
+    """C2: la regla de dominio exige registrar *quién* retiró una muestra. El dato se
+    guardaba en `operator_id` pero no salía por la API, así que la UI no podía mostrarlo."""
+    _, rack, box = make_freezer(client)
+    created = client.post(
+        "/movements",
+        json=freeze_payload(
+            rack_letter=rack["letter"], box_number=box["number"], position="1A", operator_initials="mn"
+        ),
+    )
+    sample_id = created.json()["sample"]["id"]
+
+    movements = client.get(f"/samples/{sample_id}/movements").json()
+
+    assert [movement["operator_initials"] for movement in movements] == ["MN"]
+
+
+def test_movements_endpoint_rejects_unimplemented_action(client, db_session):
+    """Guarda del fallthrough: este endpoint implementa freeze y thaw. Una acción nueva
+    caía en `_freeze` sin validar y explotaba con un 500."""
+    _, rack, box = make_freezer(client)
+    payload = freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A")
+    payload["action"] = "move"
+
+    response = client.post("/movements", json=payload)
+
+    assert response.status_code == 422
+    assert client.get("/samples").json()["total"] == 0

@@ -34,6 +34,19 @@ def create_movement(payload: MovementCreate, db: DbSession) -> MovementResult:
     box = db.query(Box).filter(Box.rack_id == rack.id, Box.number == payload.box_number).one_or_none()
     operator = get_or_create_user(db, payload.operator_initials)
 
+    # Guarda explícita en vez de un fallthrough. Este endpoint implementa exactamente dos
+    # acciones; agregar un valor nuevo a `MovementAction` (p. ej. un traslado) lo mandaba
+    # antes a `_freeze`, donde `_check_required_for_freeze` no valida nada porque la acción
+    # no es FREEZE, y terminaba en `get_or_create_user(None)` con un 500. Peor: el
+    # desplegable del formulario se genera desde `MOVEMENT_ACTION_LABELS`, así que la
+    # acción nueva aparecía sola en la UI y la encontraba un operador, no un test.
+    if payload.action not in (MovementAction.FREEZE, MovementAction.THAW):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Este endpoint solo registra congelamientos y descongelamientos; "
+            f"'{payload.action.value}' se registra en su propio endpoint",
+        )
+
     if payload.action == MovementAction.THAW:
         return _thaw(db, box=box, position=position, operator=operator, payload=payload)
     return _freeze(
@@ -53,6 +66,11 @@ def _thaw(db: Session, *, box: Box | None, position: str, operator: User, payloa
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No hay una muestra activa en esa posición")
 
     sample.status = SampleStatus.WITHDRAWN.value
+    # Acaba de liberarse una posición: la caja ya no puede estar llena. `_freeze` escribe
+    # `box.is_full` desde el campo "¿La caja está llena?" del formulario, pero nadie lo bajaba
+    # al retirar, así que la vista de % de uso seguía mostrando "Llena" con huecos libres.
+    if box.is_full:
+        box.is_full = False
     movement = Movement(
         sample_id=sample.id,
         action=MovementAction.THAW.value,
