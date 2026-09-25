@@ -205,7 +205,7 @@ export default function App() {
           </div>
         </div>
 
-        {viewMode !== "usage" && (
+        {viewMode === "table" && (
           <FiltersBar
             filters={filters}
             onChange={setFilters}
@@ -217,8 +217,8 @@ export default function App() {
         )}
 
         {viewMode === "usage" && <OccupancyView key={freezerKey} onViewBox={handleViewBoxInFreezer} />}
-        {viewMode !== "usage" && loading && <div className="empty-state">Cargando muestras…</div>}
-        {viewMode !== "usage" && error && !loading && (
+        {viewMode === "table" && loading && <div className="empty-state">Cargando muestras…</div>}
+        {viewMode === "table" && error && !loading && (
           <div className="empty-state" role="alert">
             {error}
           </div>

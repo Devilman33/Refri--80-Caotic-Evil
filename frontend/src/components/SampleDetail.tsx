@@ -36,9 +36,15 @@ export function SampleDetail({ sample, ownerLabel, onClose, onThaw }: SampleDeta
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sd-title"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="modal-header">
-          <h2>
+          <h2 id="sd-title">
             <code>{sample.environ_id ?? `Muestra #${sample.id}`}</code>
           </h2>
           <div style={{ display: "flex", gap: 8 }}>

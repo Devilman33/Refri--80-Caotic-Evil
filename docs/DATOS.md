@@ -83,6 +83,10 @@ racks y cajas sale de los datos.
   del Excel es inconsistente (por ejemplo, el mismo rack aparece en varias secciones). El importador
   debe **reportar** esas filas en vez de crear racks duplicados.
 - **Capacidad de cada rack** (cuántas subcajas caben y cómo se apilan): configurable en el mismo
-  archivo. Por defecto usa el mayor número de caja encontrado en los datos para ese rack.
+  archivo. Por defecto es **20 = 5 pisos × 4 cajas de 2 in**, según la tabla de racks del manual
+  serie J del Haier DW-86L388J, que es el modelo que dibuja `demo.html`. Si una caja registrada tiene
+  un número mayor, el visor agrega los pisos que falten.
 - **El visor genera la geometría** a partir de esa configuración y de la base de datos:
-  4 estantes × 2 racks (centro y derecha) × N subcajas, cada una con su grilla 9×9 o 10×10.
+  4 estantes × 2 racks (centro y derecha) × 20 subcajas, cada una con su grilla 9×9 o 10×10.
+  **Todas las subcajas vienen precargadas** en el visor, aunque aún no existan en la base. Una
+  subcaja se registra con su primer congelamiento.
