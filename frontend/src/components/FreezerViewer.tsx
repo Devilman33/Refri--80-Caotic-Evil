@@ -116,17 +116,27 @@ export function FreezerViewer({ focusTarget, onSelectFreePosition, onSelectOccup
   const openBoxView = useRef<(sectionCode: string, rack: LayoutRack, box: LayoutBox, highlight: string | null) => void>(
     () => undefined,
   );
+  const boxViewRequestRef = useRef(0);
 
   // Vista de caja: pide las posiciones y arma las luces roja/verde (docs/DATOS.md).
+  // Se descarta la respuesta si ya se disparó otra petición más nueva (clics rápidos entre cajas).
   function loadBoxPositions(sectionCode: string, rack: LayoutRack, box: LayoutBox, highlight: string | null) {
+    const requestId = ++boxViewRequestRef.current;
     setBoxViewLoading(true);
     api
       .getBoxPositions(box.id)
       .then((positions) => {
+        if (boxViewRequestRef.current !== requestId) return;
         setBoxView({ sectionCode, rack, box, lights: mapPositionsToLights(positions), highlight });
       })
-      .catch(() => setBoxView({ sectionCode, rack, box, lights: [], highlight }))
-      .finally(() => setBoxViewLoading(false));
+      .catch(() => {
+        if (boxViewRequestRef.current !== requestId) return;
+        setBoxView({ sectionCode, rack, box, lights: [], highlight });
+      })
+      .finally(() => {
+        if (boxViewRequestRef.current !== requestId) return;
+        setBoxViewLoading(false);
+      });
   }
   openBoxView.current = loadBoxPositions;
 
