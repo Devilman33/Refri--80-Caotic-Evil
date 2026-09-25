@@ -4,6 +4,7 @@ ver docs/DATOS.md y .github/workflows/ci.yml para cómo se levanta en CI.
 
 import os
 import pathlib
+import re
 
 import pytest
 from alembic import command
@@ -114,9 +115,41 @@ def db_session(engine):
             connection.execute(text(f"TRUNCATE TABLE {_TABLES} RESTART IDENTITY CASCADE"))
 
 
+#: Operador por defecto de los payloads de tests/api/helpers.py, y por lo tanto también
+#: el encargado por defecto de lo que congelan.
+SESSION_INITIALS = "GC"
+
+_SESSION_PATHS = re.compile(r"^/movements$|^/samples/\d+(/movements)?$|^/boxes/\d+/move$")
+
+
+class SessionClient(TestClient):
+    """Simula la sesión de la página: las escrituras que exigen saber quién es el usuario
+    (header `X-User-Id`) salen como `GC` si el test no manda otro header.
+
+    Sin esto, cada test que congela o retira tendría que crear el usuario y armar el
+    header a mano, y lo que verifica quedaría enterrado en preparación. Los tests de
+    permisos mandan el header explícito; los de "sin sesión" usan un `TestClient` pelado.
+    """
+
+    def request(self, method, url, **kwargs):  # type: ignore[override]
+        headers = dict(kwargs.pop("headers", None) or {})
+        if method.upper() != "GET" and "X-User-Id" not in headers and _SESSION_PATHS.match(str(url)):
+            headers["X-User-Id"] = str(self._session_user_id())
+        return super().request(method, url, headers=headers, **kwargs)
+
+    def _session_user_id(self) -> int:
+        users = super().request("GET", "/users").json()
+        for user in users:
+            if user["initials"] == SESSION_INITIALS:
+                return user["id"]
+        response = super().request("POST", "/users", json={"initials": SESSION_INITIALS})
+        assert response.status_code == 201, response.text
+        return response.json()["id"]
+
+
 @pytest.fixture()
 def client():
     from app.main import app
 
-    with TestClient(app) as test_client:
+    with SessionClient(app) as test_client:
         yield test_client

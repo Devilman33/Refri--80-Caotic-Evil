@@ -12,7 +12,7 @@ Este documento es la segunda mitad de esa frase.
 | Mover una muestra de posición con trazabilidad | **Hecho** | acción `move` en `movements`, `MoveModal` |
 | Alertas de cajas casi llenas y muestras sin encargado | **Hecho** | `GET /alerts`, `AlertsPanel` |
 | Página de anomalías del importador | **Hecho** | `import_runs` / `import_anomalies`, `AnomaliesView` |
-| Autenticación simple por usuario | **Diferida** | `docs/adr/0002-autenticacion.md` |
+| Autenticación simple por usuario | **Hecho en la parte 2** (identificación sin contraseña) | `docs/adr/0002-autenticacion.md` |
 | Respaldo y restauración documentados | **Hecho** | `docs/RESPALDO.md`, `scripts/backup.sh`, verificado en CI |
 
 Seis de siete implementadas. La séptima tiene un ADR con el riesgo aceptado escrito,
@@ -88,9 +88,9 @@ y `pushState` al cambiar de vista, pero conviene verlo funcionando antes de fija
 
 ### 6. Autenticación
 
-En `docs/adr/0002-autenticacion.md`, con el riesgo aceptado escrito y la recomendación
-(empezar por el reverse proxy). Lo único que hay que releer antes de exponer esto fuera
-de la red del laboratorio.
+Resuelta en la parte 2 como identificación sin contraseña con permisos por encargado; el
+riesgo que queda y qué hacer antes de exponer esto fuera de la LAN están en
+`docs/adr/0002-autenticacion.md`.
 
 ## Lo que se arregló de paso
 

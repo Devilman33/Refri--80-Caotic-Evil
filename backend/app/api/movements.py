@@ -2,14 +2,16 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import DbSession
+from app.api.deps import CurrentUser, DbSession
 from app.importer.cleaning import parse_posicion
 from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus, User
 from app.schemas.movement import MovementCreate, MovementRead, MovementResult, PositionConflict
 from app.services.location import sample_with_location
+from app.services.occupancy import refresh_box_full
+from app.services.permissions import ensure_can_modify
 from app.services.positions import next_free_position
 from app.services.racks import ensure_box_number_within_capacity
-from app.services.users import NUCLEO_INITIALS, get_or_create_user
+from app.services.users import get_or_create_user
 
 router = APIRouter(prefix="/movements", tags=["movimientos"])
 
@@ -20,7 +22,7 @@ router = APIRouter(prefix="/movements", tags=["movimientos"])
     status_code=status.HTTP_201_CREATED,
     responses={status.HTTP_409_CONFLICT: {"model": PositionConflict}},
 )
-def create_movement(payload: MovementCreate, db: DbSession) -> MovementResult:
+def create_movement(payload: MovementCreate, db: DbSession, current_user: CurrentUser) -> MovementResult:
     """Registra un movimiento: congelamiento (ingreso/reingreso) o descongelamiento
     (retiro). Nunca borra una muestra; ver .github/copilot-instructions.md."""
     rack = db.query(Rack).filter(Rack.letter == payload.rack_letter.strip().upper()).one_or_none()
@@ -48,13 +50,15 @@ def create_movement(payload: MovementCreate, db: DbSession) -> MovementResult:
         )
 
     if payload.action == MovementAction.THAW:
-        return _thaw(db, box=box, position=position, operator=operator, payload=payload)
+        return _thaw(db, box=box, position=position, operator=operator, payload=payload, current_user=current_user)
     return _freeze(
         db, rack=rack, box=box, position=position, box_type=inferred_box_type, operator=operator, payload=payload
     )
 
 
-def _thaw(db: Session, *, box: Box | None, position: str, operator: User, payload: MovementCreate) -> MovementResult:
+def _thaw(
+    db: Session, *, box: Box | None, position: str, operator: User, payload: MovementCreate, current_user: User
+) -> MovementResult:
     if box is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Caja no encontrada")
     sample = (
@@ -64,13 +68,9 @@ def _thaw(db: Session, *, box: Box | None, position: str, operator: User, payloa
     )
     if sample is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No hay una muestra activa en esa posición")
+    ensure_can_modify(sample, current_user)
 
     sample.status = SampleStatus.WITHDRAWN.value
-    # Acaba de liberarse una posición: la caja ya no puede estar llena. `_freeze` escribe
-    # `box.is_full` desde el campo "¿La caja está llena?" del formulario, pero nadie lo bajaba
-    # al retirar, así que la vista de % de uso seguía mostrando "Llena" con huecos libres.
-    if box.is_full:
-        box.is_full = False
     movement = Movement(
         sample_id=sample.id,
         action=MovementAction.THAW.value,
@@ -81,6 +81,7 @@ def _thaw(db: Session, *, box: Box | None, position: str, operator: User, payloa
         note=payload.note,
     )
     db.add(movement)
+    refresh_box_full(db, box)
     db.commit()
     db.refresh(sample)
     db.refresh(movement)
@@ -145,14 +146,9 @@ def _freeze(
             },
         )
 
-    owner = (
-        get_or_create_user(db, NUCLEO_INITIALS, name="Núcleo Environ")
-        if payload.is_core
-        else get_or_create_user(db, payload.non_core_owner_initials)
-    )
-
-    if payload.box_is_full is not None:
-        box.is_full = payload.box_is_full
+    # Núcleo es una marca sobre la muestra, no su encargado: el encargado es siempre una
+    # persona, sea o no de Núcleo.
+    owner = get_or_create_user(db, payload.owner_initials)
 
     sample = Sample(
         environ_id=payload.environ_id,
@@ -185,6 +181,7 @@ def _freeze(
         note=payload.note,
     )
     db.add(movement)
+    refresh_box_full(db, box)
     db.commit()
     db.refresh(sample)
     db.refresh(movement)

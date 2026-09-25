@@ -1,4 +1,13 @@
-from .helpers import create_rack, create_section, freeze_payload, make_freezer, thaw_payload
+from .helpers import (
+    as_user,
+    create_rack,
+    create_sample,
+    create_section,
+    create_user,
+    freeze_payload,
+    make_freezer,
+    thaw_payload,
+)
 
 
 def test_freeze_creates_sample_and_movement(client, db_session):
@@ -61,43 +70,41 @@ def test_freeze_creates_box_automatically_when_missing(client, db_session):
     assert new_box["box_type"] == "plastic_100"
 
 
-def test_freeze_requires_non_core_owner_when_not_core(client, db_session):
+def test_freeze_requires_an_owner_even_when_core(client, db_session):
+    """Núcleo es una marca, no un encargado: toda muestra queda a cargo de una persona."""
     _, rack, box = make_freezer(client)
 
-    payload = freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", is_core=False)
+    for is_core in (True, False):
+        payload = freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", is_core=is_core)
+        del payload["owner_initials"]
+        response = client.post("/movements", json=payload)
+        assert response.status_code == 422, is_core
 
-    response = client.post("/movements", json=payload)
-    assert response.status_code == 422
 
-
-def test_freeze_not_core_uses_declared_owner(client, db_session):
+def test_core_sample_keeps_its_person_as_owner(client, db_session):
     _, rack, box = make_freezer(client)
 
     payload = freeze_payload(
-        rack_letter=rack["letter"],
-        box_number=box["number"],
-        position="1A",
-        is_core=False,
-        non_core_owner_initials="DB",
+        rack_letter=rack["letter"], box_number=box["number"], position="1A", is_core=True, owner_initials="DB"
     )
     response = client.post("/movements", json=payload)
     assert response.status_code == 201
 
-    sample_id = response.json()["sample"]["id"]
-    owner_id = response.json()["sample"]["owner_id"]
-    owner = client.get(f"/users/{owner_id}").json()
+    sample = response.json()["sample"]
+    assert sample["is_core"] is True
+    owner = client.get(f"/users/{sample['owner_id']}").json()
     assert owner["initials"] == "DB"
-    assert sample_id
 
 
-def test_freeze_without_box_is_full_is_rejected(client, db_session):
+def test_freeze_ignores_a_declared_box_is_full(client, db_session):
+    """"¿La caja está llena?" ya no se pregunta: se calcula. Un valor enviado igual no
+    puede dejar una caja "llena" con una sola muestra."""
     _, rack, box = make_freezer(client)
 
-    payload = freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A")
-    del payload["box_is_full"]
+    payload = freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", box_is_full=True)
+    assert client.post("/movements", json=payload).status_code == 201
 
-    response = client.post("/movements", json=payload)
-    assert response.status_code == 422
+    assert client.get(f"/boxes/{box['id']}").json()["is_full"] is False
 
 
 def test_freeze_rejects_whitespace_only_type_other(client, db_session):
@@ -159,31 +166,84 @@ def test_freeze_can_reuse_position_after_thaw(client, db_session):
     assert response.json()["sample"]["environ_id"] == "BP002"
 
 
-def test_thaw_clears_box_is_full(client, db_session):
-    """C1: `_freeze` sube `box.is_full` desde el formulario y nadie lo bajaba al retirar,
-    así que la vista de % de uso seguía mostrando "Llena" con posiciones libres."""
+def test_box_is_full_is_computed_on_freeze_and_thaw(client, db_session):
+    """Llena = todas las posiciones ocupadas. Se sube con el último ingreso y se baja con
+    el primer retiro, sin que nadie lo declare."""
+    _, rack, box = make_freezer(client, box_type="plastic_100")
+    for position in range(1, 101):
+        response = client.post(
+            "/movements",
+            json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position=str(position)),
+        )
+        assert response.status_code == 201, response.text
+        expected_full = position == 100
+        assert client.get(f"/boxes/{box['id']}").json()["is_full"] is expected_full
+
+    client.post("/movements", json=thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="50"))
+
+    assert client.get(f"/boxes/{box['id']}").json()["is_full"] is False
+
+
+def test_thaw_records_the_reason(client, db_session):
+    """Retirar = cambiar estado + registrar quién, cuándo y motivo."""
+    _, rack, box = make_freezer(client)
+    client.post("/movements", json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A"))
+
+    response = client.post(
+        "/movements",
+        json=thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", note="Extracción de RNA"),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["movement"]["note"] == "Extracción de RNA"
+
+
+def test_only_the_owner_can_thaw_a_sample(client, db_session):
     _, rack, box = make_freezer(client)
     client.post(
         "/movements",
-        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", box_is_full=True),
+        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", owner_initials="DB"),
     )
-    assert client.get(f"/boxes/{box['id']}").json()["is_full"] is True
+    other = create_user(client, initials="VF", name="Valentina Fuentes")
+    owner = next(user for user in client.get("/users").json() if user["initials"] == "DB")
+    thaw = thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A")
 
-    client.post("/movements", json=thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A"))
+    rejected = client.post("/movements", json=thaw, headers=as_user(other["id"]))
+    assert rejected.status_code == 403
+    assert client.get(f"/boxes/{box['id']}/positions").json()[0]["occupied"] is True
 
-    assert client.get(f"/boxes/{box['id']}").json()["is_full"] is False
+    accepted = client.post("/movements", json=thaw, headers=as_user(owner["id"]))
+    assert accepted.status_code == 201
 
 
-def test_thaw_on_box_not_marked_full_keeps_is_full_unchanged(client, db_session):
+def test_anyone_can_thaw_a_sample_without_owner(client, db_session):
+    """Las muestras sin encargado (centinela del importador) no quedan bloqueadas."""
     _, rack, box = make_freezer(client)
-    client.post(
+    unassigned = create_user(client, initials="SIN_ASIG")
+    create_sample(client, owner_id=unassigned["id"], box_id=box["id"], position="1A")
+    other = create_user(client, initials="VF")
+
+    response = client.post(
         "/movements",
-        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", box_is_full=False),
+        json=thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A"),
+        headers=as_user(other["id"]),
     )
 
-    client.post("/movements", json=thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A"))
+    assert response.status_code == 201
 
-    assert client.get(f"/boxes/{box['id']}").json()["is_full"] is False
+
+def test_movements_require_a_session(db_session):
+    """Sin elegir quién es, no se registra nada: el cambio tiene que tener autor."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    with TestClient(app) as anonymous:
+        response = anonymous.post(
+            "/movements", json=freeze_payload(rack_letter="A", box_number=1, position="1A")
+        )
+
+    assert response.status_code == 401
 
 
 def test_movement_history_exposes_operator_initials(client, db_session):

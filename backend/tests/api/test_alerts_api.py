@@ -76,8 +76,11 @@ def test_box_declared_full_with_free_positions_is_flagged(client, db_session):
     _, rack, box = make_freezer(client)
     client.post(
         "/movements",
-        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", box_is_full=True),
+        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A"),
     )
+    # El formulario ya no lo declara (se calcula), pero el Excel histórico sí trae
+    # "Caja Completa" y puede venir mal: ese es el caso que la alerta sigue cubriendo.
+    client.patch(f"/boxes/{box['id']}", json={"is_full": True})
 
     body = client.get("/alerts").json()
 

@@ -93,7 +93,7 @@ def test_box_positions_report_is_core_for_the_nucleo_warning(client, db_session)
             position="1B",
             environ_id="BP002",
             is_core=False,
-            non_core_owner_initials="DB",
+            owner_initials="DB",
         ),
     )
 

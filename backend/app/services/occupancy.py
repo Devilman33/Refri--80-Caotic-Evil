@@ -1,4 +1,7 @@
-from app.models import Box, BoxType, Rack
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.models import Box, BoxType, Rack, Sample, SampleStatus
 
 _BOX_CAPACITY = {
     BoxType.CARTON_81.value: 81,
@@ -27,3 +30,19 @@ def rack_capacity(rack: Rack, boxes: list[Box] | None = None) -> int:
 
 def percent(active: int, capacity: int) -> float:
     return round(active / capacity * 100, 2) if capacity else 0.0
+
+
+def refresh_box_full(db: Session, box: Box) -> None:
+    """"¿La caja está llena?" se calcula: llena = todas sus posiciones ocupadas.
+
+    Antes lo declaraba el operador en el formulario, y una respuesta equivocada dejaba la
+    caja "llena" con huecos (o al revés). Se llama después de cada ingreso, retiro o
+    traslado, con los cambios ya flusheados para que el conteo los vea.
+    """
+    db.flush()
+    active = (
+        db.query(func.count(Sample.id))
+        .filter(Sample.box_id == box.id, Sample.status == SampleStatus.ACTIVE.value)
+        .scalar()
+    )
+    box.is_full = active >= box_capacity(box.box_type)

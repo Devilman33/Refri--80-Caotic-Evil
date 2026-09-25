@@ -1,86 +1,59 @@
-# ADR 0002 · Autenticación: diferida, con el riesgo escrito
+# ADR 0002 · Autenticación: identificación sin contraseña y permisos por encargado
 
-**Estado:** aceptada · **Fecha:** 2026-09-25 · **Contexto:** issue #8
+**Estado:** aceptada (revisada en la parte 2) · **Fecha:** 2026-09-25 · **Contexto:** issue #8,
+`requirements_parte2.md`
+
+## Historia
+
+La primera versión de este ADR (issue #8) difería la autenticación: nadie había pedido
+permisos por usuario, y la recomendación era, si hacía falta, empezar por basic auth en el
+reverse proxy. La parte 2 de los requisitos sí los pide:
+
+> Que un usuario no pueda hacer update y delete de muestras que no son de él (al inicio de
+> la página setear un "Login" para que un user se identifique quién es).
+
+Con ese pedido, la opción del proxy deja de alcanzar (no distingue personas) y se pasa a una
+variante liviana de la opción B de la versión anterior.
 
 ## Decisión
 
-No se implementa autenticación en este issue. Se documenta el riesgo aceptado, el diseño
-elegido para cuando se pida, y el conflicto que hay que resolver **antes** de implementarla.
+**Identificación, no autenticación.** Al entrar a la página cada persona elige quién es de la
+lista de usuarios registrados (o se registra con su nombre completo). No hay contraseña: el
+laboratorio lo confirmó ("con el nombre está bien").
 
-## Por qué se difiere
-
-El issue #8 lista "autenticación simple por usuario (el operador se toma de la sesión)"
-entre siete ideas de calidad de vida, sin modelo de amenaza y sin que ningún otro documento
-la pida. Implementarla significa tocar todos los endpoints y todos los tests, e introducir
-una superficie de seguridad nueva (almacenamiento de contraseñas, sesiones, expiración).
-
-Eso no es una mejora de comodidad: es un proyecto con su propio issue.
-
-## El conflicto que hay que resolver primero
-
-`docs/FORMULARIO.md` exige que el formulario sea **idéntico** al Google Form del
-laboratorio: mismos campos, mismo orden, mismas opciones. El campo 7, "Operador (a)", es una
-lista desplegable obligatoria.
-
-"El operador se toma de la sesión" se lee como sacar ese campo. Si se saca, el formulario
-deja de ser idéntico y se rompe una regla que hoy es no negociable.
-
-**Lectura propuesta:** la sesión **prellena** el operador, no lo elimina. El campo sigue
-visible y editable, porque alguien registra por otro — que es exactamente la razón por la
-que el Google Form lo pide en vez de deducirlo.
-
-Si el laboratorio confirma que quiere el campo fuera, hay que cambiar `docs/FORMULARIO.md`
-primero: hoy los dos documentos se contradicen y ese conflicto no lo puede resolver quien
-implemente.
+- El frontend guarda el usuario elegido en `localStorage` y lo manda en cada request como
+  header `X-User-Id`.
+- El backend exige ese header (`CurrentUser` en `app/api/deps.py`) en las escrituras sobre
+  muestras: `POST /movements`, `PATCH /samples/{id}`, `POST /samples/{id}/movements` y
+  `POST /boxes/{id}/move`. Sin él, o con un usuario desactivado, responde 401.
+- **Solo el encargado** de una muestra puede editarla, trasladarla o retirarla
+  (`app/services/permissions.py`, 403 en otro caso). Las muestras sin encargado (`SIN_ASIG`,
+  centinela del importador) las puede tocar cualquiera, para poder asignarles uno.
+- **Congelar** lo puede hacer cualquier persona identificada, para sí o para otro encargado.
+- **Trasladar una subcaja entera** lo puede hacer cualquier persona identificada: una caja
+  física tiene muestras de varios encargados y moverla es una tarea del laboratorio.
+- El **Operador** del formulario se prellena con la persona de la sesión y sigue editable
+  (alguien puede registrar por otro, que es la razón por la que el Google Form lo pedía).
+- Núcleo **no** restringe quién manipula una muestra: es solo una marca con su warning.
 
 ## El riesgo que se acepta, escrito
 
-**CORS no es autorización.** El hallazgo High del PR #23 se cerró restringiendo orígenes, y
-está bien, pero conviene no confundirse con lo que eso protege: CORS solo limita lo que un
-**navegador de otro origen** puede hacer. Cualquier host de la red del laboratorio puede:
+Esto evita errores, no ataques. Cualquiera puede elegir el nombre de otra persona en la
+lista, y cualquier host de la red puede mandar el header que quiera:
 
 ```bash
-curl -X POST http://<host>:8000/movements -d '...'   # registrar un movimiento
-curl http://<host>:8000/samples/export               # bajarse el inventario completo
-curl http://<host>:8000/imports/1/anomalies          # leer celdas crudas del Excel
+curl -X PATCH -H 'X-User-Id: 3' http://<host>:8000/samples/42 -d '...'
 ```
 
-Tres cosas que este issue agregó o hizo más fáciles y que van nombradas acá a propósito:
-
-1. **`GET /samples/export`** convierte "paginar de a 200" en "un GET se lleva todo". El tope
-   de 25.000 filas es el presupuesto de DoS, no una protección de privacidad.
-2. **`GET /imports/{id}/anomalies`** publica celdas del Excel tal como venían, y algunas
-   traen nombres del personal (`docs/DATOS.md`, "Propietario de Caja": `12-05-25 VF`). Se
-   sirven recortadas a 80 caracteres, que reduce la exposición pero no la elimina.
-3. **`POST /samples/{id}/movements`** y `PATCH /samples/{id}` permiten mover y editar sin
-   credenciales.
+Además siguen abiertos, sin sesión, los endpoints de administración (secciones, racks,
+cajas, usuarios, `POST /samples`) y las lecturas (`GET /samples/export` se lleva el
+inventario completo; `GET /imports/{id}/anomalies` publica celdas crudas del Excel).
 
 Con el despliegue actual —red interna del laboratorio, sin exposición a internet— el riesgo
-es aceptable. **Deja de serlo el día que esto se publique fuera de la LAN**, y ese día esta
-decisión hay que revisarla antes de exponer nada.
+es aceptable. **Deja de serlo el día que esto se publique fuera de la LAN.** Ese día hay que:
 
-## Diseño elegido para cuando se pida
+1. Poner autenticación de verdad delante (basic auth u OAuth en el reverse proxy), y
+2. Reemplazar el header `X-User-Id` por una sesión firmada (cookie) que emita el backend
+   después de autenticar, para que el usuario no lo elija el cliente.
 
-**Opción A · Autenticación en el reverse proxy (recomendada).**
-Basic auth o auth headers en nginx/Caddy delante del backend. No toca una línea de la
-aplicación ni de los tests, y el operador se toma del header que el proxy inyecta.
-Contra: no distingue permisos por usuario, solo "entra o no entra". Para un laboratorio
-donde todos pueden ver todo y el objetivo es que no entre nadie de afuera, alcanza.
-
-**Opción B · Sesión en la aplicación.**
-`users.password_hash` (argon2 o bcrypt), login que devuelve una cookie de sesión, y una
-dependencia de FastAPI que la valide. Permite permisos por usuario y auditoría real de quién
-hizo qué, más allá del campo Operador que hoy se escribe a mano.
-Contra: toca todos los endpoints, todos los tests, y agrega el manejo de contraseñas —
-recuperación, expiración, rotación— que es donde estas cosas se rompen.
-
-**Recomendación: empezar por A.** Cierra el riesgo real (acceso desde fuera del laboratorio)
-sin tocar el dominio. B solo vale la pena si aparece el requisito de permisos diferenciados,
-que hoy nadie pidió.
-
-## Qué ya está hecho y no depende de la autenticación
-
-El selector de identidad del encabezado prellena el operador y el filtro "Mis muestras"
-desde un solo lugar, usando `localStorage`. No es seguridad —cualquiera puede elegir
-cualquier nombre— y no pretende serlo: es la parte de comodidad de la idea, que se puede
-tener sin la parte de riesgo.
+El cambio 2 no toca los endpoints: solo `get_current_user` en `app/api/deps.py`.

@@ -1,4 +1,4 @@
-from .helpers import create_sample, create_user, make_freezer
+from .helpers import as_user, create_sample, create_user, make_freezer
 
 
 def test_create_sample_conflicts_on_occupied_position(client, db_session):
@@ -63,32 +63,42 @@ def test_create_sample_requires_type_other_for_otros(client, db_session):
     assert response.status_code == 422
 
 
-def test_create_core_sample_requires_nucleo_owner(client, db_session):
+def test_core_sample_can_be_owned_by_a_person(client, db_session):
+    """Núcleo es una marca: una muestra de Núcleo sigue a cargo de una persona."""
     _, _, box = make_freezer(client)
     owner = create_user(client, initials="GC")
+    created = create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1A", is_core=True)
+    assert created["is_core"] is True
+    assert created["owner_id"] == owner["id"]
 
-    response = client.post(
-        "/samples",
-        json={
-            "type": "vial_celulas",
-            "owner_id": owner["id"],
-            "box_id": box["id"],
-            "position": "1A",
-            "is_core": True,
-            "operator_initials": "GC",
-            "date": "2026-01-15",
-        },
-    )
-    assert response.status_code == 422
+    response = client.patch(f"/samples/{created['id']}", json={"is_core": False})
+    assert response.status_code == 200
+    assert response.json()["is_core"] is False
 
 
-def test_update_sample_rejects_setting_is_core_without_nucleo_owner(client, db_session):
+def test_only_the_owner_can_edit_a_sample(client, db_session):
     _, _, box = make_freezer(client)
-    owner = create_user(client, initials="GC")
+    owner = create_user(client, initials="DB", name="Daniela Bravo")
+    other = create_user(client, initials="VF")
     created = create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1A")
 
-    response = client.patch(f"/samples/{created['id']}", json={"is_core": True})
-    assert response.status_code == 422
+    rejected = client.patch(f"/samples/{created['id']}", json={"passage": 4}, headers=as_user(other["id"]))
+    assert rejected.status_code == 403
+    assert "Daniela Bravo" in rejected.json()["detail"]
+
+    accepted = client.patch(f"/samples/{created['id']}", json={"passage": 4}, headers=as_user(owner["id"]))
+    assert accepted.status_code == 200
+
+
+def test_editing_requires_an_active_session_user(client, db_session):
+    _, _, box = make_freezer(client)
+    owner = create_user(client, initials="DB")
+    created = create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1A")
+    client.patch(f"/users/{owner['id']}", json={"active": False})
+
+    response = client.patch(f"/samples/{created['id']}", json={"passage": 4}, headers=as_user(owner["id"]))
+
+    assert response.status_code == 401
 
 
 def test_update_sample_rejects_type_otros_without_type_other(client, db_session):

@@ -75,7 +75,7 @@ def freeze_payload(*, rack_letter: str, box_number: int, position: str, **overri
         "description": "Biopsia de próstata",
         "sample_type": "vial_celulas",
         "is_core": True,
-        "box_is_full": False,
+        "owner_initials": "GC",
     }
     payload.update(overrides)
     return payload
@@ -92,3 +92,8 @@ def thaw_payload(*, rack_letter: str, box_number: int, position: str, **override
     }
     payload.update(overrides)
     return payload
+
+
+def as_user(user_id: int) -> dict:
+    """Header de sesión para actuar como otra persona (ver `SessionClient` en conftest)."""
+    return {"X-User-Id": str(user_id)}

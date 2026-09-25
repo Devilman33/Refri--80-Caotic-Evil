@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
-from app.api.deps import DbSession, get_or_404
+from app.api.deps import CurrentUser, DbSession, get_or_404
 from app.config import get_settings
 from app.importer.cleaning import parse_posicion
 from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus, SampleType, Section, User
@@ -18,10 +18,12 @@ from app.schemas.sample import (
 )
 from app.services import csv_export
 from app.services.location import sample_with_location
+from app.services.occupancy import refresh_box_full
+from app.services.permissions import ensure_can_modify
 from app.services.positions import next_free_position
 from app.services.racks import ensure_box_number_within_capacity
 from app.services.search import SampleFiltersDep, build_sample_query
-from app.services.users import NUCLEO_INITIALS, get_or_create_user
+from app.services.users import get_or_create_user
 
 _TYPE_LABELS = {
     "vial_celulas": "Vial de Células",
@@ -55,23 +57,12 @@ _SORT_COLUMNS = {
 }
 
 
-def _check_nucleo_owner(owner: User, *, is_core: bool | None) -> None:
-    """Si Núcleo = Sí, el encargado debe ser el usuario reservado Núcleo Environ
-    (docs/FORMULARIO.md), igual que ya exige el flujo de `POST /movements`."""
-    if is_core and owner.initials != NUCLEO_INITIALS:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Una muestra con Núcleo=Sí debe estar a cargo del usuario reservado 'NUCLEO'",
-        )
-
-
 @router.post("", response_model=SampleRead, status_code=status.HTTP_201_CREATED)
 def create_sample(payload: SampleCreate, db: DbSession) -> Sample:
     """Alta directa de una muestra: registra además el movimiento de congelamiento
     (igual que `POST /movements`) para no dejar el historial vacío."""
-    owner = get_or_404(db, User, payload.owner_id, "Usuario encargado no encontrado")
+    get_or_404(db, User, payload.owner_id, "Usuario encargado no encontrado")
     box = get_or_404(db, Box, payload.box_id, "Caja no encontrada")
-    _check_nucleo_owner(owner, is_core=payload.is_core)
 
     position, inferred_box_type, reason = parse_posicion(payload.position)
     if reason:
@@ -114,6 +105,7 @@ def create_sample(payload: SampleCreate, db: DbSession) -> Sample:
         note=payload.note,
     )
     db.add(movement)
+    refresh_box_full(db, box)
     db.commit()
     db.refresh(sample)
     return sample
@@ -268,16 +260,16 @@ def get_sample(sample_id: int, db: DbSession) -> SampleWithLocation:
 
 
 @router.patch("/{sample_id}", response_model=SampleRead)
-def update_sample(sample_id: int, payload: SampleUpdate, db: DbSession) -> Sample:
+def update_sample(sample_id: int, payload: SampleUpdate, db: DbSession, current_user: CurrentUser) -> Sample:
     sample = get_or_404(db, Sample, sample_id, "Muestra no encontrada")
+    ensure_can_modify(sample, current_user)
     data = payload.model_dump(exclude_unset=True)
     if "owner_id" in data and data["owner_id"] is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "owner_id no puede ser nulo")
     if "type" in data and data["type"] is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "type no puede ser nulo")
-    owner = sample.owner
     if data.get("owner_id") is not None:
-        owner = get_or_404(db, User, data["owner_id"], "Usuario encargado no encontrado")
+        get_or_404(db, User, data["owner_id"], "Usuario encargado no encontrado")
     effective_type = SampleType(data["type"].value) if data.get("type") is not None else SampleType(sample.type)
     effective_type_other = data.get("type_other", sample.type_other)
     try:
@@ -286,7 +278,6 @@ def update_sample(sample_id: int, payload: SampleUpdate, db: DbSession) -> Sampl
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     if data.get("type") is not None:
         data["type"] = data["type"].value
-    _check_nucleo_owner(owner, is_core=data.get("is_core", sample.is_core))
     for field, value in data.items():
         setattr(sample, field, value)
     db.commit()
@@ -300,7 +291,9 @@ def update_sample(sample_id: int, payload: SampleUpdate, db: DbSession) -> Sampl
     status_code=status.HTTP_201_CREATED,
     responses={status.HTTP_409_CONFLICT: {"model": PositionConflict}},
 )
-def move_sample(sample_id: int, payload: SampleMoveCreate, db: DbSession) -> MovementResult:
+def move_sample(
+    sample_id: int, payload: SampleMoveCreate, db: DbSession, current_user: CurrentUser
+) -> MovementResult:
     """Traslada una muestra y deja el evento con origen y destino.
 
     Por qué esta ruta y no `POST /movements`: ese endpoint identifica la muestra por su
@@ -324,6 +317,7 @@ def move_sample(sample_id: int, payload: SampleMoveCreate, db: DbSession) -> Mov
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "La muestra está retirada: no se puede trasladar algo que no está en el freezer",
         )
+    ensure_can_modify(sample, current_user)
 
     rack = db.query(Rack).filter(Rack.letter == payload.rack_letter.strip().upper()).one_or_none()
     if rack is None:
@@ -391,6 +385,10 @@ def move_sample(sample_id: int, payload: SampleMoveCreate, db: DbSession) -> Mov
     )
     db.add(movement)
     try:
+        refresh_box_full(db, box)
+        origin_box = db.get(Box, origin_box_id)
+        if origin_box is not None and origin_box.id != box.id:
+            refresh_box_full(db, origin_box)
         db.commit()
     except IntegrityError as exc:
         # Otro traslado llegó primero a la misma posición entre el chequeo y el commit.

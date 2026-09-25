@@ -19,10 +19,11 @@ UNASSIGNED_INITIALS = "SIN_ASIG"
 
 
 def is_full(box: BoxOccupancy) -> bool:
-    """Llena por conteo, o declarada completa en el formulario.
+    """Llena por conteo, o marcada completa.
 
-    Las dos cuentan: el operador marca "¿La caja está llena?" con criterio físico (no
-    entran más tubos), que puede adelantarse al conteo de posiciones.
+    Desde la parte 2 el formulario ya no pregunta "¿La caja está llena?": `is_full` se
+    calcula. Pero el Excel histórico trae "Caja Completa Si/No" con criterio físico (no
+    entran más tubos), y esa marca sigue contando.
     """
     return bool(box.is_full) or (box.capacity > 0 and box.active >= box.capacity)
 

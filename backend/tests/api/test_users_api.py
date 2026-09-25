@@ -63,19 +63,21 @@ def test_delete_user(client, db_session):
     assert response.status_code == 404
 
 
-def test_update_nucleo_user_rejects_initials_change(client, db_session):
-    created = create_user(client, initials="NUCLEO", name="Núcleo Environ")
+def test_register_with_full_name_derives_initials(client, db_session):
+    """Se registra con el nombre completo; las iniciales (la clave del Excel y del
+    Google Form) se derivan solas y no chocan con las existentes."""
+    create_user(client, initials="GC")
 
-    response = client.patch(f"/users/{created['id']}", json={"initials": "OTRO"})
-    assert response.status_code == 409
+    response = client.post("/users", json={"name": "Gonzalo Álvarez Carrasco"})
+    assert response.status_code == 201
+    assert response.json()["initials"] == "GAC"
 
-    response = client.patch(f"/users/{created['id']}", json={"active": False})
-    assert response.status_code == 200
-    assert response.json()["initials"] == "NUCLEO"
+    response = client.post("/users", json={"name": "Gabriela Castro"})
+    assert response.status_code == 201
+    assert response.json()["initials"] == "GC2"
+    assert response.json()["name"] == "Gabriela Castro"
 
 
-def test_delete_nucleo_user_is_rejected(client, db_session):
-    created = create_user(client, initials="NUCLEO", name="Núcleo Environ")
-
-    response = client.delete(f"/users/{created['id']}")
-    assert response.status_code == 409
+def test_register_requires_a_name_or_initials(client, db_session):
+    response = client.post("/users", json={"name": "   "})
+    assert response.status_code == 422

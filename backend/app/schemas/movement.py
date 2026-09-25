@@ -29,10 +29,12 @@ class MovementCreate(BaseModel):
     sample_type: SampleType | None = None
     type_other: str | None = Field(default=None, max_length=120)
     passage: int | None = None
+    #: Marca de Núcleo Environ. Es solo una marca: el encargado sigue siendo una persona.
     is_core: bool | None = None
-    non_core_owner_initials: str | None = Field(default=None, max_length=10)
-    box_is_full: bool | None = None
-    note: str | None = None
+    #: Encargado de la muestra. Se pide siempre, sea o no de Núcleo.
+    owner_initials: str | None = Field(default=None, max_length=10)
+    #: En un descongelamiento, el motivo del retiro.
+    note: str | None = Field(default=None, max_length=255)
 
     @model_validator(mode="after")
     def _check_required_for_freeze(self) -> "MovementCreate":
@@ -46,10 +48,8 @@ class MovementCreate(BaseModel):
             raise ValueError("type_other es obligatorio cuando sample_type es 'otros'")
         if self.is_core is None:
             raise ValueError("is_core es obligatorio para un congelamiento")
-        if self.is_core is False and not self.non_core_owner_initials:
-            raise ValueError("non_core_owner_initials es obligatorio cuando is_core es false")
-        if self.box_is_full is None:
-            raise ValueError("box_is_full es obligatorio para un congelamiento")
+        if not self.owner_initials or not self.owner_initials.strip():
+            raise ValueError("owner_initials (encargado) es obligatorio para un congelamiento")
         return self
 
 

@@ -23,7 +23,7 @@ def test_search_filters_by_environ_id_partial_match(client, db_session):
 def test_search_filters_by_owner_and_core(client, db_session):
     _, rack, box = make_freezer(client)
     _freeze(client, rack, box, position="1A", is_core=True)
-    _freeze(client, rack, box, position="1B", is_core=False, non_core_owner_initials="DB")
+    _freeze(client, rack, box, position="1B", is_core=False, owner_initials="DB")
 
     response = client.get("/samples/search", params={"owner_initials": "DB"})
     assert response.status_code == 200

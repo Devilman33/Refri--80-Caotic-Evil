@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def _validate_initials(value: str) -> str:
@@ -18,8 +18,23 @@ class UserBase(BaseModel):
         return _validate_initials(value)
 
 
-class UserCreate(UserBase):
-    pass
+class UserCreate(BaseModel):
+    """Registro de una persona. Basta con el nombre completo o con las iniciales; con
+    las dos, las iniciales son las que se usan en el Excel y el Google Form."""
+
+    initials: str | None = Field(default=None, max_length=10)
+    name: str | None = Field(default=None, max_length=120)
+    active: bool = True
+
+    @model_validator(mode="after")
+    def _check_identity(self) -> "UserCreate":
+        has_initials = bool(self.initials and self.initials.strip())
+        has_name = bool(self.name and self.name.strip())
+        if not has_initials and not has_name:
+            raise ValueError("Indica el nombre completo (o al menos las iniciales)")
+        if self.initials is not None and not has_initials:
+            self.initials = None
+        return self
 
 
 class UserUpdate(BaseModel):
