@@ -324,7 +324,13 @@ export function MovementForm({ users, onClose, onSubmitted }: MovementFormProps)
             <select
               id="mf-action"
               value={form.action}
-              onChange={(event) => set("action", event.target.value as MovementAction)}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  action: event.target.value as MovementAction,
+                  position: "",
+                }))
+              }
             >
               {ACTION_OPTIONS.map(([value, label]) => (
                 <option key={value} value={value}>
@@ -457,7 +463,13 @@ export function MovementForm({ users, onClose, onSubmitted }: MovementFormProps)
               id="mf-box-type"
               value={form.boxType}
               disabled={boxExists}
-              onChange={(event) => set("boxType", event.target.value as BoxType)}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  boxType: event.target.value as BoxType,
+                  position: "",
+                }))
+              }
             >
               <option value="carton_81">Cartón (9×9)</option>
               <option value="plastic_100">Plástica (10×10)</option>
