@@ -33,7 +33,17 @@ from app.importer.cleaning import (
     parse_si_no,
 )
 from app.importer.report import Anomaly
-from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus, User
+from app.models import (
+    Box,
+    ImportAnomaly,
+    ImportRun,
+    Movement,
+    MovementAction,
+    Rack,
+    Sample,
+    SampleStatus,
+    User,
+)
 
 SHEET_NAME = "Inventario-80"
 HEADER_ROW = 2
@@ -74,6 +84,8 @@ class ImportSummary:
 class ImportResult:
     summary: ImportSummary
     anomalies: list[Anomaly]
+    #: Id de la corrida registrada. `None` en `--dry-run`, que no escribe nada.
+    run_id: int | None = None
 
 
 @dataclass
@@ -127,6 +139,7 @@ def _source_file_identity(path: Path) -> str:
 def import_inventory(path: str | Path, session: Session, *, dry_run: bool = False) -> ImportResult:
     path = Path(path)
     source_file = _source_file_identity(path)
+
     # En modo read_only openpyxl mantiene el archivo abierto hasta close(): se leen las
     # filas a memoria y se cierra, o en Windows el Excel queda bloqueado.
     workbook = load_workbook(path, data_only=True, read_only=True)
@@ -180,13 +193,19 @@ def import_inventory(path: str | Path, session: Session, *, dry_run: bool = Fals
 
         summary.total_rows += 1
 
-        if row_num in existing_source_rows:
-            summary.skipped_already_imported += 1
-            continue
-
+        # La fila se parsea SIEMPRE, incluso si ya se importó: las anomalías son una
+        # propiedad del Excel, no del estado de la base. Saltarse el parseo hacía que
+        # reimportar el mismo archivo reportara ~cero anomalías, y la serie de calidad de
+        # datos mostrara una caída a cero que se lee como "lo arreglamos" con el dato
+        # igual de sucio. Lo que se saltea es la PERSISTENCIA, que es lo que garantiza la
+        # idempotencia que promete el README.
         row_anomalies: list[Anomaly] = []
         record = _parse_row(row_num, values, row_anomalies, racks_by_letter)
         anomalies.extend(row_anomalies)
+
+        if row_num in existing_source_rows:
+            summary.skipped_already_imported += 1
+            continue
         if record is None:
             summary.skipped_invalid += 1
             continue
@@ -283,13 +302,44 @@ def import_inventory(path: str | Path, session: Session, *, dry_run: bool = Fals
 
         summary.imported += 1
 
-    if dry_run:
-        session.rollback()
-    else:
-        session.commit()
-
     summary.anomalies = len(anomalies)
-    return ImportResult(summary=summary, anomalies=anomalies)
+
+    if dry_run:
+        # El flag promete no escribir nada, y eso incluye la corrida: un ensayo no es un
+        # hecho del historial.
+        session.rollback()
+        return ImportResult(summary=summary, anomalies=anomalies)
+
+    # La corrida y sus anomalías van en la MISMA transacción que las muestras. Si se
+    # commitearan aparte y fallara la segunda, quedaría un inventario importado sin
+    # registro de qué pasó al importarlo.
+    run = ImportRun(
+        source_file=source_file,
+        source_name=path.name,
+        dry_run=False,
+        total_rows=summary.total_rows,
+        imported=summary.imported,
+        withdrawn=summary.withdrawn,
+        skipped_already_imported=summary.skipped_already_imported,
+        skipped_invalid=summary.skipped_invalid,
+        conflicts_resolved=summary.conflicts_resolved,
+        anomalies_count=summary.anomalies,
+    )
+    session.add(run)
+    session.flush()
+    for anomaly in anomalies:
+        session.add(
+            ImportAnomaly(
+                run_id=run.id,
+                row=anomaly.row,
+                column=anomaly.column,
+                value=anomaly.value,
+                reason=anomaly.reason,
+            )
+        )
+    session.commit()
+
+    return ImportResult(summary=summary, anomalies=anomalies, run_id=run.id)
 
 
 def _parse_row(

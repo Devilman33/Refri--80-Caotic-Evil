@@ -23,7 +23,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Procesa el archivo y genera el reporte sin escribir en la base de datos",
     )
     parser.add_argument(
+        "--report",
         "--reporte",
+        dest="reporte",
         type=pathlib.Path,
         default=None,
         help="Ruta del CSV de anomalías (por defecto: <ruta>.anomalias.csv)",
@@ -45,6 +47,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Inválidas (omitidas): {summary.skipped_invalid}")
     print(f"Conflictos de posición resueltos: {summary.conflicts_resolved}")
     print(f"Anomalías reportadas: {summary.anomalies} -> {report_path}")
+    if result.run_id is not None:
+        print(f"Corrida registrada: #{result.run_id} (ver GET /imports/{result.run_id}/anomalies)")
     if args.dry_run:
         print("Modo --dry-run: no se escribió nada en la base de datos.")
 

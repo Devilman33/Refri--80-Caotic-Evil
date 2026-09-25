@@ -1,7 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import alerts, autocomplete, boxes, movements, occupancy, racks, samples, sections, users
+from app.api import (
+    alerts,
+    autocomplete,
+    boxes,
+    imports,
+    movements,
+    occupancy,
+    racks,
+    samples,
+    sections,
+    users,
+)
 from app.config import get_settings
 
 app = FastAPI(title="Refri -80 · Inventario de muestras")
@@ -25,6 +36,7 @@ app.include_router(movements.router)
 app.include_router(occupancy.router)
 app.include_router(autocomplete.router)
 app.include_router(alerts.router)
+app.include_router(imports.router)
 
 
 @app.get("/health")
