@@ -61,7 +61,7 @@ describe("SampleDetail", () => {
     expect(screen.getByRole("button", { name: /descongelar/i })).toBeInTheDocument();
   });
 
-  it("a quien no es el encargado no le ofrece acciones y le dice quién puede", () => {
+  it("a quien no es el encargado le deja descongelar pero no mover ni editar", () => {
     render(
       <SampleDetail
         sample={activeSample}
@@ -73,10 +73,26 @@ describe("SampleDetail", () => {
         onMove={vi.fn()}
       />,
     );
-    for (const name of [/descongelar/i, /editar/i, /^mover$/i]) {
+    expect(screen.getByRole("button", { name: /^descongelar$/i })).toBeInTheDocument();
+    for (const name of [/editar/i, /^mover$/i]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
-    expect(screen.getByText(/solo gonzalo carrasco, su encargado/i)).toBeInTheDocument();
+    expect(screen.getByText(/mover o editar: solo gonzalo carrasco, su encargado/i)).toBeInTheDocument();
+  });
+
+  it("una muestra retirada ofrece devolverla al refri", async () => {
+    const onReturn = vi.fn();
+    render(
+      <SampleDetail
+        sample={{ ...activeSample, status: "withdrawn" }}
+        users={users}
+        canModify={false}
+        onClose={vi.fn()}
+        onReturn={onReturn}
+      />,
+    );
+    await userEvent.setup().click(screen.getByRole("button", { name: /devolver al refri/i }));
+    expect(onReturn).toHaveBeenCalledTimes(1);
   });
 
   it("muestra de quién es, cuándo se congeló y quién la congeló", async () => {

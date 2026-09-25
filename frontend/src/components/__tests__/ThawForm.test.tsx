@@ -20,6 +20,7 @@ const { api, ApiError } = vi.hoisted(() => {
       getBoxPositions: vi.fn(),
       getSample: vi.fn(),
       createMovement: vi.fn(),
+      thawBatch: vi.fn(),
       searchSamples: vi.fn(),
     },
     ApiError: ApiErrorMock,
@@ -126,7 +127,7 @@ describe("ThawForm", () => {
 
   it("registra el retiro con su motivo", async () => {
     const result = { sample: { ...sample, status: "withdrawn" }, movement: {} } as unknown as MovementResult;
-    api.createMovement.mockResolvedValue(result);
+    api.thawBatch.mockResolvedValue([result]);
     const onSubmitted = vi.fn();
     const user = userEvent.setup();
     renderForm(gonzalo, onSubmitted);
@@ -136,25 +137,50 @@ describe("ThawForm", () => {
     await user.click(screen.getByRole("button", { name: /^descongelar$/i }));
 
     await waitFor(() =>
-      expect(api.createMovement).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: "thaw",
-          operator_initials: "GC",
-          rack_letter: "A",
-          box_number: 1,
-          position: "1A",
-          note: "Extracción de RNA",
-        }),
+      expect(api.thawBatch).toHaveBeenCalledWith(
+        expect.objectContaining({ operator_initials: "GC", sample_ids: [9], note: "Extracción de RNA" }),
       ),
     );
-    expect(onSubmitted).toHaveBeenCalledWith(result);
+    expect(onSubmitted).toHaveBeenCalledWith([result]);
   });
 
-  it("no deja retirar una muestra de otra persona", async () => {
+  it("cualquier persona puede retirar, aunque la muestra sea de otra", async () => {
     renderForm(daniela);
 
-    expect(await screen.findByText(/solo sus encargados pueden retirarla/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^descongelar$/i })).toBeDisabled();
+    await screen.findByRole("region", { name: /muestra a retirar/i });
+    expect(screen.queryByText(/solo sus encargados/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^descongelar$/i })).toBeEnabled();
+  });
+
+  it("retira varias de una vez: se suman tocando posiciones y se envían juntas", async () => {
+    api.getBoxPositions.mockResolvedValue([
+      { position: "1A", occupied: true, sample_id: 9, environ_id: "BP009", is_core: true, owners: ["Gonzalo Carrasco"] },
+      { position: "1B", occupied: true, sample_id: 10, environ_id: "BP010", is_core: false, owners: ["Daniela Bravo"] },
+    ]);
+    api.thawBatch.mockResolvedValue([]);
+    const user = userEvent.setup();
+    renderForm();
+
+    const list = await screen.findByRole("region", { name: /muestras a retirar/i });
+    await waitFor(() => expect(list).toHaveTextContent("BP009"));
+    await user.click(screen.getByRole("button", { name: /^posición 1b,/i }));
+    expect(list).toHaveTextContent("BP010");
+
+    await user.click(screen.getByRole("button", { name: /descongelar 2 muestras/i }));
+
+    await waitFor(() =>
+      expect(api.thawBatch).toHaveBeenCalledWith(expect.objectContaining({ sample_ids: [9, 10] })),
+    );
+  });
+
+  it("sin muestras en la lista no envía nada", async () => {
+    const user = userEvent.setup();
+    render(<ThawForm users={users} sessionUser={gonzalo} onClose={vi.fn()} onSubmitted={vi.fn()} />);
+
+    await user.click(await screen.findByRole("button", { name: /^descongelar$/i }));
+
+    expect(screen.getByText(/agrega al menos una muestra/i)).toBeInTheDocument();
+    expect(api.thawBatch).not.toHaveBeenCalled();
   });
 });
 

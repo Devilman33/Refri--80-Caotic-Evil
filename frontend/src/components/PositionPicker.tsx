@@ -13,6 +13,8 @@ export interface PositionPickerProps {
    * descartaba. */
   corePositions?: ReadonlySet<string>;
   value: string | null;
+  /** Varias posiciones elegidas a la vez (retirar varias muestras). Se suman a `value`. */
+  selectedSet?: ReadonlySet<string>;
   onChange: (position: string) => void;
   disabled?: boolean;
   /** "free" (congelamiento: solo se puede elegir una posición libre) u "occupied"
@@ -104,6 +106,7 @@ export function PositionPicker({
   occupantLabels,
   corePositions,
   value,
+  selectedSet,
   onChange,
   disabled,
   selectMode = "free",
@@ -181,7 +184,7 @@ export function PositionPicker({
               label={position}
               occupied={isOccupied}
               isCore={corePositions?.has(position) ?? false}
-              selected={value === position}
+              selected={value === position || (selectedSet?.has(position) ?? false)}
               disabled={isDisabled(isOccupied)}
               tabbable={position === tabStop}
               title={titleFor(position, isOccupied)}

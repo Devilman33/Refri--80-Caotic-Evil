@@ -2222,3 +2222,69 @@ h3[tabindex="-1"]:focus {
   color: var(--ink);
   border: 1px solid var(--field-border);
 }
+
+/* Retirar varias y devolver al refri */
+.thaw-list {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.thaw-list h3 {
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.thaw-list ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.thaw-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.thaw-list li:last-child {
+  border-bottom: 0;
+}
+
+.thaw-list__id {
+  font-family: var(--mono);
+  font-weight: 600;
+}
+
+.thaw-list__loc,
+.thaw-list__owners {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.thaw-list li .btn-ghost {
+  margin-left: auto;
+  padding: 2px 10px;
+}
+
+.return-mode {
+  border: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.return-mode legend {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}

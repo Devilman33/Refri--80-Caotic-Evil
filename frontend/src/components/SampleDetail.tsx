@@ -26,6 +26,8 @@ export interface SampleDetailProps {
   /** Trasladar la muestra. Abre su propio diálogo y CIERRA este: dos `.modal-backdrop`
    * apilados doblan el oscurecido y vuelven ambiguo a cuál de los dos cierra un clic. */
   onMove?: () => void;
+  /** Devolver al refri una muestra retirada (parte 3). */
+  onReturn?: () => void;
   /** Solo fuera del visor 3D: vuelve al 3D con esta posición resaltada. */
   onViewInFreezer?: () => void;
 }
@@ -51,6 +53,7 @@ export function SampleDetail({
   onThaw,
   onEdit,
   onMove,
+  onReturn,
   onViewInFreezer,
 }: SampleDetailProps) {
   const titleRef = useRef<HTMLHeadingElement | null>(null);
@@ -198,33 +201,42 @@ export function SampleDetail({
       </dl>
 
       {sample.status !== "active" ? (
-        <p className="field-hint">
-          Muestra retirada: queda en el historial y no se puede modificar.
-        </p>
-      ) : canModify ? (
         <div className="detail-panel__actions">
-          {onThaw && (
-            <button className="btn" onClick={onThaw}>
-              Descongelar
-            </button>
-          )}
-          {onMove && (
-            <button className="btn-ghost" onClick={onMove}>
-              Mover
-            </button>
-          )}
-          {onEdit && (
-            <button className="btn-ghost" onClick={onEdit}>
-              Editar
+          <p className="field-hint">Muestra retirada: queda en el historial.</p>
+          {onReturn && (
+            <button className="btn" onClick={onReturn}>
+              Devolver al refri
             </button>
           )}
         </div>
       ) : (
-        <p className="field-hint">
-          {owners.length > 1
-            ? `Solo sus encargados (${ownersLabel(owners)}) pueden moverla, editarla o descongelarla.`
-            : `Solo ${ownersLabel(owners)}, su encargado, puede moverla, editarla o descongelarla.`}
-        </p>
+        <>
+          <div className="detail-panel__actions">
+            {/* Retirar lo puede hacer cualquiera (parte 3); mover y editar, sus encargados. */}
+            {onThaw && (
+              <button className="btn" onClick={onThaw}>
+                Descongelar
+              </button>
+            )}
+            {canModify && onMove && (
+              <button className="btn-ghost" onClick={onMove}>
+                Mover
+              </button>
+            )}
+            {canModify && onEdit && (
+              <button className="btn-ghost" onClick={onEdit}>
+                Editar
+              </button>
+            )}
+          </div>
+          {!canModify && (
+            <p className="field-hint">
+              {owners.length > 1
+                ? `Mover o editar: solo sus encargados (${ownersLabel(owners)}).`
+                : `Mover o editar: solo ${ownersLabel(owners)}, su encargado.`}
+            </p>
+          )}
+        </>
       )}
 
       {onViewInFreezer && (

@@ -22,6 +22,7 @@ import { MoveModal } from "./components/MoveModal";
 import { OccupancyView } from "./components/OccupancyView";
 import { Pagination } from "./components/Pagination";
 import { SampleDetail } from "./components/SampleDetail";
+import { ReturnModal } from "./components/ReturnModal";
 import { SampleEditModal } from "./components/SampleEditModal";
 import { SamplesTable, type SortState } from "./components/SamplesTable";
 import { ThawForm } from "./components/ThawForm";
@@ -160,6 +161,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
   const [moving, setMoving] = useState<SampleWithLocation | null>(null);
   const [movingBox, setMovingBox] = useState<BoxMoveTarget | null>(null);
   const [showFreezerAdmin, setShowFreezerAdmin] = useState(false);
+  const [returning, setReturning] = useState<SampleWithLocation | null>(null);
   const [showUsers, setShowUsers] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [idListMode, setIdListMode] = useState(false);
@@ -350,7 +352,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
   // El detalle es un panel (docs/PLAN_FRONTEND.md, D2). Se oculta mientras se mueve o edita
   // esa muestra: un solo foco de trabajo a la vez, y al terminar vuelve con el dato fresco.
   const detailPanel =
-    selected && !editing && !moving ? (
+    selected && !editing && !moving && !returning ? (
       <SampleDetail
         sample={selected}
         users={users}
@@ -359,6 +361,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
         onThaw={() => handleThaw(selected)}
         onEdit={() => setEditing(selected)}
         onMove={() => setMoving(selected)}
+        onReturn={() => setReturning(selected)}
         onViewInFreezer={viewMode === "3d" ? undefined : () => handleViewInFreezer(selected)}
       />
     ) : null;
@@ -584,6 +587,21 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
         />
       )}
 
+      {returning && (
+        <ReturnModal
+          sample={returning}
+          users={users}
+          sessionInitials={sessionUser.initials}
+          onClose={() => setReturning(null)}
+          onReturned={(updated, summary) => {
+            setReturning(null);
+            setSelected(updated);
+            setNotice(summary);
+            refreshInventory();
+          }}
+        />
+      )}
+
       {movingBox && (
         <BoxMoveModal
           box={movingBox}
@@ -636,8 +654,13 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
           sessionUser={sessionUser}
           initial={movementDialog.initial}
           onClose={() => setMovementDialog(null)}
-          onSubmitted={(movement) => {
-            setNotice(`Muestra retirada: ${movement.sample.environ_id ?? "sin ID"} (${movement.sample.location}).`);
+          onSubmitted={(results) => {
+            const [first] = results;
+            setNotice(
+              results.length === 1
+                ? `Muestra retirada: ${first.sample.environ_id ?? "sin ID"} (${first.sample.location}).`
+                : `${results.length} muestras retiradas.`,
+            );
             refreshInventory();
           }}
         />

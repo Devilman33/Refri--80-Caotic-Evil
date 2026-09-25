@@ -149,7 +149,7 @@ describe("App · recarga del visor", () => {
     const user = userEvent.setup();
     api.listBoxOccupancy.mockResolvedValue([occupiedBox]);
     api.getBoxPositions.mockResolvedValue(occupiedPositions);
-    api.createMovement.mockResolvedValue({ sample: sample({ status: "withdrawn" }), movement: {} });
+    api.thawBatch.mockResolvedValue([{ sample: sample({ status: "withdrawn" }), movement: {} }]);
     render(<App />);
 
     await user.click(await screen.findByRole("button", { name: /posición ocupada 3b/i }));

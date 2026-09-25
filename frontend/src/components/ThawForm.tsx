@@ -9,7 +9,7 @@ import {
   type UserRead,
 } from "../api/types";
 import { formatBoolean, todayIso } from "../utils/format";
-import { canModifySample, ownersLabel, ownersOf } from "../utils/users";
+import { ownersLabel, ownersOf } from "../utils/users";
 import type { LocationPrefill } from "./FreezeForm";
 import { Modal } from "./Modal";
 import { NucleoWarning } from "./NucleoWarning";
@@ -21,7 +21,18 @@ export interface ThawFormProps {
   sessionUser: UserRead;
   initial?: LocationPrefill;
   onClose: () => void;
-  onSubmitted: (result: MovementResult) => void;
+  onSubmitted: (results: MovementResult[]) => void;
+}
+
+/** Una muestra en la lista de las que se van a retirar. */
+interface PickedSample {
+  id: number;
+  environId: string | null;
+  location: string;
+  boxId: number;
+  position: string;
+  isCore: boolean;
+  owners: string;
 }
 
 /**
@@ -31,6 +42,9 @@ export interface ThawFormProps {
  * Se editan solo los datos del retiro (fecha, operador, dónde y motivo). El resto de los
  * campos del Google Form se MUESTRAN con los datos de la muestra elegida: la posición ya
  * la identifica, y pedirlos de nuevo solo permitiría que no coincidan (docs/FORMULARIO.md).
+ *
+ * Parte 3: se pueden retirar VARIAS de una vez (por ID o tocando posiciones), con una sola
+ * fecha y motivo, y cualquier persona identificada puede hacerlo.
  */
 const ID_DEBOUNCE_MS = 250;
 
@@ -42,7 +56,8 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
   const [rackLetter, setRackLetter] = useState(initial?.rackLetter ?? "");
   const [boxNumber, setBoxNumber] = useState(initial?.boxNumber ? String(initial.boxNumber) : "");
   const [positions, setPositions] = useState<BoxPositionStatus[]>([]);
-  const [position, setPosition] = useState(initial?.position ?? "");
+  const [picked, setPicked] = useState<PickedSample[]>([]);
+  const initialPending = useRef(initial?.position ?? null);
   const [reason, setReason] = useState("");
   const [sample, setSample] = useState<SampleWithLocation | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -110,7 +125,52 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
     () => new Set(positions.filter((entry) => entry.occupied && entry.is_core).map((entry) => entry.position)),
     [positions],
   );
-  const sampleId = positions.find((entry) => entry.position === position && entry.occupied)?.sample_id ?? null;
+  const locationPrefix = selectedBox ? `${selectedBox.section_code} · ${selectedBox.rack_letter}${selectedBox.number}` : "";
+  const pickedHere = useMemo(
+    () => new Set(picked.filter((item) => item.boxId === selectedBoxId).map((item) => item.position)),
+    [picked, selectedBoxId],
+  );
+
+  function fromPosition(entry: BoxPositionStatus): PickedSample | null {
+    if (!entry.occupied || entry.sample_id === null || selectedBoxId === null) return null;
+    return {
+      id: entry.sample_id,
+      environId: entry.environ_id,
+      location: `${locationPrefix} · ${entry.position}`,
+      boxId: selectedBoxId,
+      position: entry.position,
+      isCore: entry.is_core === true,
+      owners: entry.owners.join(", "),
+    };
+  }
+
+  function add(item: PickedSample) {
+    setPicked((current) => (current.some((entry) => entry.id === item.id) ? current : [...current, item]));
+  }
+
+  function togglePosition(position: string) {
+    const entry = positions.find((candidate) => candidate.position === position);
+    const item = entry ? fromPosition(entry) : null;
+    if (!item) return;
+    setPicked((current) =>
+      current.some((existing) => existing.id === item.id)
+        ? current.filter((existing) => existing.id !== item.id)
+        : [...current, item],
+    );
+  }
+
+  // Si se abrió desde una posición (3D o detalle), esa muestra entra a la lista sola.
+  useEffect(() => {
+    const pending = initialPending.current;
+    if (!pending || positions.length === 0) return;
+    const entry = positions.find((candidate) => candidate.position === pending);
+    const item = entry ? fromPosition(entry) : null;
+    if (item) add(item);
+    initialPending.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positions]);
+
+  const single = picked.length === 1 ? picked[0] : null;
 
   useEffect(() => {
     const text = idQuery.trim();
@@ -141,11 +201,20 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
     setIdQuery(match.environ_id ?? "");
     setIdMatches([]);
     setIdStatus("idle");
+    add({
+      id: match.id,
+      environId: match.environ_id,
+      location: match.location,
+      boxId: match.box_id,
+      position: match.position,
+      isCore: match.is_core === true,
+      owners: ownersLabel(ownersOf(match, users)),
+    });
+    setIdQuery("");
     if (!match.section_code || !match.rack_letter || match.box_number === undefined) return;
     setSectionCode(match.section_code);
     setRackLetter(match.rack_letter);
     setBoxNumber(String(match.box_number));
-    setPosition(match.position);
   }
 
   function handleIdKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -159,21 +228,19 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
     setSectionCode(value);
     setRackLetter("");
     setBoxNumber("");
-    setPosition("");
   }
 
   function chooseRack(value: string) {
     setRackLetter(value);
     setBoxNumber("");
-    setPosition("");
   }
 
   function chooseBox(value: string) {
     setBoxNumber(value);
-    setPosition("");
   }
 
-  // La muestra que se va a retirar, con todos sus datos: es lo que el operador confirma.
+  // Con UNA muestra en la lista se muestran todos sus datos: es lo que el operador confirma.
+  const sampleId = single?.id ?? null;
   useEffect(() => {
     if (sampleId === null) {
       setSample(null);
@@ -194,16 +261,12 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
   }, [sampleId]);
 
   const owners = sample ? ownersOf(sample, users) : [];
-  const allowed = sample ? canModifySample(sample, owners, sessionUser) : true;
 
   function validate(): Record<string, string> {
     const errors: Record<string, string> = {};
     if (!date) errors.date = "La fecha es obligatoria";
     if (!operatorInitials.trim()) errors.operatorInitials = "El operador es obligatorio";
-    if (!sectionCode) errors.sectionCode = "Elige la sección";
-    else if (!rackLetter) errors.rackLetter = "Elige el rack";
-    else if (!selectedBox) errors.boxNumber = "Elige la caja";
-    if (!position) errors.position = "Selecciona la posición de la muestra que vas a retirar";
+    if (picked.length === 0) errors.picked = "Agrega al menos una muestra: por su ID o tocando su posición en la caja";
     return errors;
   }
 
@@ -211,20 +274,17 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
     const errors = validate();
     setFieldErrors(errors);
     setSubmitError(null);
-    if (Object.keys(errors).length > 0 || !allowed) return;
+    if (Object.keys(errors).length > 0) return;
 
     setSubmitting(true);
     try {
-      const result = await api.createMovement({
-        action: "thaw",
+      const results = await api.thawBatch({
         date,
         operator_initials: operatorInitials.trim().toUpperCase(),
-        rack_letter: rackLetter,
-        box_number: Number(boxNumber),
-        position,
+        sample_ids: picked.map((item) => item.id),
         note: reason.trim() || null,
       });
-      onSubmitted(result);
+      onSubmitted(results);
       onClose();
     } catch (err) {
       setSubmitError(err instanceof ApiError ? err.message : "No se pudo registrar el retiro");
@@ -237,14 +297,15 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
     <Modal titleId="tf-title" onClose={onClose} wide>
       <div className="modal-header">
         <h2 id="tf-title" tabIndex={-1}>
-          <span className="movement-kind movement-kind--thaw">Descongelamiento</span> Retirar muestra
+          <span className="movement-kind movement-kind--thaw">Descongelamiento</span> Retirar muestras
         </h2>
         <button className="btn-ghost" onClick={onClose} aria-label="Cerrar">
           Cerrar
         </button>
       </div>
       <p className="field-hint">
-        La muestra pasa a estado retirada y queda en el historial: nunca se borra. Su posición queda libre.
+        Agrega una o varias muestras por su ID o tocándolas en la caja. Pasan a estado retirada y quedan en el
+        historial (nunca se borran); se pueden devolver al refri después.
       </p>
 
       <form
@@ -271,7 +332,7 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
             {idStatus === "empty" && `No hay muestras activas con «${idQuery.trim()}».`}
             {idStatus === "error" && "No se pudo buscar. Elige la caja y la posición abajo."}
             {idStatus === "idle" && idMatches.length === 0 && "O elige la caja y la posición abajo."}
-            {idStatus === "idle" && idMatches.length > 1 && `${idMatches.length} muestras activas: elige cuál.`}
+            {idStatus === "idle" && idMatches.length > 1 && `${idMatches.length} muestras activas: elige cuáles agregar.`}
           </p>
           {idMatches.length > 0 && (
             <ul className="thaw-id__matches" aria-label="Muestras con ese ID">
@@ -348,19 +409,48 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
         </div>
 
         <div className="field field--full">
-          <label>Posición de la muestra a retirar</label>
-          <p className="field-hint">Solo se pueden elegir posiciones ocupadas.</p>
+          <label>Posiciones a retirar</label>
+          <p className="field-hint">Toca las posiciones ocupadas para sumarlas o quitarlas de la lista.</p>
           <PositionPicker
             boxType={selectedBox?.box_type ?? "carton_81"}
             occupied={occupied}
             occupantLabels={occupantLabels}
             corePositions={corePositions}
-            value={position || null}
-            onChange={setPosition}
+            value={null}
+            selectedSet={pickedHere}
+            onChange={togglePosition}
             selectMode="occupied"
           />
-          {fieldErrors.position && <p className="field-error">{fieldErrors.position}</p>}
         </div>
+
+        <section className="thaw-list field--full" aria-label="Muestras a retirar">
+          <h3>
+            Muestras a retirar <span className="field-hint">({picked.length})</span>
+          </h3>
+          {picked.length === 0 ? (
+            <p className="field-hint">Todavía no agregaste ninguna.</p>
+          ) : (
+            <ul>
+              {picked.map((item) => (
+                <li key={item.id}>
+                  <span className="thaw-list__id">{item.environId ?? "Sin ID"}</span>
+                  <span className="thaw-list__loc">{item.location}</span>
+                  {item.owners && <span className="thaw-list__owners">{item.owners}</span>}
+                  {item.isCore && <span className="global-search__core">Núcleo</span>}
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    aria-label={`Quitar ${item.environId ?? "muestra"} de la lista`}
+                    onClick={() => setPicked((current) => current.filter((entry) => entry.id !== item.id))}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {fieldErrors.picked && <p className="field-error">{fieldErrors.picked}</p>}
+        </section>
 
         {sample && (
           <section className="thaw-sample field--full" aria-label="Muestra a retirar">
@@ -395,11 +485,6 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
                 <dd>{ownersLabel(owners)}</dd>
               </div>
             </dl>
-            {!allowed && (
-              <p className="field-error" role="alert">
-                Esta muestra está a cargo de {ownersLabel(owners)}: solo sus encargados pueden retirarla.
-              </p>
-            )}
           </section>
         )}
 
@@ -425,8 +510,12 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
             Cancelar
           </button>
           {/* Primario turquesa, no rojo: descongelar no borra nada (DESIGN.md). */}
-          <button type="submit" className="btn" disabled={submitting || !allowed}>
-            {submitting ? "Descongelando…" : "Descongelar"}
+          <button type="submit" className="btn" disabled={submitting}>
+            {submitting
+              ? "Descongelando…"
+              : picked.length > 1
+                ? `Descongelar ${picked.length} muestras`
+                : "Descongelar"}
           </button>
         </div>
       </form>
