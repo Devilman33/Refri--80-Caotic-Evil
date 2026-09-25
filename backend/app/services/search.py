@@ -21,7 +21,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Query as OrmQuery, Session
 
 from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus, SampleType, Section, User
@@ -55,10 +55,18 @@ def parse_id_list(raw: str) -> list[str]:
     return result
 
 
+def contains_pattern(text: str) -> str:
+    """Patrón ILIKE de "contiene" con `%`, `_` y la barra invertida escapados: sin esto, buscar `BP_01`
+    trae también `BPX01`, y un `%` suelto devuelve todo el inventario."""
+    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 @dataclass
 class SampleFilters:
-    """Los 13 filtros de la búsqueda. Consumido con `Depends()` por los dos endpoints."""
+    """Los 14 filtros de la búsqueda. Consumido con `Depends()` por los dos endpoints."""
 
+    q: str | None = None
     environ_id: str | None = None
     environ_id_exact: str | None = None
     description: str | None = None
@@ -75,6 +83,13 @@ class SampleFilters:
 
     def __init__(
         self,
+        q: str | None = Query(
+            default=None,
+            description=(
+                "Texto libre del buscador global: coincidencia PARCIAL en ID Environ O en "
+                "Descripción (ID Origen)."
+            ),
+        ),
         environ_id: str | None = Query(
             default=None, description="Coincidencia PARCIAL. Para una lista exacta usá environ_id_exact."
         ),
@@ -106,6 +121,12 @@ class SampleFilters:
                 "No se pueden combinar 'environ_id' (parcial) con 'environ_id_exact' (lista exacta): "
                 "filtran distinto. Usá uno de los dos.",
             )
+        if q and environ_id_exact:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "No se pueden combinar 'q' (texto libre) con 'environ_id_exact' (lista exacta). "
+                "Usá uno de los dos.",
+            )
         if environ_id_exact is not None:
             ids = parse_id_list(environ_id_exact)
             if len(ids) > MAX_ID_LIST:
@@ -118,6 +139,7 @@ class SampleFilters:
         else:
             self.id_list = []
 
+        self.q = q.strip() if q else None
         self.environ_id = environ_id
         self.environ_id_exact = environ_id_exact
         self.description = description
@@ -144,6 +166,14 @@ def build_sample_query(db: Session, filters: SampleFilters) -> OrmQuery:
         .join(Rack, Box.rack_id == Rack.id)
         .join(Section, Rack.section_id == Section.id)
     )
+    if filters.q:
+        pattern = contains_pattern(filters.q)
+        query = query.filter(
+            or_(
+                Sample.environ_id.ilike(pattern, escape="\\"),
+                Sample.description.ilike(pattern, escape="\\"),
+            )
+        )
     if filters.environ_id:
         query = query.filter(Sample.environ_id.ilike(f"%{filters.environ_id}%"))
     if filters.id_list:
