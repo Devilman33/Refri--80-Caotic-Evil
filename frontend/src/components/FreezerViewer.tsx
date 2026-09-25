@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, ApiError } from "../api/client";
 import type { BoxOccupancy, BoxType, RackOccupancy } from "../api/types";
 import {
@@ -69,6 +69,17 @@ export interface FreezerViewerProps {
   onSelectOccupiedPosition: (selection: OccupiedPositionSelection) => void;
   /** "Mover caja": traslada la subcaja seleccionada con todas sus muestras. */
   onMoveBox?: (request: BoxMoveRequest) => void;
+  /** Cambia después de cada movimiento. El visor vuelve a pedir ocupación y luces sin
+   * desmontarse: remontarlo reconstruía la escena three.js y devolvía la cámara al inicio
+   * en cada guardado (con una tanda de congelamiento, en cada muestra). */
+  reloadToken?: number;
+  /** Ubicación pedida desde el buscador global (`A5`, `A5-3B`); `token` permite repetirla. */
+  locationQuery?: { query: string; token: number } | null;
+  /** Por qué no se pudo ir a esa ubicación ("No existe el rack Z"), o "" si se pudo. */
+  onQueryMessage?: (message: string) => void;
+  /** El detalle de la muestra seleccionada: va arriba del panel, sobre "Caja seleccionada",
+   * para ver el dato y la posición resaltada a la vez. */
+  detailSlot?: ReactNode;
 }
 
 interface RackInfo {
@@ -104,6 +115,10 @@ export function FreezerViewer({
   onSelectFreePosition,
   onSelectOccupiedPosition,
   onMoveBox,
+  reloadToken = 0,
+  locationQuery,
+  onQueryMessage,
+  detailSlot,
 }: FreezerViewerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
@@ -124,15 +139,22 @@ export function FreezerViewer({
   const [boxViewOpen, setBoxViewOpen] = useState(false);
   const [slot, setSlot] = useState<string | null>(null);
   const [lights, setLights] = useState<PositionLight[] | null>(null);
-  const [query, setQuery] = useState("");
-  const [queryMsg, setQueryMsg] = useState("");
 
   // ---------- Datos ----------
+  // La escena se reconstruye cada vez que cambia `layout`, así que en una recarga solo se
+  // reemplaza si la estructura cambió de verdad (una caja nueva o una caja movida). La
+  // ocupación y las luces sí se recargan siempre.
+  const layoutSignature = useRef<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     Promise.all([api.listSections(), api.listRacks(), api.listBoxes()])
       .then(([sections, racks, boxes]) => {
-        if (!cancelled) setLayout(buildFreezerLayout(sections, racks, boxes));
+        if (cancelled) return;
+        const next = buildFreezerLayout(sections, racks, boxes);
+        const signature = JSON.stringify(next);
+        if (signature === layoutSignature.current) return;
+        layoutSignature.current = signature;
+        setLayout(next);
       })
       .catch((err: unknown) => {
         if (!cancelled)
@@ -158,7 +180,7 @@ export function FreezerViewer({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadToken]);
 
   const racksByLetter = useMemo(() => {
     const map = new Map<string, RackInfo>();
@@ -355,7 +377,7 @@ export function FreezerViewer({
     return () => {
       cancelled = true;
     };
-  }, [sel.rack, sel.box, selBoxId, selBoxType]);
+  }, [sel.rack, sel.box, selBoxId, selBoxType, reloadToken]);
 
   useEffect(() => {
     if (sel.box === null) {
@@ -392,8 +414,16 @@ export function FreezerViewer({
   }, [boxViewOpen]);
 
   // ---------- Búsqueda ----------
-  function handleSearch(event: FormEvent) {
-    event.preventDefault();
+  // La búsqueda vive en la barra superior (buscador global); acá solo se resuelve la
+  // ubicación pedida contra la estructura del freezer, que es lo que el visor conoce.
+  useEffect(() => {
+    if (!locationQuery || !layout) return;
+    goToLocation(locationQuery.query);
+    // Solo cuando llega un pedido nuevo (token) o termina de cargar la estructura.
+  }, [locationQuery, layout]);
+
+  function goToLocation(query: string) {
+    const setQueryMsg = (message: string) => onQueryMessage?.(message);
     const parsed = parseViewerQuery(query);
     if (!parsed.ok) {
       setQueryMsg(parsed.message);
@@ -671,6 +701,7 @@ export function FreezerViewer({
       </section>
 
       <aside className="fv-panel">
+        {detailSlot}
         <header>
           <p className="eyebrow">Congelador ULT vertical · −86 °C · 388 L</p>
           <h1 className="fv-title">Haier DW-86L388J</h1>
@@ -689,24 +720,6 @@ export function FreezerViewer({
             </div>
           </div>
         </header>
-
-        <section>
-          <h2 className="fv-h2">Buscar posición</h2>
-          <form className="fv-search" onSubmit={handleSearch}>
-            <input
-              type="text"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Ej: A5 o A5-3B"
-              autoComplete="off"
-              aria-label="Código de caja"
-            />
-            <button type="submit">Ir</button>
-          </form>
-          <p className="fv-msg" role="status">
-            {queryMsg}
-          </p>
-        </section>
 
         <section>
           <h2 className="fv-h2">

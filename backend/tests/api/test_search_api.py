@@ -122,3 +122,62 @@ def test_search_by_owner_finds_samples_shared_with_others(client, db_session):
     assert client.get("/samples/search", params={"owner_initials": "AS"}).json()["total"] == 2
     ordered = client.get("/samples/search", params={"sort_by": "owner", "sort_dir": "desc"}).json()
     assert [item["position"] for item in ordered["items"]] == ["1A", "1B"]
+
+
+def test_search_q_matches_environ_id_or_description(client, db_session):
+    """El buscador global busca en ID Environ O en Descripción (ID Origen), sin duplicar."""
+    _, rack, box = make_freezer(client)
+    _freeze(client, rack, box, position="1A", environ_id="BP001", description="Hígado")
+    _freeze(client, rack, box, position="1B", environ_id="PR002", description="BP001-origen")
+    _freeze(client, rack, box, position="1C", environ_id="PR003", description="Pulmón")
+
+    body = client.get("/samples/search", params={"q": "bp001"}).json()
+    assert body["total"] == 2
+    assert sorted(item["position"] for item in body["items"]) == ["1A", "1B"]
+
+    body = client.get("/samples/search", params={"q": "pulm"}).json()
+    assert [item["position"] for item in body["items"]] == ["1C"]
+
+
+def test_search_q_combines_with_other_filters(client, db_session):
+    _, rack, box = make_freezer(client)
+    _freeze(client, rack, box, position="1A", environ_id="BP001")
+    _freeze(client, rack, box, position="1B", environ_id="BP002")
+    client.post("/movements", json=thaw_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A"))
+
+    body = client.get("/samples/search", params={"q": "BP", "status": "active"}).json()
+    assert [item["environ_id"] for item in body["items"]] == ["BP002"]
+
+
+def test_search_q_treats_wildcards_literally(client, db_session):
+    """`%` y `_` son texto, no comodines de ILIKE."""
+    _, rack, box = make_freezer(client)
+    _freeze(client, rack, box, position="1A", environ_id="BP_01")
+    _freeze(client, rack, box, position="1B", environ_id="BPX01")
+
+    assert [item["environ_id"] for item in client.get("/samples/search", params={"q": "BP_01"}).json()["items"]] == [
+        "BP_01"
+    ]
+    assert client.get("/samples/search", params={"q": "%"}).json()["total"] == 0
+
+
+def test_search_q_blank_is_ignored(client, db_session):
+    _, rack, box = make_freezer(client)
+    _freeze(client, rack, box, position="1A")
+    assert client.get("/samples/search", params={"q": "   "}).json()["total"] == 1
+
+
+def test_search_q_rejects_exact_id_list(client, db_session):
+    response = client.get("/samples/search", params={"q": "BP", "environ_id_exact": "BP001"})
+    assert response.status_code == 422
+
+
+def test_search_returns_location_parts(client, db_session):
+    """Además del texto, la ubicación viene por partes para que el cliente no la parsee."""
+    _, rack, box = make_freezer(client, section_code="III", rack_letter="F", box_number=12)
+    _freeze(client, rack, box, position="3B")
+
+    item = client.get("/samples/search").json()["items"][0]
+    assert item["location"] == "III · F12 · 3B"
+    assert (item["section_code"], item["rack_letter"], item["box_number"], item["position"]) == ("III", "F", 12, "3B")
+    assert item["box_type"] == box["box_type"]

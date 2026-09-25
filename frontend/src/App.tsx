@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, setSessionUserId } from "./api/client";
 import { UNASSIGNED_INITIALS } from "./api/types";
 import type { BoxOccupancy, Page, SampleSearchFilters, SampleWithLocation, UserRead } from "./api/types";
-import { AlertsPanel, type AlertDestination } from "./components/AlertsPanel";
+import { AlertsPanel, alertTotal, type AlertDestination } from "./components/AlertsPanel";
 import { AnomaliesView } from "./components/AnomaliesView";
 import { BoxMoveModal, type BoxMoveTarget } from "./components/BoxMoveModal";
 import { FiltersBar } from "./components/FiltersBar";
+import { GlobalSearch } from "./components/GlobalSearch";
 import { FreezeForm, type LocationPrefill } from "./components/FreezeForm";
 import {
   FreezerViewer,
@@ -30,6 +31,7 @@ import { canModifySample, ownersOf, userLabel } from "./utils/users";
 const THEME_KEY = "refri:theme";
 const SESSION_KEY = "refri:sesion-usuario";
 const DEFAULT_PAGE_SIZE = 25;
+const NOTICE_MS = 8000;
 
 type Theme = "light" | "dark";
 // "anomalies" es una vista pero NO una pestaña: el control segmentado se queda en tres,
@@ -52,11 +54,17 @@ function readSessionId(): number | null {
   return Number.isInteger(stored) && stored > 0 ? stored : null;
 }
 
-/** `III · F12 · 3B` → la caja y posición, para abrir el retiro de una muestra ya elegida. */
+/** La caja y posición de una muestra ya elegida, para abrir su retiro prellenado. Sin las
+ * partes de la ubicación (backend anterior) el formulario abre vacío en vez de adivinar. */
 function locationPrefill(sample: SampleWithLocation): LocationPrefill | undefined {
-  const match = /^(\S+) · ([A-H])(\d+) · (.+)$/.exec(sample.location);
-  if (!match) return undefined;
-  return { sectionCode: match[1], rackLetter: match[2], boxNumber: Number(match[3]), position: match[4] };
+  if (!sample.section_code || !sample.rack_letter || sample.box_number === undefined) return undefined;
+  return {
+    sectionCode: sample.section_code,
+    rackLetter: sample.rack_letter,
+    boxNumber: sample.box_number,
+    boxType: sample.box_type,
+    position: sample.position,
+  };
 }
 
 export default function App() {
@@ -143,7 +151,6 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
   // El visor 3D es la primera vista: es la que el laboratorio usa para ubicarse.
   const [viewMode, setViewMode] = useState<ViewMode>("3d");
   const [focusTarget, setFocusTarget] = useState<FreezerFocusTarget | null>(null);
-  const [freezerKey, setFreezerKey] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
   const [editing, setEditing] = useState<SampleWithLocation | null>(null);
   const [alertCount, setAlertCount] = useState(0);
@@ -155,6 +162,31 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
   const [notice, setNotice] = useState<string | null>(null);
   const [idListMode, setIdListMode] = useState(false);
   const [idListResult, setIdListResult] = useState<Page<SampleWithLocation> | null>(null);
+  const [locationQuery, setLocationQuery] = useState<{ query: string; token: number } | null>(null);
+  const [searchMessage, setSearchMessage] = useState<string | null>(null);
+
+  // El aviso "N alertas" de la barra. Antes lo calculaba AlertsPanel, que solo se monta
+  // al abrir ese mismo aviso, y el aviso solo aparecía con N > 0: nunca se veía.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getAlerts()
+      .then((data) => {
+        if (!cancelled) setAlertCount(alertTotal(data));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
+
+  // Los avisos de resultado ("Muestra retirada: …") se van solos: antes quedaban para
+  // siempre y el siguiente se confundía con el anterior.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   // "Cambiaron los filtros" y "se pidió un refetch" son dos cosas distintas. Antes el
   // refresh posterior a un movimiento era `setFilters(current => ({ ...current }))`: un
@@ -214,10 +246,10 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
     }));
   }
 
-  /** Después de cualquier cambio de inventario: tabla, visor y alertas se recargan. */
+  /** Después de cualquier cambio de inventario: tabla, visor, % de uso y alertas vuelven a
+   * pedir sus datos con `reloadToken`, sin desmontarse. */
   function refreshInventory() {
     setReloadToken((token) => token + 1);
-    setFreezerKey((key) => key + 1);
   }
 
   // Clic en una posición libre del visor 3D (issue #6): abre el congelamiento con la caja
@@ -255,6 +287,33 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
     setFocusTarget({ boxId: sample.box_id, position: sample.position, token: Date.now() });
   }
 
+  // Buscador global (docs/PLAN_FRONTEND.md, F3). Un resultado: su posición en el 3D con el
+  // detalle abierto. Varios: la tabla filtrada. Una ubicación: el 3D enfocado ahí.
+  function handlePickSample(sample: SampleWithLocation) {
+    setSearchMessage(null);
+    setViewMode("3d");
+    setFocusTarget({ boxId: sample.box_id, position: sample.position, token: Date.now() });
+    setSelected(sample);
+  }
+
+  function handleShowMany(query: string, includeWithdrawn: boolean) {
+    setSearchMessage(null);
+    setIdListMode(false);
+    setViewMode("table");
+    setFilters((current) => ({
+      page: 1,
+      page_size: current.page_size,
+      q: query,
+      status: includeWithdrawn ? undefined : "active",
+    }));
+  }
+
+  function handleLocation(query: string) {
+    setSearchMessage(null);
+    setViewMode("3d");
+    setLocationQuery({ query, token: Date.now() });
+  }
+
   // "Ver en el refri" desde la vista de % de uso (issue #7): enfoca la subcaja sin resaltar posición.
   function handleViewBoxInFreezer(box: BoxOccupancy) {
     setViewMode("3d");
@@ -286,6 +345,22 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
 
   const selectedOwners = selected ? ownersOf(selected, users) : [];
 
+  // El detalle es un panel (docs/PLAN_FRONTEND.md, D2). Se oculta mientras se mueve o edita
+  // esa muestra: un solo foco de trabajo a la vez, y al terminar vuelve con el dato fresco.
+  const detailPanel =
+    selected && !editing && !moving ? (
+      <SampleDetail
+        sample={selected}
+        users={users}
+        canModify={canModifySample(selected, selectedOwners, sessionUser)}
+        onClose={() => setSelected(null)}
+        onThaw={() => handleThaw(selected)}
+        onEdit={() => setEditing(selected)}
+        onMove={() => setMoving(selected)}
+        onViewInFreezer={viewMode === "3d" ? undefined : () => handleViewInFreezer(selected)}
+      />
+    ) : null;
+
   return (
     <div className="app">
       <Header
@@ -295,25 +370,22 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
         sessionUser={sessionUser}
         onOpenUsers={() => setShowUsers(true)}
         onLogout={onLogout}
+        search={
+          <GlobalSearch
+            onPickSample={handlePickSample}
+            onShowMany={handleShowMany}
+            onLocation={handleLocation}
+            message={searchMessage}
+          />
+        }
+        onFreeze={() => setMovementDialog({ kind: "freeze" })}
+        onThaw={() => setMovementDialog({ kind: "thaw" })}
+        alertCount={alertCount}
+        alertsOpen={showAlerts}
+        onToggleAlerts={() => setShowAlerts((open) => !open)}
       />
       <main className="app-main">
-        <div className="filters-actions">
-          <button type="button" className="btn" onClick={() => setMovementDialog({ kind: "freeze" })}>
-            + Congelar muestra
-          </button>
-          <button type="button" className="btn btn-thaw" onClick={() => setMovementDialog({ kind: "thaw" })}>
-            − Descongelar muestra
-          </button>
-          {alertCount > 0 && (
-            <button
-              type="button"
-              className={`btn-ghost${showAlerts ? " on" : ""}`}
-              aria-expanded={showAlerts}
-              onClick={() => setShowAlerts((open) => !open)}
-            >
-              <span aria-live="polite">⚠ {alertCount} alertas</span>
-            </button>
-          )}
+        <nav className="filters-actions" aria-label="Vistas">
           <div className="view-toggle" role="group" aria-label="Vista">
             <button
               type="button"
@@ -340,7 +412,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
               % de uso
             </button>
           </div>
-        </div>
+        </nav>
 
         {viewMode === "table" && !idListMode && (
           <div className="filters-actions">
@@ -378,6 +450,21 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
           </div>
         )}
 
+        {viewMode === "table" && filters.q && (
+          <div className="filters-actions">
+            <span className="alerts-chip">
+              Búsqueda: «{filters.q}»
+              <button
+                type="button"
+                aria-label="Quitar la búsqueda"
+                onClick={() => setFilters((current) => ({ ...current, q: undefined, page: 1 }))}
+              >
+                ×
+              </button>
+            </span>
+          </div>
+        )}
+
         {viewMode === "table" && unassignedFilterActive && (
           <div className="filters-actions">
             <span className="alerts-chip">
@@ -394,14 +481,17 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
         )}
 
         {notice && (
-          <p className="field-notice" role="status">
-            {notice}
+          <p className="app-notice" role="status">
+            <span>{notice}</span>
+            <button type="button" className="app-notice__close" aria-label="Cerrar aviso" onClick={() => setNotice(null)}>
+              ×
+            </button>
           </p>
         )}
 
         {viewMode === "usage" && (
           <OccupancyView
-            key={freezerKey}
+            reloadToken={reloadToken}
             onViewBox={handleViewBoxInFreezer}
             onMoveBox={(box) =>
               setMovingBox({
@@ -433,45 +523,42 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
           </div>
         )}
         {!error && tableResult && viewMode === "table" && (
-          <div aria-busy={loading} style={loading ? { opacity: 0.6 } : undefined}>
-            <SamplesTable
-              samples={tableResult.items}
-              ownerLookup={ownerLookup}
-              onSelect={setSelected}
-              sort={sort}
-              onSortChange={handleSortChange}
-              onViewInFreezer={handleViewInFreezer}
-            />
-            <Pagination
-              page={tableResult.page}
-              pageSize={tableResult.page_size}
-              total={tableResult.total}
-              onPageChange={(page) => setFilters((current) => ({ ...current, page }))}
-            />
+          <div className={`table-split${detailPanel ? " table-split--detail" : ""}`}>
+            <div aria-busy={loading} style={loading ? { opacity: 0.6 } : undefined}>
+              <SamplesTable
+                samples={tableResult.items}
+                ownerLookup={ownerLookup}
+                onSelect={setSelected}
+                sort={sort}
+                onSortChange={handleSortChange}
+                onViewInFreezer={handleViewInFreezer}
+              />
+              <Pagination
+                page={tableResult.page}
+                pageSize={tableResult.page_size}
+                total={tableResult.total}
+                onPageChange={(page) => setFilters((current) => ({ ...current, page }))}
+              />
+            </div>
+            {detailPanel}
           </div>
         )}
         {viewMode === "3d" && (
           <FreezerViewer
-            key={freezerKey}
+            reloadToken={reloadToken}
             focusTarget={focusTarget}
+            locationQuery={locationQuery}
+            onQueryMessage={setSearchMessage}
             onSelectFreePosition={handleSelectFreePosition}
             onSelectOccupiedPosition={handleSelectOccupiedPosition}
             onMoveBox={setMovingBox}
+            detailSlot={detailPanel}
           />
         )}
       </main>
 
-      {selected && !editing && (
-        <SampleDetail
-          sample={selected}
-          users={users}
-          canModify={canModifySample(selected, selectedOwners, sessionUser)}
-          onClose={() => setSelected(null)}
-          onThaw={() => handleThaw(selected)}
-          onEdit={() => setEditing(selected)}
-          onMove={() => setMoving(selected)}
-        />
-      )}
+      {/* Fuera del 3D y de la tabla (p. ej. % de uso) el detalle igual se ve, como hoja. */}
+      {viewMode !== "3d" && viewMode !== "table" && detailPanel}
 
       {moving && (
         <MoveModal
@@ -497,9 +584,14 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
           sessionInitials={sessionUser.initials}
           onClose={() => setMovingBox(null)}
           onMoved={(summary) => {
+            const movedBoxId = movingBox.boxId;
             setMovingBox(null);
             setNotice(summary);
             refreshInventory();
+            // La caja conserva su id y cambia de lugar: el visor la busca en el layout nuevo
+            // y enfoca el destino (docs/PLAN_FRONTEND.md, F4).
+            setViewMode("3d");
+            setFocusTarget({ boxId: movedBoxId, position: null, token: Date.now() });
           }}
         />
       )}
@@ -527,6 +619,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
             onUsersChanged();
             refreshInventory();
           }}
+          onFinished={setNotice}
         />
       )}
 

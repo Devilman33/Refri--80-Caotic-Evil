@@ -15,5 +15,10 @@ def location_string(sample: Sample) -> str:
 
 def sample_with_location(sample: Sample) -> SampleWithLocation:
     data = SampleRead.model_validate(sample).model_dump()
+    box = sample.box
     data["location"] = location_string(sample)
+    data["section_code"] = box.rack.section.code
+    data["rack_letter"] = box.rack.letter
+    data["box_number"] = box.number
+    data["box_type"] = box.box_type
     return SampleWithLocation(**data)

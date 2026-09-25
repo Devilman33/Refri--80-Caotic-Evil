@@ -73,6 +73,12 @@ const ROWS: Row[] = [
   },
 ];
 
+/** Lo que suma el aviso "N alertas" de la barra. Vive acá para que la barra y el panel
+ * cuenten lo mismo. */
+export function alertTotal(data: AlertsRead): number {
+  return data.unassigned_samples + data.nearly_full_boxes + data.full_boxes + data.inconsistent_full_boxes;
+}
+
 export function AlertsPanel({ reloadToken, onNavigate, onCountChange }: AlertsPanelProps) {
   const [alerts, setAlerts] = useState<AlertsRead | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,9 +92,7 @@ export function AlertsPanel({ reloadToken, onNavigate, onCountChange }: AlertsPa
         if (cancelled) return;
         setAlerts(data);
         setError(null);
-        onCountChange(
-          data.unassigned_samples + data.nearly_full_boxes + data.full_boxes + data.inconsistent_full_boxes,
-        );
+        onCountChange(alertTotal(data));
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof ApiError ? err.message : "No se pudieron cargar las alertas");
@@ -133,14 +137,14 @@ export function AlertsPanel({ reloadToken, onNavigate, onCountChange }: AlertsPa
         return (
           <button key={row.key} type="button" onClick={() => onNavigate(row.destination)}>
             <span>{row.label(count)}</span>
-            <span className="badge badge-warn">{count}</span>
+            <span className="badge badge-count">{count}</span>
           </button>
         );
       })}
       {extra.map((row) => (
         <button key={row.key} type="button" onClick={() => onNavigate(row.destination)}>
           <span>{row.label}</span>
-          <span className="badge badge-warn">{row.count}</span>
+          <span className="badge badge-count">{row.count}</span>
         </button>
       ))}
     </div>

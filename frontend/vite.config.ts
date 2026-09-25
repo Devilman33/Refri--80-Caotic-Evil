@@ -12,5 +12,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/setupTests.ts"],
     css: true,
+    // Los tests de integración de App tipean con userEvent y esperan el debounce del
+    // buscador: ~1-1,5 s cada uno. Con 5 s (el default) fallaban por tiempo en una máquina
+    // cargada aunque el comportamiento fuera correcto.
+    testTimeout: 15000,
   },
 });

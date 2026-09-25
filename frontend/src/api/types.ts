@@ -97,6 +97,12 @@ export interface SampleWithLocation {
   created_at: string;
   updated_at: string;
   location: string;
+  /** La ubicación por partes (el backend las manda junto a `location`): el cliente no
+   * parsea el texto. Opcionales solo para convivir con un backend anterior. */
+  section_code?: string;
+  rack_letter?: string;
+  box_number?: number;
+  box_type?: BoxType;
 }
 
 /** Solo los datos descriptivos. La ubicación y el estado cambian por movimientos, para
@@ -348,6 +354,8 @@ export interface AnomalyResolveRequest {
 }
 
 export interface SampleSearchFilters {
+  /** Buscador global: coincidencia parcial en ID Environ O en Descripción. */
+  q?: string;
   environ_id?: string;
   description?: string;
   owner_initials?: string;

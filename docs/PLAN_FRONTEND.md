@@ -1,0 +1,354 @@
+# Plan · Rediseño del frontend (accesible, simple, sin AI-slop)
+
+Objetivo: que la gente del laboratorio haga sus tareas de siempre (**congelar, descongelar,
+encontrar una muestra, ver cuánto espacio queda**) sin pensar, desde una tablet frente al
+freezer o un PC, y que la interfaz se vea hecha para este laboratorio, no generada.
+
+Se hace con skills de gstack, en fases. Cada fase termina en un PR propio (ver `docs/BUCLE.md`).
+Referencia visual: **`DESIGN.md`** (tokens, tipografía, semántica de estados, lo prohibido).
+
+## Punto de partida
+
+| Pieza | Estado hoy |
+|---|---|
+| Vistas | `3d` (inicial), `table`, `usage` como pestañas; `anomalies` sin pestaña, se llega desde Alertas (`App.tsx`, `ViewMode`) |
+| Tareas (modales) | `FreezeForm`, `ThawForm`, `MoveModal`, `BoxMoveModal`, `SampleEditModal`, `SampleDetail`, `UsersModal`; `LoginScreen` es pantalla completa |
+| Búsqueda | Por ID: solo en Vista tabla (`FiltersBar`, `IdListSearch`). En el 3D, "Buscar posición" solo acepta códigos de caja (`A5`, `A5-3B`) |
+| Estilos | `styles/theme.css` de 1.687 líneas, tokens en `:root`, modo oscuro, turquesa Environ `#0c6575`, IBM Plex + Barlow |
+| Estado | `App.tsx` (549 líneas) concentra vista, filtros, sesión y todos los modales |
+
+## Restricciones que ninguna fase puede romper
+
+Vienen de `requirements.md`, `docs/FORMULARIO.md`, `.github/copilot-instructions.md` y `DESIGN.md`:
+
+- Luces: **rojo = ocupada, verde = libre**, más relleno/hueco para daltónicos.
+- **Warning de Núcleo** visible en todas las vistas (el visor 3D ya lo muestra en la vista de
+  caja, el tooltip y la tapa de la posición; falta en el buscador nuevo, ver T2).
+- Formulario de congelamiento con los campos, el orden y las opciones del Google Form, más las
+  desviaciones escritas en `docs/FORMULARIO.md`. Cambiar el aspecto sí, los campos no.
+- Mantener la estética e interacciones del visor 3D de `demo.html`.
+- Vista tabla/lista sin 3D, % de uso, búsqueda con filtros que muestre la ubicación.
+- Textos de la UI en español; `npm run build` y `npm test` en verde.
+
+## Arquitectura de información (decidida)
+
+Regla: **una vista es un lugar donde se mira el inventario; un modal es una tarea que escribe
+algo y termina.** Mirar una muestra no escribe nada, así que el detalle deja de ser modal.
+
+```
+┌ Barra superior (fija, todas las vistas) ─────────────────────────────────────────┐
+│ [logo] Refri -80   [ Buscar ID, ID Origen o ubicación… ]   [Congelar] [Descongelar] │
+│                                          ⚠ 3 alertas   [Nombre ▾ ]                │
+├ Vistas (control segmentado) ──────────────────────────────────────────────────────┤
+│  Freezer 3D  │  Tabla  │  % de uso                                                │
+├──────────────────────────────────────────────┬────────────────────────────────────┤
+│ Vista activa                                 │ Panel de contexto (PC ≥1100px)     │
+│  3D: escena                                  │  Muestra seleccionada (si hay)     │
+│  Tabla: filtros + tabla + paginación         │  Caja seleccionada                 │
+│  % de uso: tabla por sección/rack/caja       │  % de uso del rack                 │
+└──────────────────────────────────────────────┴────────────────────────────────────┘
+Menú de usuario (Nombre ▾): Usuarios · Modo claro/oscuro · Cambiar usuario
+```
+
+| Qué | Tipo | Cómo se llega |
+|---|---|---|
+| Freezer 3D (inicial en PC y tablet) | Vista | Pestaña |
+| Tabla (inicial en teléfono < 700px) | Vista | Pestaña; buscador global con varios resultados |
+| % de uso | Vista | Pestaña; alertas de cajas llenas |
+| Anomalías | Vista **sin pestaña** | Desde Alertas; breadcrumb "← Volver a alertas" |
+| Detalle de muestra | **Panel** (antes modal) | Clic en posición ocupada, fila de tabla, buscador global |
+| Alertas | Panel desplegable bajo la barra | Chip "⚠ N alertas" (solo si N > 0) |
+| Congelar | Modal | Botón fijo; clic en posición libre del 3D |
+| Descongelar | Modal | Botón fijo; "Descongelar" en el detalle |
+| Mover muestra, Editar muestra | Modal | Desde el detalle |
+| Mover caja | Modal | "Mover caja" en Caja seleccionada (3D) o fila de % de uso |
+| Usuarios | Modal | Menú de usuario |
+
+Lo que cambia respecto de hoy:
+
+1. **Buscador global** en la barra superior (decisión D1). Acepta ID Environ, ID Origen o
+   ubicación (`A5`, `A5-3B`, `II · C4 · 5E`). Reemplaza "Buscar posición" del panel 3D.
+   - 1 resultado activo → cambia al 3D, vuela a la caja, resalta la posición y abre el detalle.
+   - Varios → Vista tabla con ese filtro aplicado y el chip "ID: ENV-02 ×".
+   - Ubicación → 3D enfocado en esa caja/posición.
+   - 0 → mensaje bajo el campo: "No hay muestras activas con «ENV-9999». ¿Buscar también retiradas?" (enlace a la tabla con estado = todas).
+   - Teclado: `/` enfoca el buscador; flechas + Enter en las sugerencias.
+2. **Detalle como panel** (D2). En el 3D va arriba del panel derecho ("Muestra seleccionada"),
+   sobre "Caja seleccionada", y la posición queda resaltada en la escena. En Tabla: panel
+   derecho en PC, hoja inferior (bottom sheet) en tablet/teléfono. Acciones: **Descongelar**
+   (primario), Mover, Editar, **Ver en el refri** (solo fuera del 3D). Esc lo cierra.
+3. Congelar y Descongelar salen de la fila de la vista y pasan a la barra superior: son las dos
+   tareas más frecuentes y tienen que estar a un toque desde cualquier vista.
+4. Usuarios, tema y "Cambiar usuario" van a un menú de usuario: se usan poco y hoy compiten con
+   las tareas principales en el header.
+5. "Buscar por lista de IDs" se queda en Vista tabla como acción de la barra de filtros.
+
+## Flujos (decididos)
+
+### F1 · Congelar varias muestras del mismo set (D4)
+
+| Paso | Persona hace | Pantalla muestra |
+|---|---|---|
+| 1 | Toca **Congelar** (o una posición libre del 3D) | Modal con Operador = sesión, Fecha = hoy; si vino del 3D, caja y posición ya puestas |
+| 2 | Escribe ID Environ | Autocompletado sugiere Tipo, Descripción, Pasaje, Núcleo, encargados y caja de otras muestras con ese ID (ya existe) |
+| 3 | Completa, **Enter** | Acción primaria = **"Guardar y siguiente"**: guarda, deja todo menos la posición, avanza a la siguiente posición libre en orden de lectura de la caja, foco vuelve a **ID Environ** con el texto seleccionado |
+| 4 | Repite 2–3 | Franja fija arriba del botón: "En esta tanda: 3 · 5A 5B 5C", cada una enlazable |
+| 5 | Toca **Guardar y cerrar** (secundario) o Esc | Cierra; aviso "3 muestras congeladas en II · C4 (5A–5C)."; el 3D enfoca la caja |
+
+- Si la caja se llena a mitad de tanda: la posición queda vacía y el aviso dice "La caja C4 está
+  llena. Elige otra caja para seguir." con foco en Nombre Caja. No se salta de caja solo.
+- Posición ocupada al guardar (otra persona llegó antes): error en el campo + botón
+  "Usar 5F (siguiente libre)".
+- Criterio: 5 muestras seguidas solo con teclado (Tab/Enter), sin tocar el mouse.
+
+### F2 · Descongelar (D3)
+
+| Paso | Persona hace | Pantalla muestra |
+|---|---|---|
+| 1 | Toca **Descongelar** (barra) o "Descongelar" en el detalle | Modal. Si vino del detalle, la muestra ya está elegida y se salta al paso 3 |
+| 2 | Escribe el **ID Environ** del tubo (campo nuevo, primero) | Sugerencias de muestras **activas** con ese ID, con su ubicación en mono. Al elegir, se rellenan Nombre Caja y Posición, y la grilla de ocupadas la muestra marcada. También se puede ir por Nombre Caja → Posición como hoy |
+| 3 | Revisa la ficha (ID, Descripción, Tipo, Pasaje, Núcleo, Encargados en solo lectura) | Si es Núcleo: aviso naranja arriba de la ficha. Si la persona no es encargada: aviso y botón deshabilitado con el motivo ("Solo sus encargados pueden retirarla: MN, AS") |
+| 4 | Escribe Motivo, **Descongelar** | Botón primario turquesa (no rojo: no se borra nada, `DESIGN.md`). Aviso "ENV-0231 retirada de II · C4 · 5E." y la luz de esa posición pasa a verde en el 3D |
+
+- El campo ID no cambia los campos del Google Form: es una forma de llenar caja + posición.
+- Si el ID tiene varias muestras activas (mismo ID, varias alícuotas), la lista las muestra
+  todas con ubicación y la persona elige.
+
+### F3 · Encontrar una muestra por ID hasta su posición en el 3D (D1 + D2)
+
+| Paso | Persona hace | Pantalla muestra |
+|---|---|---|
+| 1 | Toca el buscador (o `/`), escribe `ENV-0231` | Sugerencias en vivo: ID, ubicación, aviso Núcleo |
+| 2 | Enter | 3D vuela a la caja (400–600 ms, sin animación con `prefers-reduced-motion`), abre la caja, resalta 5E con contorno turquesa, panel muestra el detalle |
+
+Dos acciones desde cualquier vista (criterio: ≤ 3).
+
+### F4 · Mover una caja
+
+| Paso | Persona hace | Pantalla muestra |
+|---|---|---|
+| 1 | En el 3D selecciona la caja → **Mover caja**; o en % de uso, acción de la fila | Modal "Mover caja II · C4 (34 muestras)" |
+| 2 | Escribe el nuevo lugar (`D7`) | Debajo del campo, en vivo: "D7 está vacía" (ok) / "D7 tiene 12 muestras" (error) / "No existe el rack D" (error). La Sección se deduce, en solo lectura |
+| 3 | **Mover caja** | Aviso "Caja movida de II · C4 a III · D7 (34 muestras)."; el 3D enfoca el lugar nuevo |
+
+## Estados por pantalla
+
+| Pantalla | Cargando | Vacío | Error | Éxito |
+|---|---|---|---|---|
+| Buscador global | Spinner de 12px dentro del campo tras 300 ms | "No hay muestras activas con «X»." + enlace a incluir retiradas | "No se pudo buscar. Reintentar." bajo el campo | Navega (ver F3) |
+| Freezer 3D | Escena con cajas en gris y "Cargando ocupación…" en el panel | Caja sin registrar: "Caja sin registrar" + "Registrar congelamiento aquí" | Banda en el panel: "No se pudo cargar la ocupación. Reintentar." La escena queda navegable | — |
+| Tabla | Primera carga: "Cargando muestras…"; refetch: tabla con `aria-busy` y opacidad 0.6 (ya existe) | "No hay muestras con esos filtros." + botón "Limpiar filtros" | `role="alert"` con el mensaje de la API + Reintentar | — |
+| % de uso | Filas esqueleto sin animación | "No hay cajas registradas." | Igual que tabla | — |
+| Detalle | Panel con el ID y "Cargando…" | — | "No se pudo cargar la muestra." | — |
+| Modales de tarea | Botón primario con verbo en gerundio ("Guardando…") y deshabilitado | — | Error en el campo (`aria-describedby`) o arriba del pie si es del servidor; el modal no se cierra | Cierra y deja un **aviso** |
+| Aviso de resultado | — | — | — | Franja `role="status"` bajo la barra con ✕; **se va sola a los 8 s o al siguiente cambio de vista** (hoy queda para siempre) |
+| Alertas | — | Sin chip cuando N = 0 | Chip no se muestra; el error se registra en consola | — |
+
+## Responsive y accesibilidad
+
+| Ancho | Barra superior | Vista | Detalle |
+|---|---|---|---|
+| PC ≥ 1100px | Todo en una fila | Vista + panel derecho de 360px | Panel derecho |
+| Tablet 700–1099px | Buscador en fila propia a ancho completo; Congelar/Descongelar como botones de 44px | Una columna; en 3D el panel pasa debajo de la escena | Hoja inferior al 50% de alto, arrastrable a 90% |
+| Teléfono < 700px | Buscador + menú; Congelar/Descongelar en barra inferior fija | Tabla por defecto; 3D disponible | Hoja inferior a pantalla completa |
+
+- Objetivos táctiles de 44px con `pointer: coarse` (`DESIGN.md`).
+- Landmarks: `header` (barra), `nav` (vistas), `main` (vista), `aside` (panel de contexto).
+- Foco: al abrir un modal va al primer campo vacío; al cerrarlo vuelve al elemento que lo abrió.
+  Al cambiar de vista por el buscador, el foco va al título del detalle.
+- Grilla de posiciones con flechas y roving tabindex (`docs/QOL.md` §3); cada posición con
+  `aria-label` completo (`DESIGN.md` › Estados de una posición).
+- Los avisos de resultado van en una sola región `aria-live="polite"`.
+
+## Fases
+
+### Fase 0 · Preparar (manual)
+
+```bash
+docker compose up -d          # db + backend + frontend con el seed
+cd frontend && npm install    # los skills corren tests y build
+```
+
+Las fases 3 y 4 navegan la app real con el navegador de gstack (`/browse`), así que la app tiene
+que estar corriendo con datos (seed o importación con el Excel sintético de los tests).
+
+### Fase 1 · Sistema de diseño → `/design-consultation` ✔
+
+Salida: `DESIGN.md` en la raíz.
+
+### Fase 2 · Revisar el plan → `/plan-design-review` ✔
+
+Salida: este documento, con la arquitectura de información y los flujos cerrados.
+
+### Fase 2b · Revisión de ingeniería → `/plan-eng-review` ✔
+
+Salida: la sección "Revisión de ingeniería" de abajo (decisiones D1–D5, flujo de datos, pruebas,
+modos de falla) y las tareas T9–T12.
+
+### Fase 3 · Implementar y auditar → `/design-review` ✔
+
+Hecho en la rama `claude/rediseno-bloque-2`: T1–T12 y la auditoría visual de todos los
+bloques (ver el historial de commits `T…` y `style(design): …`).
+
+Un PR por bloque, en este orden (cada uno deja la app usable):
+
+0. **Datos y recarga** (T9, T10, T11): parámetro `q` y ubicación estructurada en la API, visor sin
+   remontar. Va primero porque T2, T4 y T7 dependen de él. `backend/app/services/search.py`,
+   `backend/app/schemas/sample.py`, `App.tsx`, `FreezerViewer`, `OccupancyView`.
+1. **Tokens y base** (T1): cambios pendientes de `theme.css` listados en `DESIGN.md`.
+2. **Barra superior y navegación** (T2, T3): buscador global, Congelar/Descongelar fijos, menú de
+   usuario, avisos que se cierran. `Header`, `App.tsx`, `FiltersBar`.
+3. **Detalle como panel** (T4): `SampleDetail`, `FreezerViewer` (panel), `SamplesTable`.
+4. **Tareas** (T5, T7, T8): `FreezeForm` (tanda), `ThawForm` (ID primero), `BoxMoveModal`.
+   La auditoría visual de estos cuatro modales ya está en la rama `claude/rediseno-bloque-2`
+   (grilla con flechas, foco, 44px, color de descongelar, diálogos apilados, texto 12px).
+5. **Visor y ocupación** (T6): verificar Núcleo en el 3D, `OccupancyView`, `PositionPicker`.
+6. **Administración**: `UsersModal`, `AnomaliesView` (solo auditoría visual).
+
+Cada bloque que toque un flujo agrega su test de integración en `App.test.tsx` (T12).
+
+### Fase 4 · Verificar los flujos → `/qa`
+
+Recorre F1–F4 de punta a punta en PC y en viewport de tablet, en claro y oscuro.
+
+## Criterios de aceptación
+
+- F1: congelar 5 muestras consecutivas del mismo set solo con teclado.
+- F3: encontrar una muestra por ID y llegar a su posición en el 3D en ≤ 3 acciones desde cualquier vista (diseño: 2).
+- F2: retirar un tubo teniendo solo su ID, sin saber la caja.
+- F4: mover una caja sabiendo antes de confirmar si el destino está libre.
+- Todo operable por teclado, con foco visible; la grilla de posiciones con flechas.
+- Contraste WCAG AA en claro y oscuro; objetivos táctiles ≥ 44 px (tablet).
+- Warning de Núcleo presente en: buscador, tabla, detalle, 3D (posición y panel), congelar, descongelar, mover.
+- Ningún patrón de AI-slop (`DESIGN.md` › Prohibido).
+
+## Tareas
+
+- [x] **T1 (P1)** — `theme.css` — Aplicar "Cambios pendientes" de `DESIGN.md` (`--warn`, `--field-border`, 12px mínimo, 44px táctil, logo en oscuro automático, sombras).
+- [x] **T2 (P1)** — `Header`, `App.tsx` — Buscador global con sugerencias y las tres salidas (1 resultado / varios / ubicación); quitar "Buscar posición" del panel 3D. Usa `q` (T9) para IDs y `parseViewerQuery` para ubicaciones; debounce de 300 ms y se descarta la respuesta de un pedido viejo (ver modos de falla). Las sugerencias muestran el aviso de Núcleo. Depende de T9 y T10.
+- [x] **T3 (P1)** — `Header`, `App.tsx` — Congelar/Descongelar en la barra; menú de usuario (Usuarios, tema, Cambiar usuario); avisos que se cierran solos.
+- [x] **T4 (P1)** — `SampleDetail`, `FreezerViewer`, `App.tsx` — Detalle como panel/hoja inferior; botón "Ver en el refri" fuera del 3D; Descongelar como primario.
+- [x] **T5 (P1)** — `FreezeForm` — "Guardar y siguiente" como primario (Enter), foco a ID Environ, franja "En esta tanda", caja llena a mitad de tanda.
+- [x] **T6 (P3)** — `FreezerViewer` — Verificar el warning de Núcleo en el 3D contra `DESIGN.md` (ya existe: aviso en la vista de caja `FreezerViewer.tsx:552`, en la posición `:644`, tapa en estado `core` en `three/freezerScene.ts:322`). Solo ajustes visuales si no calzan; la revisión de diseño anterior lo dio por faltante por error.
+- [x] **T7 (P2)** — `ThawForm` — Campo ID Environ primero con sugerencias de muestras activas; botón primario turquesa "Descongelar"; motivo del bloqueo cuando no es encargado.
+- [x] **T8 (P2)** — `BoxMoveModal` — Validación en vivo del destino (vacía / ocupada / no existe); tras mover, enfocar el 3D en el lugar nuevo.
+- [x] **T9 (P1, backend)** — `services/search.py` — Filtro `q`: `OR` de `environ_id ILIKE %q%` y `description ILIKE %q%`; combinable con los demás filtros (AND), incompatible con `environ_id_exact` (422, como el par actual). Lo usan `/samples/search` y el export porque ambos pasan por `build_sample_query`. Tests pytest: coincide por ID, por descripción, por ambos sin duplicar, con `status`, vacío, 422 con `environ_id_exact`.
+- [x] **T10 (P1, backend)** — `schemas/sample.py`, `sample_with_location` — `SampleWithLocation` suma `section_code`, `rack_letter`, `box_number` (aditivo; `location` se mantiene). Frontend: `types.ts` y borrar `locationPrefill` de `App.tsx`. Tests: pytest de la forma del JSON; vitest de "Descongelar" desde el detalle prellenando sin regex.
+- [x] **T11 (P1)** — `App.tsx`, `FreezerViewer`, `OccupancyView` — Reemplazar `key={freezerKey}` por un prop `reloadToken`: el visor vuelve a pedir ocupación y luces sin reconstruir la escena ni mover la cámara; se mantiene la caja seleccionada. Test: cambiar el token no desmonta (el mock de escena no se recrea) y sí vuelve a llamar a la api.
+- [x] **T12 (P1)** — `src/__tests__/App.test.tsx` (nuevo) — Integración con api mockeada y `FreezerViewer` reemplazado por un doble sin WebGL: F1 tanda de 3, F2 descongelar por ID, F3 buscador (1 / varios / ubicación / 0 / error de red), F4 mover caja con destino ocupado, y "Mover" desde el detalle no apila diálogos (regresión de FINDING-005). Se escribe por partes, junto con cada bloque.
+
+## Fuera de alcance
+
+- Lector de códigos de barras/QR: el campo ID de F2 queda listo para un lector tipo teclado, pero no se integra cámara.
+- Rediseño del modelo 3D (geometría, cámara): solo se agregan Núcleo y el resaltado.
+- Cambiar campos del Google Form: prohibido por `docs/FORMULARIO.md`.
+- Modo sin conexión.
+
+## Qué ya existe y se reutiliza
+
+- `DESIGN.md` y los tokens de `theme.css`.
+- `Modal` (atrapa foco, Esc) para todas las tareas.
+- `NucleoWarning` en tabla, detalle y descongelar: se reutiliza en el 3D y el buscador.
+- `getAutocompleteSuggestions` (congelar) y `lookupByIds` (lista de IDs) como base del buscador y del ID en descongelar.
+- `focusTarget` del visor ("Ver en el refri") para el salto desde el buscador.
+- `parseViewerQuery` del visor para reconocer ubicaciones en el buscador global.
+
+## Revisión de ingeniería
+
+### Decisiones
+
+| # | Decisión | Por qué |
+|---|---|---|
+| D1 | T2 y T4 van **directo sobre `App.tsx`**, sin refactor previo del estado | Elegido por el equipo: diff inicial menor. Consecuencia aceptada: `App.tsx` crece; lo compensa T12 (tests de integración de App). |
+| D2 | La búsqueda "ID Environ o ID Origen" es un parámetro **`q` en el backend** (T9) | Hoy `environ_id` y `description` se combinan con AND (`services/search.py:147-154`); dos pedidos en el cliente romperían total y paginación. El export lo hereda gratis. |
+| D3 | El visor **no se remonta** tras cada movimiento; recibe `reloadToken` (T11) | `refreshInventory()` cambia `freezerKey` y `key={freezerKey}` reconstruye three.js y resetea la cámara en cada guardado; con la tanda de F1 serían N reconstrucciones. |
+| D4 | La API entrega la **ubicación estructurada** (T10) | `locationPrefill` (`App.tsx:56`) parsea el texto `III · F12 · 3B` con una regex; T2, T4 y T7 necesitan esos campos y un cambio de formato fallaría en silencio. |
+| D5 | Los flujos se prueban con **integración de App en Testing Library** (T12), no Playwright | Corre en la CI actual sin infraestructura nueva; el visor se reemplaza por un doble sin WebGL. |
+
+### Flujo de datos del buscador global (T2)
+
+```
+tecla ──► debounce 300 ms ──► ¿parece ubicación? (parseViewerQuery)
+                                 │ sí                         │ no
+                                 ▼                            ▼
+                      focusTarget {boxId,pos}        GET /samples/search?q=…&status=active&page_size=8
+                      viewMode = "3d"                          │  (respuesta vieja → se descarta)
+                                                               ▼
+                                          0 ── "No hay muestras activas con «q»" + ver retiradas
+                                          1 ── viewMode="3d", focusTarget, selected = muestra
+                                          N ── viewMode="table", filters.q = q, chip "ID: q ×"
+                                          error ── mensaje bajo el campo + Reintentar
+```
+
+### Cobertura de pruebas planificada
+
+```
+CÓDIGO                                            FLUJOS
+[+] backend services/search.py  q (T9)            [+] F1 congelar tanda (T5)
+  ├── [GAP→T9] por ID / por descripción / ambos     ├── [GAP→T12] 3 seguidas, foco vuelve a ID
+  ├── [GAP→T9] con status y otros filtros           └── [GAP→T12] caja llena a mitad de tanda
+  └── [GAP→T9] 422 con environ_id_exact           [+] F2 descongelar por ID (T7)
+[+] backend schemas SampleWithLocation (T10)        ├── [GAP→T12] ID con 1 y con varias activas
+  └── [GAP→T10] campos section/rack/box             └── [GAP→T12] no encargado: botón bloqueado
+[+] PositionPicker (hecho en bloque 2)            [+] F3 buscador (T2)
+  └── [★★★ TESTED] PositionPicker.test.tsx          ├── [GAP→T12] 1 / N / ubicación / 0
+[+] FreezerViewer reloadToken (T11)                 └── [GAP→T12] error de red, respuesta vieja
+  └── [GAP→T11] no desmonta, sí recarga           [+] F4 mover caja (T8)
+[+] App "Mover" sin diálogos apilados               └── [GAP→T12] destino ocupado / inexistente
+  └── [GAP→T12] regresión de FINDING-005
+
+COBERTURA HOY: 1/14 caminos  ·  todos los GAP tienen tarea asignada
+```
+
+### Modos de falla
+
+| Camino nuevo | Falla realista | ¿Test? | ¿Manejo? | ¿Lo ve el usuario? |
+|---|---|---|---|---|
+| Buscador (T2) | Respuestas fuera de orden: escribir `ENV-02` y luego `ENV-021` y que llegue primero la segunda | T12 | Descartar respuestas de pedidos viejos | Sin manejo, mostraría resultados de otro texto: **brecha si no se implementa** |
+| Buscador (T2) | Backend caído | T12 | Mensaje bajo el campo | Sí |
+| `q` (T9) | `%` o `_` en el texto se interpretan como comodines de ILIKE | T9 | Escapar comodines | Resultados de más, no silencioso |
+| Visor (T11) | La recarga llega mientras la cámara vuela a otra caja | T11 | La recarga solo cambia luces, no la cámara | No |
+| Ubicación (T10) | Frontend nuevo con backend viejo sin los campos | T10 | Campos opcionales en `types.ts`, prellenado vacío | Formulario sin prellenar, visible |
+| Tanda (T5) | Doble Enter guarda dos veces la misma posición | T12 | Botón deshabilitado mientras guarda (ya existe `submitting`) + restricción de BD | Error de posición ocupada, visible |
+
+Ninguna falla queda a la vez sin test, sin manejo y silenciosa si se implementan T2 y T9 como están escritos.
+
+### Fuera de alcance
+
+- Refactor del estado de `App.tsx` a un reducer: descartado en D1.
+- Playwright / E2E contra docker compose: descartado en D5.
+- Índice trigram para `ILIKE %q%`: con ~6.700 muestras no hace falta; revisar si supera ~100.000.
+- Estado en la URL (vista, filtros, muestra seleccionada): útil para compartir enlaces, no lo pide ningún flujo.
+- Lector de códigos de barras con cámara (ya estaba fuera).
+
+### Qué ya existe y se reutiliza (ingeniería)
+
+- `build_sample_query` (`services/search.py`) ya es compartido por búsqueda y export: `q` va ahí una sola vez.
+- `focusTarget` con `token` ya permite re-enfocar la misma caja: el buscador lo reutiliza.
+- `parseViewerQuery` del visor reconoce `A5` / `A5-3B`.
+- `Modal` (foco atrapado, Esc) y `submitting` en los formularios contra doble envío.
+
+### Paralelización
+
+| Paso | Módulos | Depende de |
+|---|---|---|
+| T9, T10 | `backend/app/services`, `backend/app/schemas` | — |
+| T1 | `frontend/src/styles` | — |
+| T11 | `frontend/src/components` (visor, ocupación), `App.tsx` | — |
+| T2, T3, T4 | `App.tsx`, `components` | T9, T10, T11 |
+| T5, T7, T8 | `components` (formularios) | T10 (T7) |
+
+Carril A: T9 → T10 (backend). Carril B: T1 (CSS). Carril C: T11. Se pueden hacer en paralelo;
+después T2–T4 en secuencia (todos tocan `App.tsx`), y T5/T7/T8 en paralelo con ellos salvo por
+`App.tsx` en T7. Conflicto: T3 y T11 tocan `App.tsx`; conviene T11 primero.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (PLAN) | 7 hallazgos, 0 brechas críticas; decisiones D1–D5, tareas T9–T12, T6 corregida |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | CLEAR (FULL) | score: 4/10 → 9/10, 4 decisiones |
+
+- **VERDICT:** ENG + DESIGN CLEARED — listo para implementar, empezando por el bloque 0 (T9, T10, T11).
+
+NO UNRESOLVED DECISIONS

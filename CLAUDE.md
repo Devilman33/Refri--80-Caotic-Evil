@@ -13,3 +13,9 @@
   a los comandos (`VAR=... cmd` se bloquea) ni verifiques la base. Corre un comando por llamada, sin
   encadenar con `;`, `&&` ni `2>&1` (los compuestos se bloquean y gastan un turno). Para los tests:
   `python -m pytest backend/tests/<archivo> -q` desde la raíz.
+
+## Sistema de diseño
+
+Lee `DESIGN.md` antes de cualquier decisión visual o de UI: tipografías, colores, espaciado,
+semántica de estados y lo que no se hace están ahí. No te desvíes sin aprobación explícita.
+En revisiones y QA, marca el código que no cumpla `DESIGN.md`.

@@ -144,3 +144,16 @@ describe("MoveModal", () => {
     );
   });
 });
+
+describe("MoveModal · grilla de destino", () => {
+  it("no deja elegir posición hasta que hay una caja de destino válida", async () => {
+    const user = userEvent.setup();
+    render(<MoveModal sample={sample} users={users} sessionInitials="MN" onClose={vi.fn()} onMoved={vi.fn()} />);
+
+    expect(screen.getByText(/escribe la caja de destino/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^posición 3b,/i })).toBeDisabled();
+    await user.type(screen.getByLabelText(/nombre caja/i), "A2");
+    await waitFor(() => expect(screen.getByRole("button", { name: /^posición 3b,/i })).toBeEnabled());
+    expect(screen.queryByText(/escribe la caja de destino/i)).not.toBeInTheDocument();
+  });
+});

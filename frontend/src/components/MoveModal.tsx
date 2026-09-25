@@ -39,6 +39,11 @@ export function MoveModal({ sample, users, sessionInitials, onClose, onMoved }: 
 
   const box = useBoxResolution(boxName, racks);
   const sectionCode = sectionCodeForBox(boxName, racks, sections);
+  // Sin una caja de destino válida la grilla mostraba 81 posiciones "libres" que no eran de
+  // ninguna caja: se deshabilita hasta saber cuál es.
+  const parsedDestination = parseBoxName(boxName);
+  const destinationReady =
+    parsedDestination !== null && racks.some((rack) => rack.letter === parsedDestination.rackLetter);
 
   useEffect(() => {
     api.listRacks().then(setRacks).catch(() => setRacks([]));
@@ -160,6 +165,7 @@ export function MoveModal({ sample, users, sessionInitials, onClose, onMoved }: 
 
         <div className="field field--full">
           <label>Posición de destino</label>
+          {!destinationReady && <p className="field-hint">Escribe la caja de destino para elegir la posición.</p>}
           <PositionPicker
             boxType={box.boxType}
             occupied={box.occupied}
@@ -167,7 +173,7 @@ export function MoveModal({ sample, users, sessionInitials, onClose, onMoved }: 
             corePositions={box.corePositions}
             value={position}
             onChange={setPosition}
-            disabled={saving}
+            disabled={saving || !destinationReady}
           />
           {fieldErrors.position && <p className="field-error">{fieldErrors.position}</p>}
           {conflict?.next_free_position && (

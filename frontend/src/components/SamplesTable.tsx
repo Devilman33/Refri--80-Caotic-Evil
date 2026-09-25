@@ -78,7 +78,7 @@ export function SamplesTable({ samples, ownerLookup, onSelect, sort, onSortChang
                 {sample.environ_id ? (
                   <code>{sample.environ_id}</code>
                 ) : (
-                  <span className="badge badge-warn">Sin ID</span>
+                  <span className="badge badge-count">Sin ID</span>
                 )}
               </td>
               <td>{sample.description ?? "—"}</td>
