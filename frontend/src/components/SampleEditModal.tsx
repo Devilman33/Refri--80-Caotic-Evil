@@ -7,9 +7,9 @@ import {
   type SampleWithLocation,
   type UserRead,
 } from "../api/types";
-import { selectableUsers } from "../utils/users";
+import { ownersOf } from "../utils/users";
 import { Modal } from "./Modal";
-import { userOptionLabel } from "./UserOptions";
+import { OwnersPicker } from "./OwnersPicker";
 
 const SAMPLE_TYPE_OPTIONS = Object.entries(SAMPLE_TYPE_LABELS) as [SampleType, string][];
 
@@ -25,19 +25,19 @@ interface FormState {
   description: string;
   type: SampleType;
   typeOther: string;
-  ownerId: string;
+  ownerInitials: string[];
   passage: string;
   isCore: "" | "true" | "false";
   notes: string;
 }
 
-function initialForm(sample: SampleWithLocation): FormState {
+function initialForm(sample: SampleWithLocation, users: UserRead[]): FormState {
   return {
     environId: sample.environ_id ?? "",
     description: sample.description ?? "",
     type: sample.type,
     typeOther: sample.type_other ?? "",
-    ownerId: String(sample.owner_id),
+    ownerInitials: ownersOf(sample, users).map((user) => user.initials),
     passage: sample.passage === null ? "" : String(sample.passage),
     isCore: sample.is_core === null ? "" : sample.is_core ? "true" : "false",
     notes: sample.notes ?? "",
@@ -55,17 +55,15 @@ function initialForm(sample: SampleWithLocation): FormState {
  * lectura: cambian por movimientos, para no romper la trazabilidad.
  */
 export function SampleEditModal({ sample, users, onClose, onSaved }: SampleEditModalProps) {
-  const [form, setForm] = useState<FormState>(() => initialForm(sample));
+  const [form, setForm] = useState<FormState>(() => initialForm(sample, users));
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const ownerOptions = useMemo(() => selectableUsers(users), [users]);
-  const currentOwner = users.find((user) => user.id === sample.owner_id);
 
   const pristine = useMemo(
-    () => JSON.stringify(form) === JSON.stringify(initialForm(sample)),
-    [form, sample],
+    () => JSON.stringify(form) === JSON.stringify(initialForm(sample, users)),
+    [form, sample, users],
   );
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -78,7 +76,9 @@ export function SampleEditModal({ sample, users, onClose, onSaved }: SampleEditM
       description: form.description.trim() || null,
       type: form.type,
       type_other: form.type === "otros" ? form.typeOther.trim() : null,
-      owner_id: Number(form.ownerId),
+      owner_ids: form.ownerInitials
+        .map((initials) => users.find((user) => user.initials === initials)?.id)
+        .filter((id): id is number => id !== undefined),
       passage: form.passage.trim() === "" ? null : Number(form.passage),
       is_core: form.isCore === "" ? null : form.isCore === "true",
       notes: form.notes.trim() || null,
@@ -90,7 +90,7 @@ export function SampleEditModal({ sample, users, onClose, onSaved }: SampleEditM
     if (form.type === "otros" && !form.typeOther.trim()) {
       errors.typeOther = "Especifica el tipo cuando seleccionas 'Otros'";
     }
-    if (!form.ownerId) errors.ownerId = "El encargado es obligatorio";
+    if (form.ownerInitials.length === 0) errors.ownerId = "Indica al menos un encargado";
     setFieldErrors(errors);
     setSubmitError(null);
     if (Object.keys(errors).length > 0) return;
@@ -162,21 +162,13 @@ export function SampleEditModal({ sample, users, onClose, onSaved }: SampleEditM
         )}
 
         <div className="field">
-          <label htmlFor="se-owner">Encargado</label>
-          <select id="se-owner" value={form.ownerId} onChange={(event) => set("ownerId", event.target.value)}>
-            {/* El encargado actual se ofrece aunque no sea seleccionable (p. ej. "sin
-                encargado"), para que el select muestre lo que la muestra tiene hoy. */}
-            {!ownerOptions.some((user) => user.id === sample.owner_id) && (
-              <option value={sample.owner_id}>
-                {currentOwner ? userOptionLabel(currentOwner) : "—"}
-              </option>
-            )}
-            {ownerOptions.map((user) => (
-              <option key={user.id} value={user.id}>
-                {userOptionLabel(user)}
-              </option>
-            ))}
-          </select>
+          <label htmlFor="se-owner">Encargados</label>
+          <OwnersPicker
+            id="se-owner"
+            users={users}
+            value={form.ownerInitials}
+            onChange={(value) => set("ownerInitials", value)}
+          />
           {fieldErrors.ownerId && <p className="field-error">{fieldErrors.ownerId}</p>}
         </div>
 

@@ -8,7 +8,7 @@ import {
   type UserRead,
 } from "../api/types";
 import { formatBoolean, formatDate } from "../utils/format";
-import { userLabel } from "../utils/users";
+import { ownersLabel, ownersOf } from "../utils/users";
 import { Modal } from "./Modal";
 import { NucleoWarning } from "./NucleoWarning";
 import { userOptionLabel } from "./UserOptions";
@@ -57,7 +57,7 @@ export function SampleDetail({ sample, users, canModify, onClose, onThaw, onEdit
   }, [sample.id]);
 
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
-  const owner = usersById.get(sample.owner_id);
+  const owners = ownersOf(sample, users);
   const location = splitLocation(sample.location);
   // El congelamiento que la trajo al freezer (el primero) y el retiro, si lo hubo.
   const frozen = movements?.find((movement) => movement.action === "freeze");
@@ -84,8 +84,8 @@ export function SampleDetail({ sample, users, canModify, onClose, onThaw, onEdit
 
       <dl className="detail-grid" style={{ marginTop: 12 }}>
         <div>
-          <dt>Encargado</dt>
-          <dd>{owner ? userOptionLabel(owner) : "—"}</dd>
+          <dt>{owners.length > 1 ? "Encargados" : "Encargado"}</dt>
+          <dd>{owners.length > 0 ? owners.map(userOptionLabel).join(", ") : "—"}</dd>
         </div>
         <div>
           <dt>Estado</dt>
@@ -187,7 +187,9 @@ export function SampleDetail({ sample, users, canModify, onClose, onThaw, onEdit
         </div>
       ) : (
         <p className="field-hint" style={{ marginTop: 12 }}>
-          Solo {userLabel(owner)}, su encargado, puede moverla, editarla o descongelarla.
+          {owners.length > 1
+            ? `Solo sus encargados (${ownersLabel(owners)}) pueden moverla, editarla o descongelarla.`
+            : `Solo ${ownersLabel(owners)}, su encargado, puede moverla, editarla o descongelarla.`}
         </p>
       )}
 

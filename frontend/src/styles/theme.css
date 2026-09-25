@@ -1644,3 +1644,44 @@ table.samples-table {
     justify-content: flex-start;
   }
 }
+
+/* Encargados (una muestra puede tener varios) */
+.owners-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.owners-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.owner-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.owner-chip button {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.owner-chip button:hover {
+  color: var(--danger);
+}

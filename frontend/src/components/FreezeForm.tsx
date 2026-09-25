@@ -16,6 +16,7 @@ import { nextFreePosition, parseBoxName } from "../utils/positions";
 import { todayIso } from "../utils/format";
 import { sectionCodeForBox } from "../utils/positions";
 import { Modal } from "./Modal";
+import { OwnersPicker } from "./OwnersPicker";
 import { PositionPicker } from "./PositionPicker";
 import { UserOptions } from "./UserOptions";
 
@@ -33,7 +34,7 @@ interface FormState {
   boxType: BoxType;
   position: string;
   isCore: "" | "true" | "false";
-  ownerInitials: string;
+  ownerInitials: string[];
 }
 
 /** Prellenado desde el visor 3D (issue #6): clic en una posición libre abre el
@@ -60,7 +61,7 @@ function emptyForm(sessionInitials: string, initial?: LocationPrefill): FormStat
     position: initial?.position ?? "",
     isCore: "",
     // Lo más común es congelar muestras propias: el encargado parte siendo quien registra.
-    ownerInitials: sessionInitials,
+    ownerInitials: sessionInitials ? [sessionInitials] : [],
   };
 }
 
@@ -187,7 +188,7 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
               typeOther: suggestion.type_other ?? current.typeOther,
               passage: suggestion.passage !== null ? String(suggestion.passage) : current.passage,
               isCore: suggestion.is_core === null ? current.isCore : suggestion.is_core ? "true" : "false",
-              ownerInitials: suggestion.owner_initials ?? current.ownerInitials,
+              ownerInitials: suggestion.owner_initials.length > 0 ? suggestion.owner_initials : current.ownerInitials,
               boxName:
                 suggestion.rack_letter && suggestion.box_number
                   ? `${suggestion.rack_letter}${suggestion.box_number}`
@@ -226,7 +227,7 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
       errors.typeOther = "Especifica el tipo cuando seleccionas 'Otros'";
     }
     if (!form.isCore) errors.isCore = "Indica si pertenece al Núcleo Environ";
-    if (!form.ownerInitials.trim()) errors.ownerInitials = "Indica el encargado de la muestra";
+    if (form.ownerInitials.length === 0) errors.ownerInitials = "Indica al menos un encargado de la muestra";
     return errors;
   }
 
@@ -245,7 +246,7 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
       type_other: form.sampleType === "otros" ? form.typeOther.trim() : undefined,
       passage: form.passage.trim() !== "" ? Number(form.passage) : undefined,
       is_core: form.isCore === "true",
-      owner_initials: form.ownerInitials.trim().toUpperCase(),
+      owner_initials: form.ownerInitials,
     };
   }
 
@@ -496,15 +497,14 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
           </div>
 
           <div className="field">
-            <label htmlFor="mf-owner">Encargado de la muestra</label>
-            <select
+            <label htmlFor="mf-owner">Encargados de la muestra</label>
+            <OwnersPicker
               id="mf-owner"
+              users={users}
               value={form.ownerInitials}
-              onChange={(event) => set("ownerInitials", event.target.value)}
-            >
-              <UserOptions users={users} />
-            </select>
-            <p className="field-hint">Siempre una persona, también si la muestra es de Núcleo.</p>
+              onChange={(value) => set("ownerInitials", value)}
+            />
+            <p className="field-hint">Una o varias personas, también si la muestra es de Núcleo.</p>
             {fieldErrors.ownerInitials && <p className="field-error">{fieldErrors.ownerInitials}</p>}
           </div>
 

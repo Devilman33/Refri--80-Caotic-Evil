@@ -41,7 +41,7 @@ const sample: SampleWithLocation = {
   description: "Biopsia de próstata",
   type: "rna",
   type_other: null,
-  owner_id: 1,
+  owner_ids: [1],
   passage: 3,
   is_core: true,
   box_id: 5,
@@ -123,7 +123,7 @@ describe("ThawForm", () => {
   it("no deja retirar una muestra de otra persona", async () => {
     renderForm(daniela);
 
-    expect(await screen.findByText(/solo su encargado puede retirarla/i)).toBeInTheDocument();
+    expect(await screen.findByText(/solo sus encargados pueden retirarla/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retirar muestra/i })).toBeDisabled();
   });
 });

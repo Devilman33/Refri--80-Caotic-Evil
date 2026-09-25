@@ -11,7 +11,7 @@ import {
 import { useBoxResolution } from "../hooks/useBoxResolution";
 import { formatBoolean, todayIso } from "../utils/format";
 import { parseBoxName, sectionCodeForBox } from "../utils/positions";
-import { canModifySample, userLabel } from "../utils/users";
+import { canModifySample, ownersLabel, ownersOf } from "../utils/users";
 import type { LocationPrefill } from "./FreezeForm";
 import { Modal } from "./Modal";
 import { NucleoWarning } from "./NucleoWarning";
@@ -78,8 +78,8 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
     };
   }, [sampleId]);
 
-  const owner = sample ? users.find((user) => user.id === sample.owner_id) : undefined;
-  const allowed = sample ? canModifySample(sample, owner, sessionUser) : true;
+  const owners = sample ? ownersOf(sample, users) : [];
+  const allowed = sample ? canModifySample(sample, owners, sessionUser) : true;
 
   function validate(): Record<string, string> {
     const errors: Record<string, string> = {};
@@ -220,13 +220,13 @@ export function ThawForm({ users, sessionUser, initial, onClose, onSubmitted }: 
                 <dd>{formatBoolean(sample.is_core)}</dd>
               </div>
               <div>
-                <dt>Encargado</dt>
-                <dd>{userLabel(owner)}</dd>
+                <dt>{owners.length > 1 ? "Encargados" : "Encargado"}</dt>
+                <dd>{ownersLabel(owners)}</dd>
               </div>
             </dl>
             {!allowed && (
               <p className="field-error" role="alert">
-                Esta muestra está a cargo de {userLabel(owner)}: solo su encargado puede retirarla.
+                Esta muestra está a cargo de {ownersLabel(owners)}: solo sus encargados pueden retirarla.
               </p>
             )}
           </section>

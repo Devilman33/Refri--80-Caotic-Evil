@@ -44,7 +44,7 @@ function baseMovementResult(overrides: Partial<MovementResult["sample"]> = {}): 
       description: null,
       type: "vial_celulas",
       type_other: null,
-      owner_id: 1,
+      owner_ids: [1],
       passage: null,
       is_core: true,
       box_id: 1,
@@ -97,7 +97,7 @@ beforeEach(() => {
     type_other: null,
     passage: null,
     is_core: null,
-    owner_initials: null,
+    owner_initials: [],
     rack_letter: null,
     box_number: null,
     box_id: null,
@@ -125,7 +125,7 @@ describe("FreezeForm", () => {
       /sección/i,
       /nombre caja/i,
       /núcleo environ/i,
-      /encargado de la muestra/i,
+      /encargados de la muestra/i,
     ]) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
@@ -139,7 +139,7 @@ describe("FreezeForm", () => {
     renderForm();
 
     expect(screen.getByLabelText(/operador/i)).toHaveValue("GC");
-    expect(screen.getByLabelText(/encargado de la muestra/i)).toHaveValue("GC");
+    expect(screen.getByRole("list", { name: /encargados elegidos/i })).toHaveTextContent("Guillermo");
     expect(screen.getAllByRole("option", { name: "Daniela Bravo (DB)" }).length).toBe(2);
   });
 
@@ -156,18 +156,18 @@ describe("FreezeForm", () => {
     expect(screen.queryByLabelText(/especifique el tipo/i)).not.toBeInTheDocument();
   });
 
-  it("Núcleo es solo una marca: el encargado se pide y se envía igual", async () => {
+  it("Núcleo es solo una marca: los encargados (pueden ser varios) se piden y se envían igual", async () => {
     api.createMovement.mockResolvedValue(baseMovementResult());
     const user = userEvent.setup();
     renderForm();
 
     await fillRequiredFreezeFields(user);
-    await user.selectOptions(screen.getByLabelText(/encargado de la muestra/i), "DB");
+    await user.selectOptions(screen.getByLabelText(/encargados de la muestra/i), "DB");
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() =>
       expect(api.createMovement).toHaveBeenCalledWith(
-        expect.objectContaining({ action: "freeze", is_core: true, owner_initials: "DB" }),
+        expect.objectContaining({ action: "freeze", is_core: true, owner_initials: ["GC", "DB"] }),
       ),
     );
     expect(api.createMovement.mock.calls[0][0]).not.toHaveProperty("box_is_full");
@@ -197,6 +197,17 @@ describe("FreezeForm", () => {
     expect(screen.getByText(/el tipo es obligatorio/i)).toBeInTheDocument();
   });
 
+  it("sin encargados no se puede guardar", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(screen.getByRole("button", { name: /quitar a guillermo/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    expect(screen.getByText(/al menos un encargado/i)).toBeInTheDocument();
+    expect(api.createMovement).not.toHaveBeenCalled();
+  });
+
   it("la sección se completa sola según el rack de la caja", async () => {
     const user = userEvent.setup();
     renderForm();
@@ -215,7 +226,7 @@ describe("FreezeForm", () => {
       type_other: null,
       passage: 4,
       is_core: false,
-      owner_initials: "DB",
+      owner_initials: ["DB"],
       rack_letter: "A",
       box_number: 1,
       box_id: 5,
@@ -230,7 +241,7 @@ describe("FreezeForm", () => {
     await waitFor(() => expect(screen.getByLabelText(/descripción/i)).toHaveValue("Biopsia de próstata"));
     expect(screen.getByLabelText(/^tipo$/i)).toHaveValue("rna");
     expect(screen.getByLabelText(/núcleo environ/i)).toHaveValue("false");
-    expect(screen.getByLabelText(/encargado de la muestra/i)).toHaveValue("DB");
+    expect(screen.getByRole("list", { name: /encargados elegidos/i })).toHaveTextContent("Daniela Bravo");
     expect(screen.getByLabelText(/nombre caja/i)).toHaveValue("A1");
   });
 

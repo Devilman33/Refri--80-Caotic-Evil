@@ -10,7 +10,7 @@ const baseSample: SampleWithLocation = {
   description: "Biopsia",
   type: "vial_celulas",
   type_other: null,
-  owner_id: 1,
+  owner_ids: [1],
   passage: 2,
   is_core: false,
   box_id: 1,
@@ -150,5 +150,18 @@ describe("SamplesTable", () => {
       <SamplesTable samples={samples} ownerLookup={ownerLookup} onSelect={vi.fn()} sort={null} onSortChange={vi.fn()} />,
     );
     expect(screen.queryByRole("button", { name: /ver en el refri/i })).not.toBeInTheDocument();
+  });
+
+  it("muestra todos los encargados de una muestra compartida", () => {
+    render(
+      <SamplesTable
+        samples={[{ ...samples[0], owner_ids: [1, 2] }]}
+        ownerLookup={{ 1: "GC", 2: "Ana Soto" }}
+        onSelect={vi.fn()}
+        sort={null}
+        onSortChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("GC, Ana Soto")).toBeInTheDocument();
   });
 });

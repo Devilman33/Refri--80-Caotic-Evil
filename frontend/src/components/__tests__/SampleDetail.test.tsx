@@ -16,7 +16,7 @@ const activeSample: SampleWithLocation = {
   description: "Biopsia",
   type: "vial_celulas",
   type_other: null,
-  owner_id: 1,
+  owner_ids: [1],
   passage: 2,
   is_core: false,
   box_id: 1,

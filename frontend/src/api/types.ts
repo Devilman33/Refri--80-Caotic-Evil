@@ -86,7 +86,8 @@ export interface SampleWithLocation {
   description: string | null;
   type: SampleType;
   type_other: string | null;
-  owner_id: number;
+  /** Encargados: una muestra puede tener varios (en el Excel, `AS/MN`). */
+  owner_ids: number[];
   passage: number | null;
   is_core: boolean | null;
   box_id: number;
@@ -105,7 +106,7 @@ export interface SampleUpdate {
   description?: string | null;
   type?: SampleType;
   type_other?: string | null;
-  owner_id?: number;
+  owner_ids?: number[];
   passage?: number | null;
   is_core?: boolean | null;
   notes?: string | null;
@@ -246,8 +247,8 @@ export interface MovementCreate {
   passage?: number | null;
   /** Marca de Núcleo Environ: solo el warning, no cambia el encargado. */
   is_core?: boolean | null;
-  /** Encargado de la muestra: se pide siempre en un congelamiento. */
-  owner_initials?: string | null;
+  /** Encargados de la muestra (uno o varios): se piden siempre en un congelamiento. */
+  owner_initials?: string[];
   /** En un descongelamiento, el motivo del retiro. */
   note?: string | null;
 }
@@ -304,7 +305,7 @@ export interface AutocompleteSuggestion {
   type_other: string | null;
   passage: number | null;
   is_core: boolean | null;
-  owner_initials: string | null;
+  owner_initials: string[];
   rack_letter: string | null;
   box_number: number | null;
   box_id: number | null;

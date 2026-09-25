@@ -25,7 +25,7 @@ import { SamplesTable, type SortState } from "./components/SamplesTable";
 import { ThawForm } from "./components/ThawForm";
 import { UsersModal } from "./components/UsersModal";
 import type { BoxFilter } from "./utils/occupancy";
-import { canModifySample, userLabel } from "./utils/users";
+import { canModifySample, ownersOf, userLabel } from "./utils/users";
 
 const THEME_KEY = "refri:theme";
 const SESSION_KEY = "refri:sesion-usuario";
@@ -284,7 +284,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
   // búsquedas distintas y mezclarlas haría imposible saber cuál se está viendo.
   const tableResult = idListMode ? idListResult : result;
 
-  const selectedOwner = selected ? users.find((user) => user.id === selected.owner_id) : undefined;
+  const selectedOwners = selected ? ownersOf(selected, users) : [];
 
   return (
     <div className="app">
@@ -465,7 +465,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
         <SampleDetail
           sample={selected}
           users={users}
-          canModify={canModifySample(selected, selectedOwner, sessionUser)}
+          canModify={canModifySample(selected, selectedOwners, sessionUser)}
           onClose={() => setSelected(null)}
           onThaw={() => handleThaw(selected)}
           onEdit={() => setEditing(selected)}

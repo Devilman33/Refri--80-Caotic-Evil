@@ -31,7 +31,7 @@ const sample: SampleWithLocation = {
   description: null,
   type: "vial_celulas",
   type_other: null,
-  owner_id: 1,
+  owner_ids: [1],
   passage: null,
   is_core: false,
   box_id: 1,

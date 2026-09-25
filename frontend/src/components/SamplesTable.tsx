@@ -86,10 +86,10 @@ export function SamplesTable({ samples, ownerLookup, onSelect, sort, onSortChang
               <td>
                 {/* SIN_ASIG es el centinela del importador, no una persona: mostrarlo
                     crudo obliga al operador a aprender un código interno. */}
-                {ownerLookup[sample.owner_id] === UNASSIGNED_INITIALS ? (
+                {sample.owner_ids.some((id) => ownerLookup[id] === UNASSIGNED_INITIALS) ? (
                   <span className="badge badge-withdrawn">Sin encargado</span>
                 ) : (
-                  (ownerLookup[sample.owner_id] ?? "—")
+                  sample.owner_ids.map((id) => ownerLookup[id] ?? "—").join(", ") || "—"
                 )}
               </td>
               <td>{sample.passage ?? "—"}</td>
