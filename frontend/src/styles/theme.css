@@ -1448,6 +1448,22 @@ table.samples-table {
   background: var(--chip-hover);
 }
 
+/* Cada fila lleva a otra vista: que se note sin pasar el mouse (en tablet no hay hover). */
+.alerts-panel button > span:first-child {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.alerts-panel button > span:first-child::after {
+  content: " →";
+}
+
+@media (pointer: coarse) {
+  .alerts-panel button {
+    min-height: 44px;
+  }
+}
+
 .alerts-panel .badge {
   font-variant-numeric: tabular-nums;
 }
