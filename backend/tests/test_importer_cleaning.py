@@ -70,12 +70,19 @@ def test_parse_si_no_unknown(raw):
 
 @pytest.mark.parametrize("raw,expected", [("3", 3), (4.0, 4), (5, 5)])
 def test_parse_pasaje_valid(raw, expected):
-    assert parse_pasaje(raw) == expected
+    assert parse_pasaje(raw) == (expected, None)
 
 
-@pytest.mark.parametrize("raw", ["-", "N/A", "n/a", None, "mezclado-3"])
-def test_parse_pasaje_invalid_is_null(raw):
-    assert parse_pasaje(raw) is None
+@pytest.mark.parametrize("raw", ["-", "N/A", "n/a", None])
+def test_parse_pasaje_documented_nulls_are_silent(raw):
+    """docs/DATOS.md: "Numeros mezclados con `-` y `N/A` -> nulo". Son nulos esperados,
+    no datos malos: reportarlos llenaria el CSV de anomalias que nadie puede corregir."""
+    assert parse_pasaje(raw) == (None, None)
+
+
+def test_parse_pasaje_unparseable_text_is_reported():
+    """Antes esto tambien devolvia None en silencio, que es como se pierde un dato."""
+    assert parse_pasaje("mezclado-3") == (None, "Pasaje no numerico")
 
 
 def test_parse_seccion_legacy_numeric():
@@ -211,3 +218,45 @@ def test_parse_fecha_salida_note_only_is_reported(raw):
 
 def test_parse_propietario_caja_ignores_embedded_date():
     assert parse_propietario_caja("12-05-25 VF") == "VF"
+
+
+def test_parse_pasaje_accepts_integers():
+    assert parse_pasaje(3) == (3, None)
+    assert parse_pasaje("7") == (7, None)
+    # Excel guarda los enteros como float; 3.0 es un 3, no una anomalía.
+    assert parse_pasaje(3.0) == (3, None)
+
+
+def test_parse_pasaje_reports_fractional_instead_of_truncating():
+    """Antes `2.5` se truncaba a `2` en silencio: el Excel decía una cosa y la base otra."""
+    assert parse_pasaje(2.5) == (None, "Pasaje no entero")
+
+
+def test_parse_pasaje_reports_comma_decimal():
+    """La coma es el separador decimal por defecto de Excel en es-CL, o sea el formato
+    esperado en este laboratorio. Antes caía en `return None` sin dejar rastro."""
+    assert parse_pasaje("2,5") == (None, "Pasaje no entero")
+    assert parse_pasaje("4,0") == (4, None)
+
+
+def test_parse_pasaje_reports_non_numeric_text():
+    assert parse_pasaje("P2") == (None, "Pasaje no numerico")
+    assert parse_pasaje("2-3") == (None, "Pasaje no numerico")
+
+
+def test_parse_pasaje_keeps_empty_silent():
+    """Vacío no es una anomalía: el pasaje es opcional (docs/DATOS.md)."""
+    assert parse_pasaje(None) == (None, None)
+    assert parse_pasaje("-") == (None, None)
+    assert parse_pasaje("") == (None, None)
+
+
+def test_parse_caja_numero_reports_fractional():
+    assert parse_caja_numero(12.7) == (None, "Número de caja no entero")
+    assert parse_caja_numero(12.0) == (12, None)
+
+
+def test_parse_caja_numero_accepts_thirty():
+    """docs/DATOS.md fija `Caja` en 1-30 y dice que el visor agrega pisos si el número
+    supera la capacidad configurada: el importador no rechaza por capacidad."""
+    assert parse_caja_numero(30) == (30, None)

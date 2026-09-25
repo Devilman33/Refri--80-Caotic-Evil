@@ -97,22 +97,47 @@ def parse_si_no(raw: object) -> bool | None:
     return None
 
 
-def parse_pasaje(raw: object) -> int | None:
-    if raw is None:
-        return None
-    if isinstance(raw, bool):
-        return None
-    if isinstance(raw, (int, float)):
-        try:
-            return int(raw)
-        except (ValueError, OverflowError):
-            return None
+_PASAJE_NULOS = {"N/A", "NA", "S/I", "SIN DATO", "?"}
+
+
+def parse_pasaje(raw: object) -> tuple[int | None, str | None]:
+    """Devuelve (pasaje, motivo).
+
+    Antes devolvia solo el valor y se tragaba TODO lo que no fuera un entero limpio:
+    `2.5` se truncaba a `2` sin aviso, y `"2,5"` -el decimal por defecto de Excel en
+    es-CL, o sea el formato esperado en este laboratorio-, `"P2"` y `"2-3"` devolvian
+    None sin dejar rastro. El reporte de anomalias existe exactamente para que eso no
+    pase: un pasaje perdido en silencio no lo detecta nadie nunca.
+    """
+    if raw is None or isinstance(raw, bool):
+        return None, None
+    if isinstance(raw, int):
+        return raw, None
+    if isinstance(raw, float):
+        if raw != int(raw):
+            return None, "Pasaje no entero"
+        return int(raw), None
     text = clean_text(raw)
     if text is None:
-        return None
+        return None, None
     if text.isdigit():
-        return int(text)
-    return None
+        return int(text), None
+    # `N/A` es un nulo DOCUMENTADO en docs/DATOS.md ("Numeros mezclados con `-` y `N/A`
+    # -> nulo"), no un dato malo. Reportarlo llenaria el CSV de anomalias con filas que el
+    # laboratorio no tiene nada que corregir, y eso es justo lo que vuelve inservible un
+    # reporte de anomalias.
+    if text.upper() in _PASAJE_NULOS:
+        return None, None
+    # Coma o punto decimal escritos como texto: se distingue el no-entero del no-numero
+    # para que el laboratorio sepa si corregir el valor o el formato.
+    normalized = text.replace(",", ".")
+    try:
+        number = float(normalized)
+    except ValueError:
+        return None, "Pasaje no numerico"
+    if number != int(number):
+        return None, "Pasaje no entero"
+    return int(number), None
 
 
 def parse_seccion(raw: object) -> tuple[str | None, str | None]:
@@ -138,9 +163,19 @@ def parse_rack_letter(raw: object) -> tuple[str | None, str | None]:
 
 
 def parse_caja_numero(raw: object) -> tuple[int | None, str | None]:
+    """Devuelve (numero, motivo).
+
+    No se rechaza por capacidad del rack: docs/DATOS.md fija `Caja` en 1-30 y dice que
+    si una caja tiene un numero mayor que la capacidad configurada el visor agrega los
+    pisos que falten. El desacuerdo entre ese 1-30 y el `capacity: 20` provisorio de
+    layout.yaml es un problema de datos, no de validacion, y se resuelve confirmando la
+    capacidad real con el laboratorio.
+    """
     if raw is None:
         return None, "Número de caja vacío"
     if not isinstance(raw, bool) and isinstance(raw, (int, float)):
+        if isinstance(raw, float) and raw != int(raw):
+            return None, "Número de caja no entero"
         value = int(raw)
         if value <= 0:
             return None, "Número de caja inválido"
