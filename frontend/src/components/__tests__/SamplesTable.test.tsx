@@ -110,4 +110,32 @@ describe("SamplesTable", () => {
     render(<SamplesTable samples={[]} ownerLookup={{}} onSelect={vi.fn()} sort={null} onSortChange={vi.fn()} />);
     expect(screen.getByText(/no se encontraron muestras/i)).toBeInTheDocument();
   });
+
+  it('"Ver en el refri" llama a onViewInFreezer sin también disparar onSelect de la fila', async () => {
+    const onSelect = vi.fn();
+    const onViewInFreezer = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <SamplesTable
+        samples={samples}
+        ownerLookup={ownerLookup}
+        onSelect={onSelect}
+        sort={null}
+        onSortChange={vi.fn()}
+        onViewInFreezer={onViewInFreezer}
+      />,
+    );
+
+    await user.click(screen.getAllByRole("button", { name: /ver en el refri/i })[0]);
+
+    expect(onViewInFreezer).toHaveBeenCalledWith(samples[0]);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('no muestra "Ver en el refri" cuando no se pasa onViewInFreezer', () => {
+    render(
+      <SamplesTable samples={samples} ownerLookup={ownerLookup} onSelect={vi.fn()} sort={null} onSortChange={vi.fn()} />,
+    );
+    expect(screen.queryByRole("button", { name: /ver en el refri/i })).not.toBeInTheDocument();
+  });
 });

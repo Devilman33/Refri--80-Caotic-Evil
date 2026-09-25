@@ -58,9 +58,20 @@ interface FormState {
   boxIsFull: "" | "true" | "false";
 }
 
-function emptyForm(lastOperator: string): FormState {
+// Prellenado desde el visor 3D (issue #6): clic en una posición libre arma un
+// congelamiento con esa caja/posición; clic en una ocupada arma un descongelamiento.
+export interface MovementFormPrefill {
+  action?: MovementAction;
+  sectionCode?: string;
+  rackLetter?: string;
+  boxNumber?: number;
+  boxType?: BoxType;
+  position?: string;
+}
+
+function emptyForm(lastOperator: string, initial?: MovementFormPrefill): FormState {
   return {
-    action: "freeze",
+    action: initial?.action ?? "freeze",
     date: todayIso(),
     environId: "",
     description: "",
@@ -68,10 +79,10 @@ function emptyForm(lastOperator: string): FormState {
     typeOther: "",
     operatorInitials: lastOperator,
     passage: "",
-    sectionCode: "",
-    boxName: "",
-    boxType: "carton_81",
-    position: "",
+    sectionCode: initial?.sectionCode ?? "",
+    boxName: initial?.rackLetter && initial?.boxNumber ? `${initial.rackLetter}${initial.boxNumber}` : "",
+    boxType: initial?.boxType ?? "carton_81",
+    position: initial?.position ?? "",
     isCore: "",
     nonCoreOwnerInitials: "",
     boxIsFull: "",
@@ -80,13 +91,14 @@ function emptyForm(lastOperator: string): FormState {
 
 export interface MovementFormProps {
   users: UserRead[];
+  initial?: MovementFormPrefill;
   onClose: () => void;
   onSubmitted: (result: MovementResult) => void;
 }
 
-export function MovementForm({ users, onClose, onSubmitted }: MovementFormProps) {
+export function MovementForm({ users, initial, onClose, onSubmitted }: MovementFormProps) {
   const [lastOperator] = useState(() => localStorage.getItem(LAST_OPERATOR_KEY) ?? "");
-  const [form, setForm] = useState<FormState>(() => emptyForm(lastOperator));
+  const [form, setForm] = useState<FormState>(() => emptyForm(lastOperator, initial));
   const [racks, setRacks] = useState<RackRead[]>([]);
   const [sections, setSections] = useState<SectionRead[]>([]);
   const [boxExists, setBoxExists] = useState(false);

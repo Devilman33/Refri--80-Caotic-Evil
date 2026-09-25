@@ -8,9 +8,12 @@ export interface SampleDetailProps {
   sample: SampleWithLocation;
   ownerLabel: string;
   onClose: () => void;
+  /** Solo se ofrece cuando el detalle se abrió desde una posición ocupada del
+   * visor 3D (issue #6): ahí ya se conoce la caja/posición sin otro round-trip. */
+  onThaw?: () => void;
 }
 
-export function SampleDetail({ sample, ownerLabel, onClose }: SampleDetailProps) {
+export function SampleDetail({ sample, ownerLabel, onClose, onThaw }: SampleDetailProps) {
   const [movements, setMovements] = useState<MovementRead[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,9 +41,16 @@ export function SampleDetail({ sample, ownerLabel, onClose }: SampleDetailProps)
           <h2>
             <code>{sample.environ_id ?? `Muestra #${sample.id}`}</code>
           </h2>
-          <button className="btn-ghost" onClick={onClose} aria-label="Cerrar">
-            Cerrar
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            {onThaw && sample.status === "active" && (
+              <button className="btn-ghost" onClick={onThaw}>
+                Descongelar
+              </button>
+            )}
+            <button className="btn-ghost" onClick={onClose} aria-label="Cerrar">
+              Cerrar
+            </button>
+          </div>
         </div>
 
         <NucleoWarning isCore={sample.is_core} />

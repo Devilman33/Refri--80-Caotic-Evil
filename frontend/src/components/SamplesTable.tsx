@@ -13,6 +13,8 @@ export interface SamplesTableProps {
   onSelect: (sample: SampleWithLocation) => void;
   sort: SortState | null;
   onSortChange: (sort: SortState | null) => void;
+  /** "Ver en el refri" (issue #6): enfoca la caja en el visor 3D y resalta la posición. */
+  onViewInFreezer?: (sample: SampleWithLocation) => void;
 }
 
 const COLUMNS: { key: SampleSortKey; label: string }[] = [
@@ -26,7 +28,7 @@ const COLUMNS: { key: SampleSortKey; label: string }[] = [
   { key: "created_at", label: "Registrada" },
 ];
 
-export function SamplesTable({ samples, ownerLookup, onSelect, sort, onSortChange }: SamplesTableProps) {
+export function SamplesTable({ samples, ownerLookup, onSelect, sort, onSortChange, onViewInFreezer }: SamplesTableProps) {
   function toggleSort(key: SampleSortKey) {
     if (!sort || sort.key !== key) return onSortChange({ key, direction: "asc" });
     if (sort.direction === "asc") return onSortChange({ key, direction: "desc" });
@@ -84,7 +86,22 @@ export function SamplesTable({ samples, ownerLookup, onSelect, sort, onSortChang
                 {sample.is_core ? " " : null}
                 <NucleoWarning isCore={sample.is_core} />
               </td>
-              <td>{sample.location}</td>
+              <td>
+                {sample.location}
+                {onViewInFreezer && (
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    style={{ marginLeft: 8, padding: "2px 8px", fontSize: 11 }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onViewInFreezer(sample);
+                    }}
+                  >
+                    Ver en el refri
+                  </button>
+                )}
+              </td>
               <td>{formatDate(sample.created_at)}</td>
             </tr>
           ))}
