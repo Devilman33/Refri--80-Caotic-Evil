@@ -57,6 +57,7 @@ jobs:
           node-version: "22"
 
       - uses: anthropics/claude-code-action@v1
+        id: claude
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -69,6 +70,35 @@ jobs:
             --model claude-sonnet-5
             --max-turns 120
             --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(mkdir:*),Bash(touch:*),Bash(cp:*),Bash(mv:*),Bash(rm:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(git mv:*),Bash(git restore:*),Bash(git stash:*),Bash(gh pr create:*),Bash(git checkout:*),Bash(git switch:*),Bash(git branch:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh api repos/${{ github.repository }}/*),Bash(jq:*),Bash(cut:*),Bash(tr:*),Bash(xargs:*),Bash(basename:*),Bash(dirname:*),Bash(true:*),Bash(test:*),Bash(timeout:*),Bash(env:*),Bash(ls:*),Bash(cd:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(find:*),Bash(grep:*),Bash(rg:*),Bash(sed:*),Bash(awk:*),Bash(sort:*),Bash(uniq:*),Bash(diff:*),Bash(echo:*),Bash(printf:*),Bash(tree:*),Bash(which:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(pip3:*),Bash(pytest:*),Bash(alembic:*),Bash(psql:*),Bash(npm:*),Bash(npx:*),Bash(node:*)"
+
+      # Claude a veces termina con el enlace "Create PR" sin ejecutar `gh pr create`. Si trabajó
+      # sobre un issue y dejó una rama claude/* con commits pero sin PR, lo abre el workflow
+      # (con BUCLE_PAT, para que dispare la CI y el Bucle B).
+      - name: Abrir el PR si Claude no lo abrió
+        if: always() && github.event.issue.pull_request == null && startsWith(steps.claude.outputs.branch_name, 'claude/')
+        env:
+          GH_TOKEN: ${{ secrets.BUCLE_PAT }}
+          RAMA: ${{ steps.claude.outputs.branch_name }}
+          ISSUE: ${{ github.event.issue.number }}
+          TITULO_ISSUE: ${{ github.event.issue.title }}
+          RAMA_BASE: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GH_TOKEN" ]; then echo "::warning::Sin BUCLE_PAT no se abre el PR."; exit 0; fi
+          if ! git ls-remote --exit-code --heads origin "$RAMA" >/dev/null 2>&1 \
+             && [ -z "$(gh api "repos/$GITHUB_REPOSITORY/branches/$RAMA" --jq .name 2>/dev/null || true)" ]; then
+            echo "Claude no subió la rama $RAMA; no hay PR que abrir."
+            exit 0
+          fi
+          adelante=$(gh api "repos/$GITHUB_REPOSITORY/compare/$RAMA_BASE...$RAMA" --jq .ahead_by)
+          if [ "$adelante" -eq 0 ]; then echo "La rama no tiene commits nuevos."; exit 0; fi
+          existente=$(gh pr list -R "$GITHUB_REPOSITORY" --head "$RAMA" --state all --json number --jq '.[0].number // empty')
+          if [ -n "$existente" ]; then echo "Ya existe el PR #$existente."; exit 0; fi
+          titulo=$(sed -E 's/^\[[0-9]+\/[0-9]+\] *//' <<<"$TITULO_ISSUE")
+          printf 'Implementa el issue #%s.\n\nEl detalle de lo implementado está en el comentario de Claude en el issue.\n\nCloses #%s\n' \
+            "$ISSUE" "$ISSUE" > "$RUNNER_TEMP/pr.md"
+          gh pr create -R "$GITHUB_REPOSITORY" --base "$RAMA_BASE" --head "$RAMA" \
+            --title "$titulo" --body-file "$RUNNER_TEMP/pr.md"
 
       - name: Guardar el log de Claude
         if: always()
