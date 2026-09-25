@@ -584,9 +584,14 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
           sessionInitials={sessionUser.initials}
           onClose={() => setMovingBox(null)}
           onMoved={(summary) => {
+            const movedBoxId = movingBox.boxId;
             setMovingBox(null);
             setNotice(summary);
             refreshInventory();
+            // La caja conserva su id y cambia de lugar: el visor la busca en el layout nuevo
+            // y enfoca el destino (docs/PLAN_FRONTEND.md, F4).
+            setViewMode("3d");
+            setFocusTarget({ boxId: movedBoxId, position: null, token: Date.now() });
           }}
         />
       )}

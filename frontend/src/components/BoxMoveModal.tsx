@@ -47,22 +47,33 @@ export function BoxMoveModal({ box, users, sessionInitials, onClose, onMoved }: 
     api.listSections().then(setSections).catch(() => setSections([]));
   }, []);
 
+  /** Qué pasa con el destino escrito, en vivo (docs/PLAN_FRONTEND.md, F4): se sabe si está
+   * libre antes de confirmar, no después de un error del servidor. */
+  function destinationProblem(): string | null {
+    const parsed = parseBoxName(boxName);
+    if (!boxName.trim()) return "Indica el lugar de destino";
+    if (!parsed) return "Formato inválido: letra de rack + N° de caja (p. ej. B7)";
+    const rack = racks.find((entry) => entry.letter === parsed.rackLetter);
+    if (!rack) return `No existe el rack '${parsed.rackLetter}'`;
+    if (parsed.boxNumber > rack.capacity) return `El rack ${rack.letter} tiene lugar para ${rack.capacity} cajas`;
+    if (destinationBusy) return `En ${parsed.rackLetter}${parsed.boxNumber} ya hay una caja con ${destination.occupied.size} muestras`;
+    return null;
+  }
+
+  // Mientras se escribe no se reclama el formato: "B" es el comienzo de "B7", no un error.
+  const typed = boxName.trim();
+  const liveProblem = typed.length >= 2 && racks.length > 0 ? destinationProblem() : null;
+  const liveOk =
+    typed.length >= 2 && racks.length > 0 && !liveProblem
+      ? `${typed.toUpperCase()} está libre${destination.boxExists ? " (hay una caja registrada, vacía)" : ""}.`
+      : null;
+
   function validate(): Record<string, string> {
     const errors: Record<string, string> = {};
     if (!date) errors.date = "La fecha es obligatoria";
     if (!operatorInitials) errors.operatorInitials = "El operador es obligatorio";
-    const parsed = parseBoxName(boxName);
-    if (!boxName.trim()) errors.boxName = "Indica el lugar de destino";
-    else if (!parsed) errors.boxName = "Formato inválido: letra de rack + N° de caja (p. ej. B7)";
-    else {
-      const rack = racks.find((entry) => entry.letter === parsed.rackLetter);
-      if (!rack) errors.boxName = `No existe el rack '${parsed.rackLetter}'`;
-      else if (parsed.boxNumber > rack.capacity) {
-        errors.boxName = `El rack ${rack.letter} tiene lugar para ${rack.capacity} cajas`;
-      } else if (destinationBusy) {
-        errors.boxName = "En ese lugar ya hay una caja con muestras";
-      }
-    }
+    const problem = destinationProblem();
+    if (problem) errors.boxName = problem;
     return errors;
   }
 
@@ -127,11 +138,21 @@ export function BoxMoveModal({ box, users, sessionInitials, onClose, onMoved }: 
         </div>
         <div className="field">
           <label htmlFor="bm-box">Nuevo lugar (Letra rack y N° de caja)</label>
-          <input id="bm-box" value={boxName} onChange={(event) => setBoxName(event.target.value)} placeholder="p. ej. B7" />
-          {fieldErrors.boxName && <p className="field-error">{fieldErrors.boxName}</p>}
-          {!fieldErrors.boxName && destinationBusy && (
-            <p className="field-error">En ese lugar ya hay una caja con muestras.</p>
-          )}
+          <input
+            id="bm-box"
+            value={boxName}
+            onChange={(event) => {
+              setBoxName(event.target.value);
+              setFieldErrors((current) => ({ ...current, boxName: "" }));
+            }}
+            placeholder="p. ej. B7"
+            autoComplete="off"
+            aria-describedby="bm-box-status"
+            aria-invalid={Boolean(fieldErrors.boxName || liveProblem)}
+          />
+          <p id="bm-box-status" role="status" className={fieldErrors.boxName || liveProblem ? "field-error" : "field-notice"}>
+            {fieldErrors.boxName || liveProblem || liveOk}
+          </p>
         </div>
         <div className="field">
           <label htmlFor="bm-section">Sección</label>

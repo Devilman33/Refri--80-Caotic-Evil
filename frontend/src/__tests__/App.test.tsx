@@ -41,6 +41,7 @@ vi.mock("../components/FreezerViewer", async () => {
       locationQuery?: { query: string } | null;
       detailSlot?: import("react").ReactNode;
       onSelectOccupiedPosition: (selection: { sampleId: number }) => void;
+      onMoveBox?: (request: { boxId: number; label: string; active: number }) => void;
     }) => {
       useEffect(() => {
         viewerMounts.count += 1;
@@ -55,6 +56,9 @@ vi.mock("../components/FreezerViewer", async () => {
           {props.detailSlot}
           <button type="button" onClick={() => props.onSelectOccupiedPosition({ sampleId: 9 })}>
             Posición ocupada 3B
+          </button>
+          <button type="button" onClick={() => props.onMoveBox?.({ boxId: 5, label: "I · A3", active: 34 })}>
+            Mover caja A3
           </button>
         </section>
       );
@@ -294,5 +298,25 @@ describe("App · detalle como panel (T4)", () => {
     await screen.findByRole("complementary", { name: /BP009/ });
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("complementary", { name: /BP009/ })).not.toBeInTheDocument());
+  });
+});
+
+describe("App · mover caja (F4)", () => {
+  it("después de mover, el 3D enfoca la caja en su lugar nuevo y queda el aviso", async () => {
+    api.listRacks.mockResolvedValue([{ id: 4, section_id: 2, letter: "D", slot: "right", capacity: 28 }]);
+    api.listSections.mockResolvedValue([{ id: 2, code: "II" }]);
+    api.moveBox.mockResolvedValue({ moved: 34, from_label: "I · A3", to_label: "II · D7" });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: /mover caja a3/i }));
+    const dialog = await screen.findByRole("dialog", { name: /mover caja/i });
+    await user.type(within(dialog).getByLabelText(/nuevo lugar/i), "D7");
+    await within(dialog).findByText(/D7 está libre/i);
+    await user.click(within(dialog).getByRole("button", { name: /^mover caja$/i }));
+
+    expect(await screen.findByText(/caja trasladada: I · A3 → II · D7/i)).toBeInTheDocument();
+    expect(screen.getByTestId("viewer-focus")).toHaveTextContent("5:-");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
