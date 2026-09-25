@@ -149,12 +149,17 @@ a {
   min-height: 100%;
 }
 
+/* Barra superior (docs/PLAN_FRONTEND.md › Arquitectura de información): marca, buscador
+   global, tareas fijas (Congelar/Descongelar), alertas y menú de usuario. */
 .app-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(240px, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
-  padding: 16px 24px;
+  padding: 12px 24px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
   border-bottom: 3px solid var(--brand);
   background: var(--panel);
 }
@@ -1550,6 +1555,180 @@ table.samples-table {
   gap: 8px;
 }
 
+.app-header__search {
+  max-width: 560px;
+}
+
+.global-search {
+  position: relative;
+}
+
+.global-search input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 36px 8px 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--chip);
+  font-family: var(--mono);
+  font-size: 14px;
+}
+
+.global-search__key {
+  position: absolute;
+  right: 10px;
+  top: 20px;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 5px;
+  pointer-events: none;
+}
+
+.global-search__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.16);
+  padding: 4px;
+}
+
+.global-search__list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.global-search__list li {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) 1fr auto auto;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.global-search__list li.active,
+.global-search__list li:hover {
+  background: var(--accent-soft);
+}
+
+.global-search__id,
+.global-search__loc {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.global-search__loc {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.global-search__meta {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.global-search__core {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.global-search__more {
+  display: block;
+  padding: 8px 10px;
+}
+
+.global-search__msg {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.global-search__msg:empty {
+  display: none;
+}
+
+.user-menu {
+  position: relative;
+}
+
+.user-menu__list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.16);
+  padding: 4px;
+}
+
+.user-menu__list button {
+  border: 0;
+  background: none;
+  text-align: left;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.user-menu__list button:hover {
+  background: var(--chip-hover);
+}
+
+/* Aviso de resultado: se va solo a los 8 s (App.tsx) o con la ×. */
+.app-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.app-notice__close {
+  border: 0;
+  background: none;
+  min-width: 32px;
+  min-height: 32px;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
 .session-chip {
   display: inline-flex;
   align-items: center;
@@ -1718,10 +1897,23 @@ table.samples-table {
   color: var(--muted);
 }
 
+/* Tablet: el buscador pasa a su propia fila, a todo el ancho. */
+@media (max-width: 1099px) {
+  .app-header {
+    grid-template-columns: auto 1fr;
+  }
+
+  .app-header__search {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    max-width: none;
+  }
+}
+
 @media (max-width: 640px) {
   .app-header {
-    flex-direction: column;
-    align-items: flex-start;
+    grid-template-columns: 1fr;
+    padding: 10px 16px;
   }
 
   .header-actions {
@@ -1768,4 +1960,9 @@ table.samples-table {
 
 .owner-chip button:hover {
   color: var(--danger);
+}
+
+/* Con texto escrito, la × nativa del campo ocupa el lugar de la pista "/". */
+.global-search input:not(:placeholder-shown) + .global-search__key {
+  display: none;
 }

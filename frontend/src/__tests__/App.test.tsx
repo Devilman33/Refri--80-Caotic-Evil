@@ -38,6 +38,7 @@ vi.mock("../components/FreezerViewer", async () => {
     FreezerViewer: (props: {
       focusTarget?: { boxId: number; position: string | null } | null;
       reloadToken?: number;
+      locationQuery?: { query: string } | null;
       onSelectOccupiedPosition: (selection: { sampleId: number }) => void;
     }) => {
       useEffect(() => {
@@ -48,6 +49,7 @@ vi.mock("../components/FreezerViewer", async () => {
           <p data-testid="viewer-focus">
             {props.focusTarget ? `${props.focusTarget.boxId}:${props.focusTarget.position ?? "-"}` : "sin foco"}
           </p>
+          <p data-testid="viewer-location">{props.locationQuery?.query ?? "sin ubicación"}</p>
           <p data-testid="viewer-reload">{props.reloadToken ?? "sin token"}</p>
           <button type="button" onClick={() => props.onSelectOccupiedPosition({ sampleId: 9 })}>
             Posición ocupada 3B
@@ -154,5 +156,112 @@ describe("App · recarga del visor", () => {
 
     await waitFor(() => expect(screen.getByTestId("viewer-reload")).toHaveTextContent("1"));
     expect(viewerMounts.count).toBe(1);
+  });
+});
+
+describe("App · buscador global (F3)", () => {
+  async function search(text: string) {
+    const user = userEvent.setup();
+    render(<App />);
+    const input = await screen.findByRole("combobox", { name: /buscar muestra o ubicación/i });
+    await user.type(input, `${text}{Enter}`);
+    return user;
+  }
+
+  it("con un resultado va al 3D, enfoca su posición y abre el detalle", async () => {
+    api.searchSamples.mockImplementation((filters: { q?: string }) =>
+      Promise.resolve(filters.q ? page([sample()]) : page([])),
+    );
+    await search("BP009");
+
+    await waitFor(() => expect(screen.getByTestId("viewer-focus")).toHaveTextContent("5:3B"));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("BP009");
+    expect(api.searchSamples).toHaveBeenCalledWith(expect.objectContaining({ q: "BP009", status: "active" }));
+  });
+
+  it("con varios resultados abre la tabla filtrada, con el chip para quitar la búsqueda", async () => {
+    api.searchSamples.mockImplementation((filters: { q?: string }) =>
+      Promise.resolve(filters.q ? page([sample(), sample({ id: 10, environ_id: "BP0091" })]) : page([])),
+    );
+    const user = await search("BP009");
+
+    const chip = await screen.findByText(/búsqueda: «bp009»/i);
+    expect(screen.getByRole("button", { name: /vista tabla/i })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(chip).getByRole("button", { name: /quitar la búsqueda/i }));
+    await waitFor(() => expect(screen.queryByText(/búsqueda: «bp009»/i)).not.toBeInTheDocument());
+  });
+
+  it("una ubicación va directo al 3D sin buscar muestras", async () => {
+    await search("F12-3B");
+
+    await waitFor(() => expect(screen.getByTestId("viewer-location")).toHaveTextContent("F12-3B"));
+    expect(api.searchSamples).not.toHaveBeenCalledWith(expect.objectContaining({ q: expect.anything() }));
+  });
+
+  it("sin resultados lo dice y ofrece buscar también las retiradas", async () => {
+    api.searchSamples.mockResolvedValue(page([]));
+    const user = await search("ZZ999");
+
+    expect(await screen.findByText(/no hay muestras activas con «zz999»/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /buscar también retiradas/i }));
+    await waitFor(() =>
+      expect(api.searchSamples).toHaveBeenLastCalledWith(expect.objectContaining({ q: "ZZ999", status: undefined })),
+    );
+  });
+
+  it("si la búsqueda falla lo dice y deja reintentar", async () => {
+    api.searchSamples.mockImplementation((filters: { q?: string }) =>
+      filters.q ? Promise.reject(new Error("red")) : Promise.resolve(page([])),
+    );
+    await search("BP009");
+
+    expect(await screen.findByText(/no se pudo buscar/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
+  });
+
+  it("descarta la respuesta de un texto anterior que llega tarde", async () => {
+    let resolveOld: (value: unknown) => void = () => undefined;
+    api.searchSamples.mockImplementation((filters: { q?: string }) => {
+      if (filters.q === "BP0") return new Promise((resolve) => (resolveOld = resolve));
+      if (filters.q === "BP009") return Promise.resolve(page([sample()]));
+      return Promise.resolve(page([]));
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    const input = await screen.findByRole("combobox", { name: /buscar muestra o ubicación/i });
+    await user.type(input, "BP0");
+    await waitFor(() => expect(api.searchSamples).toHaveBeenCalledWith(expect.objectContaining({ q: "BP0" })));
+    await user.type(input, "09");
+    expect(await screen.findByRole("option", { name: /BP009/ })).toBeInTheDocument();
+
+    resolveOld(page([sample({ id: 77, environ_id: "BP0777" })]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole("option", { name: /BP0777/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("App · barra superior", () => {
+  it("muestra el aviso de alertas cuando hay alertas (antes no aparecía nunca)", async () => {
+    api.getAlerts.mockResolvedValue({
+      unassigned_samples: 2,
+      nearly_full_boxes: 1,
+      full_boxes: 0,
+      inconsistent_full_boxes: 0,
+      boxes: [],
+    });
+    render(<App />);
+    expect(await screen.findByRole("button", { name: /3 alertas/i })).toBeInTheDocument();
+  });
+
+  it("Usuarios, tema y cambio de usuario viven en el menú de usuario", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const menuButton = await screen.findByRole("button", { name: /gonzalo carrasco/i });
+    expect(screen.queryByRole("button", { name: /cambiar usuario/i })).not.toBeInTheDocument();
+    await user.click(menuButton);
+    expect(screen.getByRole("button", { name: /cambiar usuario/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^usuarios$/i })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("button", { name: /cambiar usuario/i })).not.toBeInTheDocument();
   });
 });

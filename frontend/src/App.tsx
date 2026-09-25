@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, setSessionUserId } from "./api/client";
 import { UNASSIGNED_INITIALS } from "./api/types";
 import type { BoxOccupancy, Page, SampleSearchFilters, SampleWithLocation, UserRead } from "./api/types";
-import { AlertsPanel, type AlertDestination } from "./components/AlertsPanel";
+import { AlertsPanel, alertTotal, type AlertDestination } from "./components/AlertsPanel";
 import { AnomaliesView } from "./components/AnomaliesView";
 import { BoxMoveModal, type BoxMoveTarget } from "./components/BoxMoveModal";
 import { FiltersBar } from "./components/FiltersBar";
+import { GlobalSearch } from "./components/GlobalSearch";
 import { FreezeForm, type LocationPrefill } from "./components/FreezeForm";
 import {
   FreezerViewer,
@@ -30,6 +31,7 @@ import { canModifySample, ownersOf, userLabel } from "./utils/users";
 const THEME_KEY = "refri:theme";
 const SESSION_KEY = "refri:sesion-usuario";
 const DEFAULT_PAGE_SIZE = 25;
+const NOTICE_MS = 8000;
 
 type Theme = "light" | "dark";
 // "anomalies" es una vista pero NO una pestaña: el control segmentado se queda en tres,
@@ -160,6 +162,31 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
   const [notice, setNotice] = useState<string | null>(null);
   const [idListMode, setIdListMode] = useState(false);
   const [idListResult, setIdListResult] = useState<Page<SampleWithLocation> | null>(null);
+  const [locationQuery, setLocationQuery] = useState<{ query: string; token: number } | null>(null);
+  const [searchMessage, setSearchMessage] = useState<string | null>(null);
+
+  // El aviso "N alertas" de la barra. Antes lo calculaba AlertsPanel, que solo se monta
+  // al abrir ese mismo aviso, y el aviso solo aparecía con N > 0: nunca se veía.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getAlerts()
+      .then((data) => {
+        if (!cancelled) setAlertCount(alertTotal(data));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
+
+  // Los avisos de resultado ("Muestra retirada: …") se van solos: antes quedaban para
+  // siempre y el siguiente se confundía con el anterior.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   // "Cambiaron los filtros" y "se pidió un refetch" son dos cosas distintas. Antes el
   // refresh posterior a un movimiento era `setFilters(current => ({ ...current }))`: un
@@ -260,6 +287,33 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
     setFocusTarget({ boxId: sample.box_id, position: sample.position, token: Date.now() });
   }
 
+  // Buscador global (docs/PLAN_FRONTEND.md, F3). Un resultado: su posición en el 3D con el
+  // detalle abierto. Varios: la tabla filtrada. Una ubicación: el 3D enfocado ahí.
+  function handlePickSample(sample: SampleWithLocation) {
+    setSearchMessage(null);
+    setViewMode("3d");
+    setFocusTarget({ boxId: sample.box_id, position: sample.position, token: Date.now() });
+    setSelected(sample);
+  }
+
+  function handleShowMany(query: string, includeWithdrawn: boolean) {
+    setSearchMessage(null);
+    setIdListMode(false);
+    setViewMode("table");
+    setFilters((current) => ({
+      page: 1,
+      page_size: current.page_size,
+      q: query,
+      status: includeWithdrawn ? undefined : "active",
+    }));
+  }
+
+  function handleLocation(query: string) {
+    setSearchMessage(null);
+    setViewMode("3d");
+    setLocationQuery({ query, token: Date.now() });
+  }
+
   // "Ver en el refri" desde la vista de % de uso (issue #7): enfoca la subcaja sin resaltar posición.
   function handleViewBoxInFreezer(box: BoxOccupancy) {
     setViewMode("3d");
@@ -300,25 +354,22 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
         sessionUser={sessionUser}
         onOpenUsers={() => setShowUsers(true)}
         onLogout={onLogout}
+        search={
+          <GlobalSearch
+            onPickSample={handlePickSample}
+            onShowMany={handleShowMany}
+            onLocation={handleLocation}
+            message={searchMessage}
+          />
+        }
+        onFreeze={() => setMovementDialog({ kind: "freeze" })}
+        onThaw={() => setMovementDialog({ kind: "thaw" })}
+        alertCount={alertCount}
+        alertsOpen={showAlerts}
+        onToggleAlerts={() => setShowAlerts((open) => !open)}
       />
       <main className="app-main">
-        <div className="filters-actions">
-          <button type="button" className="btn" onClick={() => setMovementDialog({ kind: "freeze" })}>
-            + Congelar muestra
-          </button>
-          <button type="button" className="btn btn-thaw" onClick={() => setMovementDialog({ kind: "thaw" })}>
-            − Descongelar muestra
-          </button>
-          {alertCount > 0 && (
-            <button
-              type="button"
-              className={`btn-ghost${showAlerts ? " on" : ""}`}
-              aria-expanded={showAlerts}
-              onClick={() => setShowAlerts((open) => !open)}
-            >
-              <span aria-live="polite">⚠ {alertCount} alertas</span>
-            </button>
-          )}
+        <nav className="filters-actions" aria-label="Vistas">
           <div className="view-toggle" role="group" aria-label="Vista">
             <button
               type="button"
@@ -345,7 +396,7 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
               % de uso
             </button>
           </div>
-        </div>
+        </nav>
 
         {viewMode === "table" && !idListMode && (
           <div className="filters-actions">
@@ -383,6 +434,21 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
           </div>
         )}
 
+        {viewMode === "table" && filters.q && (
+          <div className="filters-actions">
+            <span className="alerts-chip">
+              Búsqueda: «{filters.q}»
+              <button
+                type="button"
+                aria-label="Quitar la búsqueda"
+                onClick={() => setFilters((current) => ({ ...current, q: undefined, page: 1 }))}
+              >
+                ×
+              </button>
+            </span>
+          </div>
+        )}
+
         {viewMode === "table" && unassignedFilterActive && (
           <div className="filters-actions">
             <span className="alerts-chip">
@@ -399,8 +465,11 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
         )}
 
         {notice && (
-          <p className="field-notice" role="status">
-            {notice}
+          <p className="app-notice" role="status">
+            <span>{notice}</span>
+            <button type="button" className="app-notice__close" aria-label="Cerrar aviso" onClick={() => setNotice(null)}>
+              ×
+            </button>
           </p>
         )}
 
@@ -459,6 +528,8 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
           <FreezerViewer
             reloadToken={reloadToken}
             focusTarget={focusTarget}
+            locationQuery={locationQuery}
+            onQueryMessage={setSearchMessage}
             onSelectFreePosition={handleSelectFreePosition}
             onSelectOccupiedPosition={handleSelectOccupiedPosition}
             onMoveBox={setMovingBox}

@@ -354,6 +354,8 @@ export interface AnomalyResolveRequest {
 }
 
 export interface SampleSearchFilters {
+  /** Buscador global: coincidencia parcial en ID Environ O en Descripción. */
+  q?: string;
   environ_id?: string;
   description?: string;
   owner_initials?: string;
