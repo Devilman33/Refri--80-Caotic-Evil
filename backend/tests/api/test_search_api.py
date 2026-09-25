@@ -83,3 +83,30 @@ def test_search_is_paginated(client, db_session):
     body = response.json()
     assert body["total"] == 3
     assert len(body["items"]) == 2
+
+
+def test_search_sort_applies_before_pagination(client, db_session):
+    """El orden debe abarcar todo el resultado, no solo la página devuelta
+    (si no, ordenar en el frontend con datos ya paginados es engañoso)."""
+    _, rack, box = make_freezer(client, box_type="plastic_100")
+    for index, environ_id in zip(range(1, 4), ["BP003", "BP001", "BP002"]):
+        _freeze(client, rack, box, position=str(index), environ_id=environ_id)
+
+    response = client.get(
+        "/samples/search",
+        params={"sort_by": "environ_id", "sort_dir": "asc", "page": 1, "page_size": 2},
+    )
+    body = response.json()
+    assert [item["environ_id"] for item in body["items"]] == ["BP001", "BP002"]
+
+    response = client.get(
+        "/samples/search",
+        params={"sort_by": "environ_id", "sort_dir": "desc", "page": 1, "page_size": 2},
+    )
+    body = response.json()
+    assert [item["environ_id"] for item in body["items"]] == ["BP003", "BP002"]
+
+
+def test_search_sort_rejects_unknown_column(client, db_session):
+    response = client.get("/samples/search", params={"sort_by": "not_a_column"})
+    assert response.status_code == 422

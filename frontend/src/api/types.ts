@@ -93,6 +93,18 @@ export interface SampleSearchFilters {
   section_code?: string;
   rack_letter?: string;
   box_number?: number;
+  sort_by?: SampleSortKey;
+  sort_dir?: "asc" | "desc";
   page?: number;
   page_size?: number;
 }
+
+export type SampleSortKey =
+  | "environ_id"
+  | "description"
+  | "type"
+  | "owner"
+  | "passage"
+  | "status"
+  | "location"
+  | "created_at";

@@ -31,7 +31,9 @@ const ownerLookup = { 1: "GC" };
 
 describe("SamplesTable", () => {
   it("muestra el warning de Núcleo solo en las muestras con is_core = true", () => {
-    render(<SamplesTable samples={samples} ownerLookup={ownerLookup} onSelect={vi.fn()} />);
+    render(
+      <SamplesTable samples={samples} ownerLookup={ownerLookup} onSelect={vi.fn()} sort={null} onSortChange={vi.fn()} />,
+    );
 
     const rowWithNucleo = screen.getByTestId("sample-row-2");
     const rowWithoutNucleo = screen.getByTestId("sample-row-1");
@@ -42,7 +44,9 @@ describe("SamplesTable", () => {
 
   it("llama a onSelect con la muestra al hacer click en una fila", async () => {
     const onSelect = vi.fn();
-    render(<SamplesTable samples={samples} ownerLookup={ownerLookup} onSelect={onSelect} />);
+    render(
+      <SamplesTable samples={samples} ownerLookup={ownerLookup} onSelect={onSelect} sort={null} onSortChange={vi.fn()} />,
+    );
     const user = userEvent.setup();
 
     await user.click(screen.getByTestId("sample-row-1"));
@@ -50,19 +54,47 @@ describe("SamplesTable", () => {
     expect(onSelect).toHaveBeenCalledWith(samples[0]);
   });
 
-  it("ordena las filas por ID Environ al hacer click en la columna", async () => {
-    render(<SamplesTable samples={samples} ownerLookup={ownerLookup} onSelect={vi.fn()} />);
+  it("pide ordenar por ID Environ al hacer click en la columna, delegando en el backend", async () => {
+    const onSortChange = vi.fn();
+    render(
+      <SamplesTable samples={samples} ownerLookup={ownerLookup} onSelect={vi.fn()} sort={null} onSortChange={onSortChange} />,
+    );
     const user = userEvent.setup();
 
-    await user.click(screen.getByText(/id environ/i));
+    await user.click(screen.getByRole("button", { name: /id environ/i }));
+    expect(onSortChange).toHaveBeenCalledWith({ key: "environ_id", direction: "asc" });
 
-    const rows = screen.getAllByRole("row").slice(1);
-    expect(within(rows[0]).getByText("BP1000")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("BP2000")).toBeInTheDocument();
+    render(
+      <SamplesTable
+        samples={samples}
+        ownerLookup={ownerLookup}
+        onSelect={vi.fn()}
+        sort={{ key: "environ_id", direction: "asc" }}
+        onSortChange={onSortChange}
+      />,
+    );
+    await user.click(screen.getAllByRole("button", { name: /id environ/i })[1]);
+    expect(onSortChange).toHaveBeenCalledWith({ key: "environ_id", direction: "desc" });
+  });
+
+  it("los encabezados son botones enfocables y anuncian el orden con aria-sort", () => {
+    render(
+      <SamplesTable
+        samples={samples}
+        ownerLookup={ownerLookup}
+        onSelect={vi.fn()}
+        sort={{ key: "environ_id", direction: "asc" }}
+        onSortChange={vi.fn()}
+      />,
+    );
+
+    const header = screen.getByRole("columnheader", { name: /id environ/i });
+    expect(header).toHaveAttribute("aria-sort", "ascending");
+    expect(within(header).getByRole("button")).toBeInTheDocument();
   });
 
   it("muestra un estado vacío cuando no hay muestras", () => {
-    render(<SamplesTable samples={[]} ownerLookup={{}} onSelect={vi.fn()} />);
+    render(<SamplesTable samples={[]} ownerLookup={{}} onSelect={vi.fn()} sort={null} onSortChange={vi.fn()} />);
     expect(screen.getByText(/no se encontraron muestras/i)).toBeInTheDocument();
   });
 });

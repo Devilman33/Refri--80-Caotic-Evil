@@ -5,7 +5,7 @@ import { FiltersBar } from "./components/FiltersBar";
 import { Header } from "./components/Header";
 import { Pagination } from "./components/Pagination";
 import { SampleDetail } from "./components/SampleDetail";
-import { SamplesTable } from "./components/SamplesTable";
+import { SamplesTable, type SortState } from "./components/SamplesTable";
 
 const THEME_KEY = "refri:theme";
 const MY_INITIALS_KEY = "refri:mis-iniciales";
@@ -72,6 +72,17 @@ export default function App() {
     myInitials.trim() && filters.owner_initials?.toUpperCase() === myInitials.trim().toUpperCase(),
   );
 
+  const sort: SortState | null = filters.sort_by ? { key: filters.sort_by, direction: filters.sort_dir ?? "asc" } : null;
+
+  function handleSortChange(next: SortState | null) {
+    setFilters((current) => ({
+      ...current,
+      sort_by: next?.key,
+      sort_dir: next?.direction,
+      page: 1,
+    }));
+  }
+
   function toggleMyFilter() {
     const initials = myInitials.trim().toUpperCase();
     if (!initials) return;
@@ -103,7 +114,13 @@ export default function App() {
         )}
         {!loading && !error && result && (
           <>
-            <SamplesTable samples={result.items} ownerLookup={ownerLookup} onSelect={setSelected} />
+            <SamplesTable
+              samples={result.items}
+              ownerLookup={ownerLookup}
+              onSelect={setSelected}
+              sort={sort}
+              onSortChange={handleSortChange}
+            />
             <Pagination
               page={result.page}
               pageSize={result.page_size}

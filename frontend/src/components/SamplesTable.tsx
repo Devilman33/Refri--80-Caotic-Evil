@@ -1,22 +1,21 @@
-import { useMemo, useState } from "react";
-import { SAMPLE_TYPE_LABELS, type SampleWithLocation } from "../api/types";
+import { SAMPLE_TYPE_LABELS, type SampleSortKey, type SampleWithLocation } from "../api/types";
 import { formatDate } from "../utils/format";
 import { NucleoWarning } from "./NucleoWarning";
+
+export interface SortState {
+  key: SampleSortKey;
+  direction: "asc" | "desc";
+}
 
 export interface SamplesTableProps {
   samples: SampleWithLocation[];
   ownerLookup: Record<number, string>;
   onSelect: (sample: SampleWithLocation) => void;
+  sort: SortState | null;
+  onSortChange: (sort: SortState | null) => void;
 }
 
-type SortKey = "environ_id" | "description" | "type" | "owner" | "passage" | "status" | "location" | "created_at";
-
-interface SortState {
-  key: SortKey;
-  direction: "asc" | "desc";
-}
-
-const COLUMNS: { key: SortKey; label: string }[] = [
+const COLUMNS: { key: SampleSortKey; label: string }[] = [
   { key: "environ_id", label: "ID Environ" },
   { key: "description", label: "Descripción" },
   { key: "type", label: "Tipo" },
@@ -27,48 +26,11 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "created_at", label: "Registrada" },
 ];
 
-function sortValue(sample: SampleWithLocation, key: SortKey, ownerLookup: Record<number, string>): string | number {
-  switch (key) {
-    case "environ_id":
-      return sample.environ_id ?? "";
-    case "description":
-      return sample.description ?? "";
-    case "type":
-      return SAMPLE_TYPE_LABELS[sample.type];
-    case "owner":
-      return ownerLookup[sample.owner_id] ?? "";
-    case "passage":
-      return sample.passage ?? -1;
-    case "status":
-      return sample.status;
-    case "location":
-      return sample.location;
-    case "created_at":
-      return sample.created_at;
-  }
-}
-
-export function SamplesTable({ samples, ownerLookup, onSelect }: SamplesTableProps) {
-  const [sort, setSort] = useState<SortState | null>(null);
-
-  const sorted = useMemo(() => {
-    if (!sort) return samples;
-    const copy = [...samples];
-    copy.sort((a, b) => {
-      const va = sortValue(a, sort.key, ownerLookup);
-      const vb = sortValue(b, sort.key, ownerLookup);
-      const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
-      return sort.direction === "asc" ? cmp : -cmp;
-    });
-    return copy;
-  }, [samples, sort, ownerLookup]);
-
-  function toggleSort(key: SortKey) {
-    setSort((current) => {
-      if (!current || current.key !== key) return { key, direction: "asc" };
-      if (current.direction === "asc") return { key, direction: "desc" };
-      return null;
-    });
+export function SamplesTable({ samples, ownerLookup, onSelect, sort, onSortChange }: SamplesTableProps) {
+  function toggleSort(key: SampleSortKey) {
+    if (!sort || sort.key !== key) return onSortChange({ key, direction: "asc" });
+    if (sort.direction === "asc") return onSortChange({ key, direction: "desc" });
+    return onSortChange(null);
   }
 
   if (samples.length === 0) {
@@ -83,18 +45,20 @@ export function SamplesTable({ samples, ownerLookup, onSelect }: SamplesTablePro
             {COLUMNS.map((column) => {
               const active = sort?.key === column.key;
               const arrow = active ? (sort!.direction === "asc" ? " ▲" : " ▼") : "";
-              const ariaSort = active ? (sort!.direction === "asc" ? "ascending" : "descending") : undefined;
+              const ariaSort = active ? (sort!.direction === "asc" ? "ascending" : "descending") : "none";
               return (
-                <th key={column.key} onClick={() => toggleSort(column.key)} aria-sort={ariaSort}>
-                  {column.label}
-                  {arrow}
+                <th key={column.key} aria-sort={ariaSort}>
+                  <button type="button" className="sort-button" onClick={() => toggleSort(column.key)}>
+                    {column.label}
+                    {arrow}
+                  </button>
                 </th>
               );
             })}
           </tr>
         </thead>
         <tbody>
-          {sorted.map((sample) => (
+          {samples.map((sample) => (
             <tr key={sample.id} onClick={() => onSelect(sample)} data-testid={`sample-row-${sample.id}`}>
               <td>
                 <code>{sample.environ_id ?? "—"}</code>
