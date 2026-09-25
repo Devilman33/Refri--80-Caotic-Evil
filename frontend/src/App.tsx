@@ -21,6 +21,7 @@ import { SampleDetail } from "./components/SampleDetail";
 import { SampleEditModal } from "./components/SampleEditModal";
 import { SamplesTable, type SortState } from "./components/SamplesTable";
 import type { BoxFilter } from "./utils/occupancy";
+import { userLabel } from "./utils/users";
 
 const THEME_KEY = "refri:theme";
 const MY_INITIALS_KEY = "refri:mis-iniciales";
@@ -49,7 +50,8 @@ export default function App() {
   const [myInitials, setMyInitials] = useState(() => localStorage.getItem(MY_INITIALS_KEY) ?? "");
   const [showMovementForm, setShowMovementForm] = useState(false);
   const [movementInitial, setMovementInitial] = useState<MovementFormPrefill | undefined>(undefined);
-  const [viewMode, setViewMode] = useState<ViewMode>("table");
+  // El visor 3D es la primera vista: es la que el laboratorio usa para ubicarse.
+  const [viewMode, setViewMode] = useState<ViewMode>("3d");
   const [focusTarget, setFocusTarget] = useState<FreezerFocusTarget | null>(null);
   const [thawSelection, setThawSelection] = useState<OccupiedPositionSelection | null>(null);
   const [freezerKey, setFreezerKey] = useState(0);
@@ -107,7 +109,9 @@ export default function App() {
 
   const ownerLookup = useMemo(() => {
     const map: Record<number, string> = {};
-    for (const user of users) map[user.id] = user.initials;
+    // Nombre completo cuando la persona se registró con uno. El centinela del importador
+    // se deja crudo porque la tabla lo reconoce para mostrar la marca "Sin encargado".
+    for (const user of users) map[user.id] = user.initials === UNASSIGNED_INITIALS ? user.initials : userLabel(user);
     return map;
   }, [users]);
 
@@ -293,6 +297,7 @@ export default function App() {
           <FiltersBar
             filters={filters}
             onChange={setFilters}
+            users={users}
             myInitials={myInitials}
             onMyInitialsChange={setMyInitials}
             myFilterActive={myFilterActive}
@@ -384,7 +389,7 @@ export default function App() {
       {selected && !editing && (
         <SampleDetail
           sample={selected}
-          ownerLabel={ownerLookup[selected.owner_id] ?? "—"}
+          ownerLabel={userLabel(users.find((user) => user.id === selected.owner_id))}
           onClose={() => {
             setSelected(null);
             setThawSelection(null);

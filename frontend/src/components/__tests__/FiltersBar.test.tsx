@@ -2,13 +2,19 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { api, ApiError } from "../../api/client";
-import type { SampleSearchFilters } from "../../api/types";
+import type { SampleSearchFilters, UserRead } from "../../api/types";
 import { FiltersBar } from "../FiltersBar";
 
 vi.mock("../../api/client", async () => {
   const actual = await vi.importActual<typeof import("../../api/client")>("../../api/client");
   return { ...actual, api: { ...actual.api, downloadSamplesCsv: vi.fn() } };
 });
+
+const USERS: UserRead[] = [
+  { id: 1, initials: "GC", name: "Gonzalo Carrasco", active: true },
+  { id: 2, initials: "VF", name: null, active: true },
+  { id: 3, initials: "SIN_ASIG", name: null, active: true },
+];
 
 function setup(filters: SampleSearchFilters = { page: 1, page_size: 25 }) {
   const onChange = vi.fn();
@@ -23,6 +29,7 @@ function setup(filters: SampleSearchFilters = { page: 1, page_size: 25 }) {
       myFilterActive={false}
       onToggleMyFilter={onToggleMyFilter}
       total={42}
+      users={USERS}
     />,
   );
   return { onChange, onMyInitialsChange, onToggleMyFilter };
@@ -62,6 +69,20 @@ describe("FiltersBar", () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ is_core: true }));
   });
 
+  it("el Encargado es una lista de los usuarios registrados, con su nombre completo", async () => {
+    const { onChange } = setup();
+    const user = userEvent.setup();
+    const select = screen.getByLabelText(/encargado/i);
+
+    // El centinela del importador no es una persona: no se ofrece.
+    expect(screen.queryByRole("option", { name: "SIN_ASIG" })).not.toBeInTheDocument();
+    await user.selectOptions(select, "Gonzalo Carrasco");
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ owner_initials: "GC", page: 1 }));
+    // Sin nombre registrado se muestran las iniciales.
+    expect(screen.getByRole("option", { name: "VF" })).toBeInTheDocument();
+  });
+
   it("filtra por estado retirada", async () => {
     const { onChange } = setup();
     const user = userEvent.setup();
@@ -87,6 +108,7 @@ describe("FiltersBar", () => {
         myFilterActive={false}
         onToggleMyFilter={onToggleMyFilter}
         total={42}
+        users={USERS}
       />,
     );
     const user = userEvent.setup();
@@ -116,6 +138,7 @@ describe("FiltersBar", () => {
         myFilterActive={false}
         onToggleMyFilter={vi.fn()}
         total={1284}
+        users={USERS}
       />,
     );
 
@@ -131,6 +154,7 @@ describe("FiltersBar", () => {
         myFilterActive={false}
         onToggleMyFilter={vi.fn()}
         total={0}
+        users={USERS}
       />,
     );
 

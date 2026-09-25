@@ -7,7 +7,9 @@ import {
   type SampleSearchFilters,
   type SampleStatus,
   type SampleType,
+  type UserRead,
 } from "../api/types";
+import { selectableUsers, userLabel } from "../utils/users";
 
 export interface FiltersBarProps {
   filters: SampleSearchFilters;
@@ -15,6 +17,8 @@ export interface FiltersBarProps {
   /** Total de la búsqueda actual. El botón de export lo muestra para que se sepa cuánto
    * se está por bajar antes de hacer clic, y se deshabilita en cero. */
   total: number;
+  /** Personas registradas: el filtro de Encargado es una lista, no texto libre. */
+  users: UserRead[];
   myInitials: string;
   onMyInitialsChange: (initials: string) => void;
   myFilterActive: boolean;
@@ -35,6 +39,7 @@ export function FiltersBar({
   filters,
   onChange,
   total,
+  users,
   myInitials,
   onMyInitialsChange,
   myFilterActive,
@@ -52,7 +57,6 @@ export function FiltersBar({
   const [text, setText] = useState({
     environ_id: filters.environ_id ?? "",
     description: filters.description ?? "",
-    owner_initials: filters.owner_initials ?? "",
   });
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
@@ -63,16 +67,14 @@ export function FiltersBar({
     setText({
       environ_id: filters.environ_id ?? "",
       description: filters.description ?? "",
-      owner_initials: filters.owner_initials ?? "",
     });
-  }, [filters.environ_id, filters.description, filters.owner_initials]);
+  }, [filters.environ_id, filters.description]);
 
   useEffect(() => {
     const current = filtersRef.current;
     const changed =
       (current.environ_id ?? "") !== text.environ_id ||
-      (current.description ?? "") !== text.description ||
-      (current.owner_initials ?? "") !== text.owner_initials;
+      (current.description ?? "") !== text.description;
     if (!changed) return;
 
     const timer = setTimeout(() => {
@@ -80,14 +82,13 @@ export function FiltersBar({
         ...filtersRef.current,
         environ_id: toOptionalString(text.environ_id),
         description: toOptionalString(text.description),
-        owner_initials: toOptionalString(text.owner_initials),
         page: 1,
       });
     }, 300);
     return () => clearTimeout(timer);
   }, [text, onChange]);
 
-  function handleText(key: "environ_id" | "description" | "owner_initials") {
+  function handleText(key: "environ_id" | "description") {
     return (event: ChangeEvent<HTMLInputElement>) => {
       const value = event.target.value;
       setText((current) => ({ ...current, [key]: value }));
@@ -158,12 +159,18 @@ export function FiltersBar({
 
         <div className="field">
           <label htmlFor="filter-owner">Encargado</label>
-          <input
+          <select
             id="filter-owner"
-            value={text.owner_initials}
-            onChange={handleText("owner_initials")}
-            placeholder="Iniciales"
-          />
+            value={filters.owner_initials ?? ""}
+            onChange={(event) => set("owner_initials", toOptionalString(event.target.value))}
+          >
+            <option value="">Todos</option>
+            {selectableUsers(users).map((user) => (
+              <option key={user.id} value={user.initials}>
+                {userLabel(user)}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="field">

@@ -6,9 +6,11 @@
   --line: #d1dae0;
   --chip: #ecf0f2;
   --chip-hover: #e0e7eb;
-  --accent: #0a7c96;
+  /* Turquesa de la marca Environ (logo: #0c6575). */
+  --brand: #0c6575;
+  --accent: #0c6575;
   --accent-ink: #ffffff;
-  --accent-soft: #d4eaf0;
+  --accent-soft: #d2e7eb;
   --warn: #b4531a;
   --warn-soft: #f3ddce;
   --danger: #b3261e;
@@ -42,9 +44,10 @@
     --line: #25313a;
     --chip: #1b252c;
     --chip-hover: #223039;
-    --accent: #3cb3cd;
+    --brand: #45b3c4;
+    --accent: #45b3c4;
     --accent-ink: #06161b;
-    --accent-soft: #15323a;
+    --accent-soft: #13333a;
     --warn: #e08a4f;
     --warn-soft: #3a2a1c;
     --danger: #e5766b;
@@ -72,9 +75,10 @@
   --line: #25313a;
   --chip: #1b252c;
   --chip-hover: #223039;
-  --accent: #3cb3cd;
+  --brand: #45b3c4;
+  --accent: #45b3c4;
   --accent-ink: #06161b;
-  --accent-soft: #15323a;
+  --accent-soft: #13333a;
   --warn: #e08a4f;
   --warn-soft: #3a2a1c;
   --danger: #e5766b;
@@ -139,8 +143,27 @@ a {
   justify-content: space-between;
   gap: 16px;
   padding: 16px 24px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 3px solid var(--brand);
   background: var(--panel);
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.app-brand img {
+  height: 44px;
+  width: auto;
+}
+
+/* El logo es turquesa oscuro: sobre el fondo oscuro se le da una placa clara para que
+   se lea, en vez de mantener una segunda versión del archivo. */
+:root[data-theme="dark"] .app-brand img {
+  background: #e8f1f3;
+  border-radius: 8px;
+  padding: 3px 5px;
 }
 
 .app-header h1 {

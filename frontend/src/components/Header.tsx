@@ -18,9 +18,12 @@ export interface HeaderProps {
 export function Header({ theme, onToggleTheme, viewMode }: HeaderProps) {
   return (
     <header className="app-header">
-      <div>
-        <h1>Refri -80 · Inventario de muestras</h1>
-        <div className="subtitle">{VIEW_SUBTITLES[viewMode]}</div>
+      <div className="app-brand">
+        <img src="/environ-logo.png" alt="Environ" />
+        <div>
+          <h1>Refri -80 · Inventario de muestras</h1>
+          <div className="subtitle">{VIEW_SUBTITLES[viewMode]}</div>
+        </div>
       </div>
       <button className="btn-ghost" onClick={onToggleTheme}>
         {theme === "dark" ? "☀ Modo claro" : "☾ Modo oscuro"}

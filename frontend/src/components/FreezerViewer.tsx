@@ -894,18 +894,6 @@ export function FreezerViewer({
             />
           </section>
         )}
-
-        <section>
-          <h2 className="fv-h2">Supuestos del modelo</h2>
-          <p className="fv-note">
-            Medidas exteriores (830 × 980 × 1980 mm), cámara interior (465 × 630
-            × 1310 mm), 2 puertas interiores y 3 bandejas de 451 × 597 mm según
-            la ficha técnica. Racks de 5 pisos × 4 cajas según la tabla de racks
-            del manual serie J; en este congelador se usan solo los racks del
-            centro y de la derecha de cada estante. Cada caja de 2 in es de
-            cartón 9 × 9 (1A–9I) o plástica 10 × 10 (1–100).
-          </p>
-        </section>
       </aside>
     </div>
   );

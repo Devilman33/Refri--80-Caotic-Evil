@@ -102,7 +102,8 @@ export function SamplesTable({ samples, ownerLookup, onSelect, sort, onSortChang
               </td>
               <td>
                 {sample.location}
-                {onViewInFreezer && (
+                {/* Una retirada ya no está en el freezer: no hay nada que ir a ver. */}
+                {onViewInFreezer && sample.status === "active" && (
                   <button
                     type="button"
                     className="btn-ghost"
