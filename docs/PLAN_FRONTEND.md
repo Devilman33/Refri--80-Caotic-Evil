@@ -185,7 +185,10 @@ Salida: este documento, con la arquitectura de información y los flujos cerrado
 Salida: la sección "Revisión de ingeniería" de abajo (decisiones D1–D5, flujo de datos, pruebas,
 modos de falla) y las tareas T9–T12.
 
-### Fase 3 · Implementar y auditar → `/design-review`
+### Fase 3 · Implementar y auditar → `/design-review` ✔
+
+Hecho en la rama `claude/rediseno-bloque-2`: T1–T12 y la auditoría visual de todos los
+bloques (ver el historial de commits `T…` y `style(design): …`).
 
 Un PR por bloque, en este orden (cada uno deja la app usable):
 
@@ -221,18 +224,18 @@ Recorre F1–F4 de punta a punta en PC y en viewport de tablet, en claro y oscur
 
 ## Tareas
 
-- [ ] **T1 (P1)** — `theme.css` — Aplicar "Cambios pendientes" de `DESIGN.md` (`--warn`, `--field-border`, 12px mínimo, 44px táctil, logo en oscuro automático, sombras).
-- [ ] **T2 (P1)** — `Header`, `App.tsx` — Buscador global con sugerencias y las tres salidas (1 resultado / varios / ubicación); quitar "Buscar posición" del panel 3D. Usa `q` (T9) para IDs y `parseViewerQuery` para ubicaciones; debounce de 300 ms y se descarta la respuesta de un pedido viejo (ver modos de falla). Las sugerencias muestran el aviso de Núcleo. Depende de T9 y T10.
-- [ ] **T3 (P1)** — `Header`, `App.tsx` — Congelar/Descongelar en la barra; menú de usuario (Usuarios, tema, Cambiar usuario); avisos que se cierran solos.
-- [ ] **T4 (P1)** — `SampleDetail`, `FreezerViewer`, `App.tsx` — Detalle como panel/hoja inferior; botón "Ver en el refri" fuera del 3D; Descongelar como primario.
-- [ ] **T5 (P1)** — `FreezeForm` — "Guardar y siguiente" como primario (Enter), foco a ID Environ, franja "En esta tanda", caja llena a mitad de tanda.
-- [ ] **T6 (P3)** — `FreezerViewer` — Verificar el warning de Núcleo en el 3D contra `DESIGN.md` (ya existe: aviso en la vista de caja `FreezerViewer.tsx:552`, en la posición `:644`, tapa en estado `core` en `three/freezerScene.ts:322`). Solo ajustes visuales si no calzan; la revisión de diseño anterior lo dio por faltante por error.
-- [ ] **T7 (P2)** — `ThawForm` — Campo ID Environ primero con sugerencias de muestras activas; botón primario turquesa "Descongelar"; motivo del bloqueo cuando no es encargado.
-- [ ] **T8 (P2)** — `BoxMoveModal` — Validación en vivo del destino (vacía / ocupada / no existe); tras mover, enfocar el 3D en el lugar nuevo.
-- [ ] **T9 (P1, backend)** — `services/search.py` — Filtro `q`: `OR` de `environ_id ILIKE %q%` y `description ILIKE %q%`; combinable con los demás filtros (AND), incompatible con `environ_id_exact` (422, como el par actual). Lo usan `/samples/search` y el export porque ambos pasan por `build_sample_query`. Tests pytest: coincide por ID, por descripción, por ambos sin duplicar, con `status`, vacío, 422 con `environ_id_exact`.
-- [ ] **T10 (P1, backend)** — `schemas/sample.py`, `sample_with_location` — `SampleWithLocation` suma `section_code`, `rack_letter`, `box_number` (aditivo; `location` se mantiene). Frontend: `types.ts` y borrar `locationPrefill` de `App.tsx`. Tests: pytest de la forma del JSON; vitest de "Descongelar" desde el detalle prellenando sin regex.
-- [ ] **T11 (P1)** — `App.tsx`, `FreezerViewer`, `OccupancyView` — Reemplazar `key={freezerKey}` por un prop `reloadToken`: el visor vuelve a pedir ocupación y luces sin reconstruir la escena ni mover la cámara; se mantiene la caja seleccionada. Test: cambiar el token no desmonta (el mock de escena no se recrea) y sí vuelve a llamar a la api.
-- [ ] **T12 (P1)** — `src/__tests__/App.test.tsx` (nuevo) — Integración con api mockeada y `FreezerViewer` reemplazado por un doble sin WebGL: F1 tanda de 3, F2 descongelar por ID, F3 buscador (1 / varios / ubicación / 0 / error de red), F4 mover caja con destino ocupado, y "Mover" desde el detalle no apila diálogos (regresión de FINDING-005). Se escribe por partes, junto con cada bloque.
+- [x] **T1 (P1)** — `theme.css` — Aplicar "Cambios pendientes" de `DESIGN.md` (`--warn`, `--field-border`, 12px mínimo, 44px táctil, logo en oscuro automático, sombras).
+- [x] **T2 (P1)** — `Header`, `App.tsx` — Buscador global con sugerencias y las tres salidas (1 resultado / varios / ubicación); quitar "Buscar posición" del panel 3D. Usa `q` (T9) para IDs y `parseViewerQuery` para ubicaciones; debounce de 300 ms y se descarta la respuesta de un pedido viejo (ver modos de falla). Las sugerencias muestran el aviso de Núcleo. Depende de T9 y T10.
+- [x] **T3 (P1)** — `Header`, `App.tsx` — Congelar/Descongelar en la barra; menú de usuario (Usuarios, tema, Cambiar usuario); avisos que se cierran solos.
+- [x] **T4 (P1)** — `SampleDetail`, `FreezerViewer`, `App.tsx` — Detalle como panel/hoja inferior; botón "Ver en el refri" fuera del 3D; Descongelar como primario.
+- [x] **T5 (P1)** — `FreezeForm` — "Guardar y siguiente" como primario (Enter), foco a ID Environ, franja "En esta tanda", caja llena a mitad de tanda.
+- [x] **T6 (P3)** — `FreezerViewer` — Verificar el warning de Núcleo en el 3D contra `DESIGN.md` (ya existe: aviso en la vista de caja `FreezerViewer.tsx:552`, en la posición `:644`, tapa en estado `core` en `three/freezerScene.ts:322`). Solo ajustes visuales si no calzan; la revisión de diseño anterior lo dio por faltante por error.
+- [x] **T7 (P2)** — `ThawForm` — Campo ID Environ primero con sugerencias de muestras activas; botón primario turquesa "Descongelar"; motivo del bloqueo cuando no es encargado.
+- [x] **T8 (P2)** — `BoxMoveModal` — Validación en vivo del destino (vacía / ocupada / no existe); tras mover, enfocar el 3D en el lugar nuevo.
+- [x] **T9 (P1, backend)** — `services/search.py` — Filtro `q`: `OR` de `environ_id ILIKE %q%` y `description ILIKE %q%`; combinable con los demás filtros (AND), incompatible con `environ_id_exact` (422, como el par actual). Lo usan `/samples/search` y el export porque ambos pasan por `build_sample_query`. Tests pytest: coincide por ID, por descripción, por ambos sin duplicar, con `status`, vacío, 422 con `environ_id_exact`.
+- [x] **T10 (P1, backend)** — `schemas/sample.py`, `sample_with_location` — `SampleWithLocation` suma `section_code`, `rack_letter`, `box_number` (aditivo; `location` se mantiene). Frontend: `types.ts` y borrar `locationPrefill` de `App.tsx`. Tests: pytest de la forma del JSON; vitest de "Descongelar" desde el detalle prellenando sin regex.
+- [x] **T11 (P1)** — `App.tsx`, `FreezerViewer`, `OccupancyView` — Reemplazar `key={freezerKey}` por un prop `reloadToken`: el visor vuelve a pedir ocupación y luces sin reconstruir la escena ni mover la cámara; se mantiene la caja seleccionada. Test: cambiar el token no desmonta (el mock de escena no se recrea) y sí vuelve a llamar a la api.
+- [x] **T12 (P1)** — `src/__tests__/App.test.tsx` (nuevo) — Integración con api mockeada y `FreezerViewer` reemplazado por un doble sin WebGL: F1 tanda de 3, F2 descongelar por ID, F3 buscador (1 / varios / ubicación / 0 / error de red), F4 mover caja con destino ocupado, y "Mover" desde el detalle no apila diálogos (regresión de FINDING-005). Se escribe por partes, junto con cada bloque.
 
 ## Fuera de alcance
 
