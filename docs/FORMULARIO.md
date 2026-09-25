@@ -38,6 +38,12 @@ Instrucciones que el formulario muestra y que la página debe mantener:
   posiciones ocupadas por una muestra activa y ofrece la siguiente libre.
 - **Descongelamiento:** equivale a *retirar*. La muestra pasa a estado retirada y queda en el
   historial. **Nunca se borra.** La posición queda libre (luz verde).
+  - **Única desviación del Google Form:** en un retiro la página solo exige Fecha, Operador,
+    Sección, Nombre Caja y Posición. Descripción, Tipo, Pasaje, Núcleo y "¿La caja está llena?"
+    no se piden, y la página muestra qué muestra se va a retirar. En la página la posición se
+    elige sobre la grilla de ocupadas, así que la muestra ya queda identificada y esos datos
+    salen de la base. Pedirlos de nuevo solo agrega la posibilidad de que no coincidan con lo
+    guardado. Al liberarse una posición, "caja llena" se baja sola.
 - **Campos 11 y 12:** se muestra solo el que corresponde al tipo de la caja elegida (cartón 9×9 o plástica 10×10).
 - **Posición desde el visor:** hacer clic en una posición libre del visor abre este formulario prellenado.
 - **Autocompletado (QOL):**

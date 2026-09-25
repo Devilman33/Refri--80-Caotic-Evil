@@ -26,6 +26,9 @@ _TIPO_MAP = {
 }
 _LINEA_CELULAR = {"linea celular", "lineas celulares"}
 
+#: Tope de `Caja` según docs/DATOS.md.
+CAJA_MAX = 30
+
 _SECCION_VALIDAS = {"I", "II", "III", "IV"}
 _SECCION_LEGACY = {"1": "I", "2": "II", "3": "III", "4": "IV"}
 
@@ -170,7 +173,17 @@ def parse_caja_numero(raw: object) -> tuple[int | None, str | None]:
     pisos que falten. El desacuerdo entre ese 1-30 y el `capacity: 20` provisorio de
     layout.yaml es un problema de datos, no de validacion, y se resuelve confirmando la
     capacidad real con el laboratorio.
+
+    Lo que si se rechaza es salir del rango 1-30 que fija docs/DATOS.md: ahi no hay
+    desacuerdo que resolver, es un dato mal cargado.
     """
+    number, reason = _parse_caja_entero(raw)
+    if number is not None and number > CAJA_MAX:
+        return None, f"Número de caja fuera de rango (1–{CAJA_MAX})"
+    return number, reason
+
+
+def _parse_caja_entero(raw: object) -> tuple[int | None, str | None]:
     if raw is None:
         return None, "Número de caja vacío"
     if not isinstance(raw, bool) and isinstance(raw, (int, float)):

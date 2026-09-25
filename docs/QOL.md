@@ -111,6 +111,15 @@ comportamiento, resumidos:
 - **`DATABASE_URL`**: tenía un default que apuntaba a localhost. Arrancar mal configurado
   y escribir en la base equivocada era posible; ahora falla al arrancar con instrucciones.
 
+Una última pasada, después de mergear las tres PRs, volvió a revisar uno por uno los
+hallazgos de los comentarios del issue contra `main`. Quedaban tres: el importador aceptaba
+`Caja` por encima de 30, la tabla mostraba "—" en vez de la marca "sin ID", y el retiro
+relajaba campos del Google Form sin que estuviera escrito en `docs/FORMULARIO.md`. Los dos
+primeros se arreglaron y el tercero quedó documentado como desviación deliberada. De los
+demás, el único que no se implementó es el reingreso de una muestra retirada (punto 4 de
+arriba), y la fecha de salida con formato de fecha en Excel no se guarda como nota porque
+no trae texto que guardar.
+
 ## Cómo seguir
 
 Cada punto de arriba alcanza para un issue. El orden sugerido es el de la lista: el
