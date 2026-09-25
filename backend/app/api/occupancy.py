@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.api.deps import DbSession
 from app.models import Box, Rack, Sample, SampleStatus, Section
 from app.schemas.occupancy import BoxOccupancy, FreezerOccupancy, RackOccupancy, SectionOccupancy
-from app.services.occupancy import box_capacity, percent
+from app.services.occupancy import box_capacity, percent, rack_capacity
 
 router = APIRouter(prefix="/occupancy", tags=["ocupación"])
 
@@ -22,11 +22,11 @@ def _active_counts_by_box(db: Session) -> dict[int, int]:
 
 @router.get("/freezer", response_model=FreezerOccupancy)
 def freezer_occupancy(db: DbSession) -> FreezerOccupancy:
-    """% de uso del freezer completo (activas / capacidad de todas las cajas)."""
-    boxes = db.query(Box).all()
+    """% de uso del freezer completo (activas / capacidad física de todos los racks)."""
+    racks = db.query(Rack).options(joinedload(Rack.boxes)).all()
     active_by_box = _active_counts_by_box(db)
-    capacity = sum(box_capacity(box.box_type) for box in boxes)
-    active = sum(active_by_box.get(box.id, 0) for box in boxes)
+    capacity = sum(rack_capacity(rack) for rack in racks)
+    active = sum(active_by_box.get(box.id, 0) for rack in racks for box in rack.boxes)
     return FreezerOccupancy(active=active, capacity=capacity, percent=percent(active, capacity))
 
 
@@ -37,9 +37,8 @@ def sections_occupancy(db: DbSession) -> list[SectionOccupancy]:
     sections = db.query(Section).options(joinedload(Section.racks).joinedload(Rack.boxes)).order_by(Section.code)
     results = []
     for section in sections:
-        boxes = [box for rack in section.racks for box in rack.boxes]
-        capacity = sum(box_capacity(box.box_type) for box in boxes)
-        active = sum(active_by_box.get(box.id, 0) for box in boxes)
+        capacity = sum(rack_capacity(rack) for rack in section.racks)
+        active = sum(active_by_box.get(box.id, 0) for rack in section.racks for box in rack.boxes)
         results.append(
             SectionOccupancy(
                 section_id=section.id, code=section.code, active=active, capacity=capacity, percent=percent(active, capacity)
@@ -57,7 +56,7 @@ def racks_occupancy(db: DbSession, section_code: str | None = None) -> list[Rack
         query = query.join(Section).filter(Section.code == section_code.strip().upper())
     results = []
     for rack in query.order_by(Rack.letter).all():
-        capacity = sum(box_capacity(box.box_type) for box in rack.boxes)
+        capacity = rack_capacity(rack)
         active = sum(active_by_box.get(box.id, 0) for box in rack.boxes)
         results.append(
             RackOccupancy(

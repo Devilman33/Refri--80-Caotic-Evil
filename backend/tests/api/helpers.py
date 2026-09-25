@@ -55,9 +55,10 @@ def make_freezer(
     slot: str = "center",
     box_number: int = 1,
     box_type: str = "carton_81",
+    rack_capacity: int = 30,
 ) -> tuple[dict, dict, dict]:
     section = create_section(client, code=section_code)
-    rack = create_rack(client, section_id=section["id"], letter=rack_letter, slot=slot)
+    rack = create_rack(client, section_id=section["id"], letter=rack_letter, slot=slot, capacity=rack_capacity)
     box = create_box(client, rack_id=rack["id"], number=box_number, box_type=box_type)
     return section, rack, box
 
