@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { api, ApiError } from "../api/client";
-import type { BoxRead, BoxType, RackRead, SectionRead } from "../api/types";
+import type { BoxRead, BoxType, RackOccupancy, RackRead, SectionRead } from "../api/types";
 import { mapPositionsToLights, tooltipFor, type PositionLight } from "../three/boxPositionLights";
+import { FreezerUsagePanel } from "./FreezerUsagePanel";
 import { boxGridPosition, buildFreezerLayout, rackGridRows, type FreezerLayout, type LayoutBox, type LayoutRack } from "../three/freezerLayout";
 
 export interface FreePositionSelection {
@@ -27,7 +28,8 @@ export interface OccupiedPositionSelection {
 
 export interface FreezerFocusTarget {
   boxId: number;
-  position: string;
+  /** Posición a resaltar; null para solo enfocar la subcaja (p. ej. desde la vista de % de uso). */
+  position: string | null;
   /** Se cambia en cada click para poder re-enfocar la misma caja/posición. */
   token: number;
 }
@@ -104,12 +106,30 @@ export function FreezerViewer({ focusTarget, onSelectFreePosition, onSelectOccup
     highlight: string | null;
   } | null>(null);
   const [boxViewLoading, setBoxViewLoading] = useState(false);
+  // % de uso del rack seleccionado (issue #7).
+  const [selectedRack, setSelectedRack] = useState<{ id: number; sectionCode: string; letter: string } | null>(null);
+  const [rackOccupancy, setRackOccupancy] = useState<RackOccupancy[]>([]);
+  const onRackSelected = useRef<(rack: { id: number; sectionCode: string; letter: string }) => void>(() => undefined);
+  onRackSelected.current = setSelectedRack;
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listRackOccupancy()
+      .then((racks) => {
+        if (!cancelled) setRackOccupancy(racks);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const apiRef = useRef<{
     setXray: (value: boolean) => void;
     setExtract: (value: boolean) => void;
     reset: () => void;
-    focusOnBox: (boxId: number, position: string) => void;
+    focusOnBox: (boxId: number, position: string | null) => void;
     dispose: () => void;
   } | null>(null);
   const focusTargetRef = useRef<FreezerFocusTarget | null | undefined>(focusTarget);
@@ -389,6 +409,7 @@ export function FreezerViewer({ focusTarget, onSelectFreePosition, onSelectOccup
 
       function selectRack(entry: RackEntry, fly_ = true) {
         selectedRackKey = entry.key;
+        onRackSelected.current({ id: entry.rack.id, sectionCode: entry.sectionCode, letter: entry.rack.letter });
         if (selectedBoxId !== null && !entry.boxMeshes.has(selectedBoxId)) selectedBoxId = null;
         applyMaterials();
         if (fly_) focusRack(entry);
@@ -398,6 +419,7 @@ export function FreezerViewer({ focusTarget, onSelectFreePosition, onSelectOccup
         if (!mesh) return;
         selectedRackKey = entry.key;
         selectedBoxId = box.id;
+        onRackSelected.current({ id: entry.rack.id, sectionCode: entry.sectionCode, letter: entry.rack.letter });
         applyMaterials();
         if (fly_) focusBox(entry, mesh);
         openBoxView.current(entry.sectionCode, entry.rack, box, highlight);
@@ -540,7 +562,7 @@ export function FreezerViewer({ focusTarget, onSelectFreePosition, onSelectOccup
         reset() {
           flyTo(HOME_TARGET, HOME_POSITION, 900);
         },
-        focusOnBox(boxId: number, position: string) {
+        focusOnBox(boxId: number, position: string | null) {
           const found = boxLookup.get(boxId);
           if (!found) return;
           const box = found.rack.rack.boxes.find((b) => b.id === boxId);
@@ -610,6 +632,26 @@ export function FreezerViewer({ focusTarget, onSelectFreePosition, onSelectOccup
         </div>
         <p className="freezer-hint">Arrastra para girar · rueda para acercar · clic en un rack o una caja</p>
         <div ref={tooltipRef} className="freezer-tooltip" hidden />
+        <FreezerUsagePanel
+          rack={
+            selectedRack
+              ? {
+                  sectionCode: selectedRack.sectionCode,
+                  letter: selectedRack.letter,
+                  occupancy: rackOccupancy.find((rack) => rack.rack_id === selectedRack.id) ?? null,
+                }
+              : null
+          }
+          box={
+            boxView && !boxViewLoading && boxView.lights.length > 0
+              ? {
+                  number: boxView.box.number,
+                  occupied: boxView.lights.filter((light) => light.occupied).length,
+                  total: boxView.lights.length,
+                }
+              : null
+          }
+        />
         {loadError && <div className="empty-state" role="alert">{loadError}</div>}
         {webglError && <div className="empty-state" role="alert">{webglError}</div>}
 

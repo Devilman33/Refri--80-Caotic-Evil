@@ -1,15 +1,19 @@
 import type {
   AutocompleteSuggestion,
   BoxPositionStatus,
+  BoxOccupancy,
   BoxRead,
+  FreezerOccupancy,
   MovementCreate,
   MovementRead,
   MovementResult,
   Page,
   PositionConflict,
+  RackOccupancy,
   RackRead,
   SampleSearchFilters,
   SampleWithLocation,
+  SectionOccupancy,
   SectionRead,
   UserRead,
 } from "./types";
@@ -93,6 +97,18 @@ export const api = {
     owner_initials?: string;
   }): Promise<AutocompleteSuggestion> {
     return request(`/autocomplete/suggestions${buildQuery(params)}`);
+  },
+  getFreezerOccupancy(): Promise<FreezerOccupancy> {
+    return request(`/occupancy/freezer`);
+  },
+  listSectionOccupancy(): Promise<SectionOccupancy[]> {
+    return request(`/occupancy/sections`);
+  },
+  listRackOccupancy(): Promise<RackOccupancy[]> {
+    return request(`/occupancy/racks`);
+  },
+  listBoxOccupancy(): Promise<BoxOccupancy[]> {
+    return request(`/occupancy/boxes`);
   },
   createMovement(payload: MovementCreate): Promise<MovementResult> {
     return post(`/movements`, payload);

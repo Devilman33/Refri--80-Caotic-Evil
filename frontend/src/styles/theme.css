@@ -639,3 +639,177 @@ table.samples-table {
   color: var(--ink);
   background: var(--chip-hover);
 }
+
+/* ---------- % de uso (issue #7) ---------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.occupancy-view {
+  display: grid;
+  gap: 16px;
+}
+
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.usage-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.usage-card h2,
+.usage-card h3 {
+  margin: 0 0 10px;
+  font-family: var(--display);
+}
+
+.usage-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.usage-card__head strong {
+  font-family: var(--mono);
+  font-size: 1.4rem;
+}
+
+.usage-card__meta {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.usage-card .tog {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.usage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.usage-list li {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) 2fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.usage-list__name small {
+  color: var(--muted);
+}
+
+.usage-list__value {
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  min-width: 4.5em;
+  text-align: right;
+}
+
+.usage-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--chip);
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.usage-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.usage-bar--near-full .usage-bar__fill {
+  background: var(--warn);
+}
+
+.usage-bar--full .usage-bar__fill {
+  background: var(--danger);
+}
+
+.usage-cell {
+  display: grid;
+  grid-template-columns: minmax(80px, 160px) auto;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+}
+
+.usage-row--full td:first-child {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+.usage-row--near-full td:first-child {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+
+.usage-badge--full {
+  background: var(--danger);
+  color: var(--accent-ink);
+}
+
+.usage-badge--near-full {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.usage-badge--normal,
+.usage-badge--empty {
+  background: var(--chip);
+  color: var(--muted);
+}
+
+/* Panel de % en el visor 3D */
+.freezer-usage {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  width: min(260px, calc(100% - 24px));
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+  font-size: 0.9rem;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.12);
+}
+
+.freezer-usage__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.freezer-usage__row .usage-bar {
+  grid-column: 1 / -1;
+}
+
+.freezer-usage__row strong {
+  font-family: var(--mono);
+}

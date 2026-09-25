@@ -141,6 +141,34 @@ export interface BoxRead {
   is_full: boolean | null;
 }
 
+// % de uso (GET /occupancy/*, issue #7). `percent` viene redondeado a 2 decimales.
+export interface FreezerOccupancy {
+  active: number;
+  capacity: number;
+  percent: number;
+}
+
+export interface SectionOccupancy extends FreezerOccupancy {
+  section_id: number;
+  code: string;
+}
+
+export interface RackOccupancy extends FreezerOccupancy {
+  rack_id: number;
+  letter: string;
+  section_code: string;
+}
+
+export interface BoxOccupancy extends FreezerOccupancy {
+  box_id: number;
+  number: number;
+  rack_id: number;
+  rack_letter: string;
+  section_code: string;
+  box_type: BoxType;
+  is_full: boolean | null;
+}
+
 export interface BoxPositionStatus {
   position: string;
   occupied: boolean;
