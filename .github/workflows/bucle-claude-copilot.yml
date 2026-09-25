@@ -28,7 +28,9 @@ on:
 
 env:
   # Rondas de corrección de Claude por PR. Cada ronda consume tokens de la suscripción.
-  MAX_ITERACIONES: "3"
+  # Con 2 rondas, cada PR usa como máximo 2 reviews de Copilot (créditos de GitHub): la del PR
+  # nuevo y la que se pide tras la 1ª ronda. Tras la última ronda se mergea sin pedir otra review.
+  MAX_ITERACIONES: "2"
   # Qué hacer si tras MAX_ITERACIONES siguen abiertos hallazgos High:
   #   mergear  -> mergea igual (si la CI está en verde) y etiqueta bucle:revisar-despues
   #   detener  -> no mergea y etiqueta bucle:requiere-humano (la cadena se detiene)
@@ -300,6 +302,7 @@ jobs:
           gh label create "bucle:revisar-despues" -R "$GITHUB_REPOSITORY" --color fbca04 --description "Mergeado con hallazgos High sin resolver" --force
           if [ -z "$RESULTADO" ]; then RESULTADO='{}'; fi
           resumen=""
+          SIN_REVIEW_FINAL=false
           pendientes=$(cat "$RUNNER_TEMP/pendientes.md" 2>/dev/null || true)
 
           # Merge automático con BUCLE_PAT (no GITHUB_TOKEN): cadena.yml escucha el `closed`
@@ -322,6 +325,7 @@ jobs:
             {
               printf '### Pendientes del PR #%s para la revisión final\n\n' "$PR"
               printf 'Hallazgos de Copilot que quedaron sin arreglar al mergear. Al implementar este issue, revisa cada uno y corrige los que sigan vigentes (algunos pueden haberse arreglado sin que Copilot lo marcara).\n\n'
+              if [ "$SIN_REVIEW_FINAL" = true ]; then printf '> La última ronda de Claude se mergeó sin una nueva review de Copilot (para ahorrar créditos): verifica en especial los High.\n\n'; fi
               if [ -n "$abiertos" ]; then printf '**Reportados por Copilot y no marcados como resueltos:**\n%s\n\n' "$abiertos"; fi
               if [ -n "$diferidos" ]; then printf '**Diferidos por Claude (con su motivo):**\n%s\n' "$diferidos"; fi
             } | sed 's/@claude/Claude/Ig; s/@copilot/Copilot/Ig' > "$RUNNER_TEMP/revision_final.md"
@@ -335,6 +339,11 @@ jobs:
               titulo="### ⚠️ $1, pero falta BUCLE_PAT para mergear"
               return
             fi
+            # Tras un push, los checks del commit nuevo tardan unos segundos en aparecer.
+            for _ in $(seq 1 24); do
+              [ "$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json statusCheckRollup -q '.statusCheckRollup | length')" -gt 0 ] && break
+              sleep 10
+            done
             if ! GH_TOKEN="$BUCLE_PAT" gh pr checks "$PR" -R "$GITHUB_REPOSITORY" --watch --fail-fast; then
               gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:requiere-humano"
               titulo="### ⚠️ $1, pero el CI quedó en rojo: no se mergeó"
@@ -379,7 +388,19 @@ jobs:
                 # claude-code-action deja `origin` autenticado con GITHUB_TOKEN, y un push con ese
                 # token no dispara workflows. Por eso se empuja explícitamente con BUCLE_PAT.
                 git push "https://x-access-token:${BUCLE_PAT}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$RAMA"
-                titulo="### 🔁 Claude corrigió $HIGH hallazgo(s) High de Copilot (ronda $n/$MAX_ITERACIONES)"
+                if [ "$n" -ge "$MAX_ITERACIONES" ]; then
+                  # Última ronda: no se gasta otra review de Copilot. Se mergea con la CI en verde y
+                  # lo que quede sin verificar va al issue de revisión final.
+                  SIN_REVIEW_FINAL=true
+                  gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:revisar-despues"
+                  mergear "Última ronda de corrección aplicada"
+                else
+                  # Pide la siguiente review explícitamente (sirve con "Review new pushes" apagado).
+                  GH_TOKEN="$BUCLE_PAT" gh api -X POST "repos/$GITHUB_REPOSITORY/pulls/$PR/requested_reviewers" \
+                    -f 'reviewers[]=copilot-pull-request-reviewer[bot]' >/dev/null \
+                    || echo "::warning::No se pudo pedir la review de Copilot; se espera la automática."
+                  titulo="### 🔁 Claude corrigió hallazgos de Copilot (ronda $n/$MAX_ITERACIONES)"
+                fi
               else
                 gh pr edit "$PR" -R "$GITHUB_REPOSITORY" --add-label "bucle:aprobado"
                 mergear "Claude revisó los hallazgos High y no requieren cambios"
