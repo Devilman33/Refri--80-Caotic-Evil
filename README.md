@@ -77,8 +77,11 @@ curl http://localhost:8000/health
 
 El frontend queda disponible en <http://localhost:5173>. Al entrar, cada persona elige
 quién es de la lista o se registra con su nombre completo (sin contraseña: ver
-`docs/adr/0002-autenticacion.md`). Solo el encargado de una muestra puede editarla,
-trasladarla o retirarla.
+`docs/adr/0002-autenticacion.md`). Solo los encargados de una muestra pueden editarla o
+trasladarla, y cualquier persona puede retirar (una o varias a la vez) y devolver al refri
+una muestra retirada. La distribución del freezer (mover racks de estante, dar de baja o
+crear racks y cajas) se administra desde el menú de usuario → **Administrar freezer**; la
+base de datos manda y `backend/app/seed/layout.yaml` solo crea lo que falta la primera vez.
 
 ### Frontend en local (sin Docker)
 

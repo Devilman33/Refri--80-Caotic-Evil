@@ -32,13 +32,6 @@ export interface SampleDetailProps {
   onViewInFreezer?: () => void;
 }
 
-/** Las partes de la ubicación, que la API manda por separado. Con un backend anterior que
- * solo manda el texto, se muestra el texto entero. */
-function locationParts(sample: SampleWithLocation): { section: string; box: string; position: string } | null {
-  if (!sample.section_code || !sample.rack_letter || sample.box_number === undefined) return null;
-  return { section: sample.section_code, box: `${sample.rack_letter}${sample.box_number}`, position: sample.position };
-}
-
 /**
  * Detalle de una muestra como PANEL, no modal (docs/PLAN_FRONTEND.md, D2): mirar una
  * muestra no escribe nada, y un modal tapaba el 3D justo cuando se quería ver dónde está.
@@ -79,7 +72,6 @@ export function SampleDetail({
 
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const owners = ownersOf(sample, users);
-  const location = locationParts(sample);
 
   // Al elegir otra muestra, el foco va a su título: quien navega con teclado o lector de
   // pantalla se entera de que el panel cambió.
@@ -147,27 +139,7 @@ export function SampleDetail({
           <dt>Núcleo Environ</dt>
           <dd>{formatBoolean(sample.is_core)}</dd>
         </div>
-        {location ? (
-          <>
-            <div>
-              <dt>Sección</dt>
-              <dd>{location.section}</dd>
-            </div>
-            <div>
-              <dt>Caja</dt>
-              <dd>{location.box}</dd>
-            </div>
-            <div>
-              <dt>Posición</dt>
-              <dd>{location.position}</dd>
-            </div>
-          </>
-        ) : (
-          <div>
-            <dt>Ubicación</dt>
-            <dd>{sample.location}</dd>
-          </div>
-        )}
+        {/* La ubicación ya está en el encabezado de la ficha: no se repite acá. */}
         <div>
           <dt>Fecha de congelamiento</dt>
           <dd>{frozen ? formatDate(frozen.date) : movements ? "—" : "…"}</dd>

@@ -82,6 +82,8 @@ export interface FreezerViewerProps {
   /** El detalle de la muestra seleccionada: va arriba del panel, sobre "Caja seleccionada",
    * para ver el dato y la posición resaltada a la vez. */
   detailSlot?: ReactNode;
+  /** Qué mostrar arriba del panel cuando no hay caja ni muestra elegida (p. ej. "Mis muestras"). */
+  summarySlot?: ReactNode;
 }
 
 interface RackInfo {
@@ -102,7 +104,6 @@ const DOOR_LABELS = ["Cerrado", "Puerta abierta", "Todo abierto"] as const;
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const formatLabel = (type: BoxType) =>
   type === "carton_81" ? "9 × 9" : "10 × 10";
-const capacityOf = (type: BoxType) => (type === "carton_81" ? 81 : 100);
 
 function lidStateOf(light: PositionLight): LidState {
   if (!light.occupied) return "free";
@@ -122,6 +123,7 @@ export function FreezerViewer({
   locationQuery,
   onQueryMessage,
   detailSlot,
+  summarySlot,
 }: FreezerViewerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
@@ -508,6 +510,14 @@ export function FreezerViewer({
     });
   }
 
+  // Tocar una posición ocupada muestra la ficha de la muestra arriba en el panel lateral
+  // (parte 3): antes había que apretar además "Ver muestra" y la ficha quedaba abajo.
+  const selSampleId = selLight?.occupied ? selLight.sampleId : null;
+  useEffect(() => {
+    if (selSampleId !== null) openSample();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selSampleId, slot]);
+
   const order = positionOrder(selBoxType);
   const occupiedCount = lights
     ? lights.filter((light) => light.occupied).length
@@ -585,17 +595,12 @@ export function FreezerViewer({
           <div className="fv-boxview" role="dialog" aria-labelledby="fvBvTitle">
             <div className="bv-head">
               <div>
-                <p className="eyebrow">
-                  Caja {formatLabel(selSlot.boxType)} ·{" "}
-                  {capacityOf(selSlot.boxType)} posiciones
-                </p>
                 <h3 className="bv-code" id="fvBvTitle">
-                  {selCode}
+                  {selCode}{" "}
+                  <small>
+                    {formatLabel(selSlot.boxType)} · Sección {selRack.sectionCode} · P{selSlot.piso} F{selSlot.fondo}
+                  </small>
                 </h3>
-                <p className="bv-sub">
-                  Sección {selRack.sectionCode} · Rack {selRack.rack.letter} ·
-                  Piso P{selSlot.piso} · Fondo F{selSlot.fondo}
-                </p>
                 {hasCore && (
                   <span className="badge badge-warn" role="status">
                     ⚠ Contiene muestras de Núcleo
@@ -671,48 +676,24 @@ export function FreezerViewer({
               {lights !== null && !slot && (
                 <p className="later">
                   {selSlot.box
-                    ? `Toca una posición para ver su estado. Ocupación: ${occupiedCount} de ${order.length}.`
-                    : "Caja aún sin registrar: se crea con el primer congelamiento. Toca una posición para registrar una muestra."}
+                    ? `${occupiedCount} de ${order.length} ocupadas · toca una posición`
+                    : "Caja sin registrar: toca una posición para congelar ahí."}
                 </p>
               )}
-              {lights !== null && slot && (
-                <>
-                  <div>
-                    <b>
-                      {selCode}-{slot}
-                    </b>{" "}
-                    · posición {order.indexOf(slot) + 1} de {order.length}
-                  </div>
-                  {selLight?.occupied ? (
-                    <>
-                      <div>{selLight.environId ?? "Muestra sin ID Environ"}</div>
-                      <div>
-                        {selLight.owners.length > 1 ? "Encargados: " : "Encargado: "}
-                        <b>{selLight.owners.length > 0 ? selLight.owners.join(", ") : "sin encargado"}</b>
-                        {/* Núcleo es una marca adicional al encargado, no lo reemplaza. */}
-                        {selLight.isCore && <span className="fv-warn"> · ⚠ Núcleo</span>}
-                      </div>
-                      <button
-                        type="button"
-                        className="fv-btn"
-                        onClick={openSample}
-                      >
-                        Ver muestra / descongelar
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div>Libre</div>
-                      <button
-                        type="button"
-                        className="fv-btn"
-                        onClick={registerHere}
-                      >
-                        Registrar congelamiento aquí
-                      </button>
-                    </>
-                  )}
-                </>
+              {lights !== null && slot && !selLight?.occupied && (
+                <div className="bv-foot__row">
+                  <span>
+                    <b>{selCode}-{slot}</b> · libre
+                  </span>
+                  <button type="button" className="fv-btn" onClick={registerHere}>
+                    Congelar aquí
+                  </button>
+                </div>
+              )}
+              {lights !== null && slot && selLight?.occupied && (
+                <p className="later">
+                  <b>{selCode}-{slot}</b> · la ficha está en el panel →
+                </p>
               )}
             </div>
           </div>
@@ -721,80 +702,114 @@ export function FreezerViewer({
 
       <aside className="fv-panel">
         {detailSlot}
-        <header>
-          <p className="eyebrow">Congelador ULT vertical · −86 °C · 388 L</p>
-          <h1 className="fv-title">Haier DW-86L388J</h1>
-          <div className="fv-stats">
-            <div>
-              <b>{layout?.length ?? 4}</b>
-              <span>estantes</span>
-            </div>
-            <div>
-              <b>{racksByLetter.size}</b>
-              <span>racks</span>
-            </div>
-            <div>
-              <b>{totalBoxes}</b>
-              <span>cajas de 2 in</span>
-            </div>
-          </div>
-        </header>
 
-        <section>
-          <h2 className="fv-h2">
-            Estructura <small>sección · rack</small>
-          </h2>
-          <div>
-            {(layout ?? []).map((section) => (
-              <div
-                key={section.code}
-                className={`fv-est${sel.section === section.code ? " on" : ""}`}
-              >
+        {!detailSlot && !selSlot && summarySlot}
+
+        {selRack && selSlot && (
+          <section className="fv-card">
+            <h2 className="fv-h2">
+              Caja {selCode}
+              <small>
+                {selSlot.box
+                  ? lights
+                    ? `${occupiedCount} de ${order.length} ocupadas`
+                    : "…"
+                  : "sin registrar"}
+              </small>
+            </h2>
+            <p className="fv-line">
+              Sección {selRack.sectionCode} · Rack {selRack.rack.letter} ({selRack.rack.slot === "center" ? "centro" : "derecha"}) ·
+              Piso P{selSlot.piso} · Fondo F{selSlot.fondo} · {formatLabel(selSlot.boxType)}
+            </p>
+            {selSlot.box && lights && (
+              <FreezerUsagePanel
+                rack={null}
+                box={{ number: selSlot.number, occupied: occupiedCount, total: lights.length }}
+              />
+            )}
+            <div className="fv-actions">
+              {!boxViewOpen && (
+                <button type="button" className="fv-btn" onClick={() => setBoxViewOpen(true)}>
+                  Abrir caja
+                </button>
+              )}
+              {onMoveBox && selSlot.box && occupiedCount > 0 && (
                 <button
                   type="button"
-                  className="fv-est-name"
-                  onClick={() => selectSection(section.code)}
+                  className="fv-btn fv-btn--quiet"
+                  onClick={() =>
+                    onMoveBox({
+                      boxId: selSlot.box!.id,
+                      label: `${selRack.sectionCode} · ${selRack.rack.letter}${selSlot.number}`,
+                      active: occupiedCount,
+                    })
+                  }
                 >
-                  {section.code}
+                  Mover caja
                 </button>
-                <span className="fv-est-sub">
-                  {sectionDescription(section.code)}
-                </span>
-                <div className="fv-rk">
-                  {[section.center, section.right].map((rack, index) =>
-                    rack ? (
-                      <button
-                        key={rack.letter}
-                        type="button"
-                        className={sel.rack === rack.letter ? "on" : ""}
-                        aria-label={`Sección ${section.code}, rack ${rack.letter} (${index === 0 ? "centro" : "derecha"})`}
-                        onClick={() => selectRack(rack.letter)}
-                      >
-                        {rack.letter}
-                      </button>
-                    ) : (
-                      <button
-                        key={`empty-${index}`}
-                        type="button"
-                        disabled
-                        title="Sin rack en esta posición"
-                      >
-                        —
-                      </button>
-                    ),
-                  )}
+              )}
+              {onBoxChanged && selSlot.box && lights !== null && occupiedCount === 0 && (
+                <button
+                  type="button"
+                  className="fv-btn fv-btn--quiet"
+                  disabled={boxActionBusy}
+                  onClick={() =>
+                    runBoxAction(async () => {
+                      await api.deactivateBox(selSlot.box!.id);
+                      return `Caja ${selRack.rack.letter}${selSlot.number} dada de baja. Su historial se conserva y el lugar quedó libre.`;
+                    })
+                  }
+                >
+                  Dar de baja caja
+                </button>
+              )}
+            </div>
+            {onBoxChanged && !selSlot.box && (
+              <div className="fv-newbox">
+                <label htmlFor="fv-newbox-type">Registrar caja en este lugar</label>
+                <div>
+                  <select
+                    id="fv-newbox-type"
+                    value={newBoxType}
+                    onChange={(event) => setNewBoxType(event.target.value as BoxType)}
+                  >
+                    <option value="carton_81">Cartón 9 × 9</option>
+                    <option value="plastic_100">Plástica 10 × 10</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="fv-btn"
+                    disabled={boxActionBusy}
+                    onClick={() =>
+                      runBoxAction(async () => {
+                        await api.createBox({ rack_id: selRack.rack.id, number: selSlot.number, box_type: newBoxType });
+                        return `Caja ${selRack.rack.letter}${selSlot.number} registrada (${formatLabel(newBoxType)}).`;
+                      })
+                    }
+                  >
+                    Registrar caja
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
+            )}
+            {boxActionError && (
+              <p className="field-error" role="alert">
+                {boxActionError}
+              </p>
+            )}
+          </section>
+        )}
 
         {selRack && (
           <section>
             <h2 className="fv-h2">
-              Rack{" "}
+              Rack {selRack.rack.letter}
               <small>
-                {selRack.rack.letter} · Sección {selRack.sectionCode}
+                Sección {selRack.sectionCode}
+                {(() => {
+                  const occ = rackOccupancy.find((rack) => rack.rack_id === selRack.rack.id);
+                  return occ ? ` · ${Math.round(occ.percent)} % en uso` : "";
+                })()}
               </small>
             </h2>
             <div className="fv-cells">
@@ -806,13 +821,9 @@ export function FreezerViewer({
                   </div>,
                   ...Array.from({ length: RACK_GRID_COLUMNS }, (_, f) => {
                     const number = pisoIndex * RACK_GRID_COLUMNS + f + 1;
-                    const s = selRack.slots.find(
-                      (item) => item.number === number,
-                    );
+                    const s = selRack.slots.find((item) => item.number === number);
                     const occ = s?.box ? boxOccupancy.get(s.box.id) : undefined;
-                    const full = Boolean(
-                      occ && (occ.percent >= 100 || occ.is_full),
-                    );
+                    const full = Boolean(occ && (occ.percent >= 100 || occ.is_full));
                     const used = Boolean(occ && occ.active > 0);
                     const code = boxCode(selRack.rack.letter, number);
                     const title = occ
@@ -834,173 +845,50 @@ export function FreezerViewer({
                 ];
               })}
             </div>
-            <div className="fv-axis-note">
-              <span>Frente</span>
-              <span>Fondo →</span>
-            </div>
           </section>
         )}
 
+        {/* "Estructura" reducida a lo útil: saltar a un rack. */}
         <section>
-          <h2 className="fv-h2">Caja seleccionada</h2>
-          {!selRack || !selSlot ? (
-            <p className="fv-empty">
-              Haz clic en una caja del modelo o en la grilla del rack.
-            </p>
-          ) : (
-            <>
-              <p className="fv-code">{selCode}</p>
-              <dl className="fv-dl">
-                <dt>Sección</dt>
-                <dd>
-                  {selRack.sectionCode} de {layout?.length ?? 4} (desde arriba)
-                  ·{" "}
-                  {["I", "II"].includes(selRack.sectionCode)
-                    ? "puerta interior superior"
-                    : "puerta interior inferior"}
-                </dd>
-                <dt>Rack</dt>
-                <dd>
-                  {selRack.rack.letter} ·{" "}
-                  {selRack.rack.slot === "center" ? "centro" : "derecha"} del
-                  estante
-                </dd>
-                <dt>Piso</dt>
-                <dd>
-                  P{selSlot.piso} de {selRack.pisos} (desde arriba)
-                </dd>
-                <dt>Fondo</dt>
-                <dd>
-                  F{selSlot.fondo} de {RACK_GRID_COLUMNS} (desde el frente)
-                </dd>
-                <dt>Caja</dt>
-                <dd>
-                  N.º {pad2(selSlot.number)} de {selRack.slots.length} en el
-                  rack
-                </dd>
-                <dt>Formato</dt>
-                <dd>
-                  2 in · 133 × 133 × 52 mm · {formatLabel(selSlot.boxType)}
-                </dd>
-                <dt>Estado</dt>
-                <dd>
-                  {selSlot.box
-                    ? `Registrada · ${lights ? `${occupiedCount} de ${order.length} ocupadas` : "…"}`
-                    : "Sin registrar"}
-                </dd>
-                {slot && (
-                  <>
-                    <dt>Posición</dt>
-                    <dd>
-                      {slot} ({order.indexOf(slot) + 1} de {order.length})
-                    </dd>
-                  </>
-                )}
-              </dl>
-              {!boxViewOpen && (
+          <h2 className="fv-h2">
+            Racks <small>sección · rack</small>
+          </h2>
+          <div className="fv-rackbar">
+            {(layout ?? []).map((section) => (
+              <div key={section.code} className={`fv-rackbar__section${sel.section === section.code ? " on" : ""}`}>
                 <button
                   type="button"
-                  className="fv-btn"
-                  onClick={() => setBoxViewOpen(true)}
+                  className="fv-rackbar__name"
+                  title={sectionDescription(section.code)}
+                  onClick={() => selectSection(section.code)}
                 >
-                  Abrir caja {formatLabel(selSlot.boxType)}
+                  {section.code}
                 </button>
-              )}
-              {onBoxChanged && !selSlot.box && (
-                <div className="fv-newbox">
-                  <label htmlFor="fv-newbox-type">Registrar caja en este lugar</label>
-                  <div>
-                    <select
-                      id="fv-newbox-type"
-                      value={newBoxType}
-                      onChange={(event) => setNewBoxType(event.target.value as BoxType)}
-                    >
-                      <option value="carton_81">Cartón 9 × 9</option>
-                      <option value="plastic_100">Plástica 10 × 10</option>
-                    </select>
+                {[section.center, section.right].map((rack, index) =>
+                  rack ? (
                     <button
+                      key={rack.letter}
                       type="button"
-                      className="fv-btn"
-                      disabled={boxActionBusy}
-                      onClick={() =>
-                        runBoxAction(async () => {
-                          await api.createBox({ rack_id: selRack.rack.id, number: selSlot.number, box_type: newBoxType });
-                          return `Caja ${selRack.rack.letter}${selSlot.number} registrada (${formatLabel(newBoxType)}).`;
-                        })
-                      }
+                      className={sel.rack === rack.letter ? "on" : ""}
+                      aria-label={`Sección ${section.code}, rack ${rack.letter} (${index === 0 ? "centro" : "derecha"})`}
+                      onClick={() => selectRack(rack.letter)}
                     >
-                      Registrar caja
+                      {rack.letter}
                     </button>
-                  </div>
-                </div>
-              )}
-              {onBoxChanged && selSlot.box && lights !== null && occupiedCount === 0 && (
-                <button
-                  type="button"
-                  className="fv-btn fv-btn--quiet"
-                  disabled={boxActionBusy}
-                  onClick={() =>
-                    runBoxAction(async () => {
-                      await api.deactivateBox(selSlot.box!.id);
-                      return `Caja ${selRack.rack.letter}${selSlot.number} dada de baja. Su historial se conserva y el lugar quedó libre.`;
-                    })
-                  }
-                >
-                  Dar de baja caja
-                </button>
-              )}
-              {boxActionError && (
-                <p className="field-error" role="alert">
-                  {boxActionError}
-                </p>
-              )}
-              {onMoveBox && selSlot.box && occupiedCount > 0 && (
-                <button
-                  type="button"
-                  className="fv-btn"
-                  onClick={() =>
-                    onMoveBox({
-                      boxId: selSlot.box!.id,
-                      label: `${selRack.sectionCode} · ${selRack.rack.letter}${selSlot.number}`,
-                      active: occupiedCount,
-                    })
-                  }
-                >
-                  Mover caja
-                </button>
-              )}
-            </>
-          )}
+                  ) : (
+                    <button key={`empty-${index}`} type="button" disabled title="Sin rack en esta posición">
+                      —
+                    </button>
+                  ),
+                )}
+              </div>
+            ))}
+          </div>
         </section>
 
-        {selRack && (
-          <section>
-            <h2 className="fv-h2">% de uso</h2>
-            <FreezerUsagePanel
-              rack={
-                selRack
-                  ? {
-                      sectionCode: selRack.sectionCode,
-                      letter: selRack.rack.letter,
-                      occupancy:
-                        rackOccupancy.find(
-                          (rack) => rack.rack_id === selRack.rack.id,
-                        ) ?? null,
-                    }
-                  : null
-              }
-              box={
-                selSlot && lights
-                  ? {
-                      number: selSlot.number,
-                      occupied: occupiedCount,
-                      total: lights.length,
-                    }
-                  : null
-              }
-            />
-          </section>
-        )}
+        <p className="fv-model">
+          Haier DW-86L388J · −86 °C · {layout?.length ?? 4} estantes · {racksByLetter.size} racks · {totalBoxes} cajas
+        </p>
       </aside>
     </div>
   );

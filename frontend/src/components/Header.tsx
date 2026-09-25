@@ -26,6 +26,10 @@ export interface HeaderProps {
   search: ReactNode;
   onFreeze: () => void;
   onThaw: () => void;
+  /** "Mis muestras": muestras activas de la persona de la sesión (propias y compartidas). */
+  myCount: number | null;
+  myFilterActive: boolean;
+  onToggleMine: () => void;
   alertCount: number;
   alertsOpen: boolean;
   onToggleAlerts: () => void;
@@ -104,7 +108,8 @@ function UserMenu({
 }
 
 export function Header(props: HeaderProps) {
-  const { viewMode, search, onFreeze, onThaw, alertCount, alertsOpen, onToggleAlerts } = props;
+  const { viewMode, search, onFreeze, onThaw, alertCount, alertsOpen, onToggleAlerts, myCount, myFilterActive, onToggleMine } =
+    props;
   return (
     <header className="app-header">
       <div className="app-brand">
@@ -116,6 +121,15 @@ export function Header(props: HeaderProps) {
       </div>
       <div className="app-header__search">{search}</div>
       <div className="header-actions">
+        <button
+          type="button"
+          className={`btn mine-btn${myFilterActive ? " on" : ""}`}
+          aria-pressed={myFilterActive}
+          onClick={onToggleMine}
+        >
+          <span aria-hidden="true">★</span> Mis muestras
+          {myCount !== null && <span className="mine-btn__count">{myCount}</span>}
+        </button>
         <button type="button" className="btn" onClick={onFreeze}>
           + Congelar
         </button>

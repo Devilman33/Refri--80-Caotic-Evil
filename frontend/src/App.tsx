@@ -231,6 +231,34 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
 
   const myFilterActive = filters.owner_initials === sessionUser.initials;
 
+  // Cuántas muestras activas tiene la persona de la sesión (propias y compartidas): va en
+  // el botón "Mis muestras" de la barra y en el resumen del visor.
+  const [myCount, setMyCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .searchSamples({ owner_initials: sessionUser.initials, status: "active", page: 1, page_size: 1 })
+      .then((page) => {
+        if (!cancelled) setMyCount(page.total);
+      })
+      .catch(() => {
+        if (!cancelled) setMyCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionUser.initials, reloadToken]);
+
+  /** "Mis muestras" lleva a la tabla filtrada por la sesión; apretarlo de nuevo lo quita. */
+  function toggleMine() {
+    if (myFilterActive && viewMode === "table") {
+      toggleMyFilter();
+      return;
+    }
+    setViewMode("table");
+    setFilters((current) => ({ ...current, owner_initials: sessionUser.initials, status: "active", page: 1 }));
+  }
+
   const sort: SortState | null = filters.sort_by ? { key: filters.sort_by, direction: filters.sort_dir ?? "asc" } : null;
 
   function handleSortChange(next: SortState | null) {
@@ -384,6 +412,9 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
             message={searchMessage}
           />
         }
+        myCount={myCount}
+        myFilterActive={myFilterActive && viewMode === "table"}
+        onToggleMine={toggleMine}
         onFreeze={() => setMovementDialog({ kind: "freeze" })}
         onThaw={() => setMovementDialog({ kind: "thaw" })}
         alertCount={alertCount}
@@ -563,6 +594,26 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
               refreshInventory();
             }}
             detailSlot={detailPanel}
+            summarySlot={
+              <section className="fv-card fv-summary">
+                <h2 className="fv-h2">Hola, {userLabel(sessionUser)}</h2>
+                <p className="fv-line">
+                  {myCount === null
+                    ? "Cargando tus muestras…"
+                    : myCount === 0
+                      ? "No tienes muestras activas en el refri."
+                      : `Tienes ${myCount} ${myCount === 1 ? "muestra activa" : "muestras activas"} en el refri.`}
+                </p>
+                <div className="fv-actions">
+                  <button type="button" className="fv-btn" onClick={toggleMine}>
+                    Ver mis muestras
+                  </button>
+                </div>
+                <p className="fv-line fv-line--muted">
+                  Toca una caja del modelo, un rack de la lista o busca un ID arriba.
+                </p>
+              </section>
+            }
           />
         )}
       </main>
