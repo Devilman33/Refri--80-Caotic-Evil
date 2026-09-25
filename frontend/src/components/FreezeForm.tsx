@@ -15,6 +15,7 @@ import {
 import { nextFreePosition, parseBoxName } from "../utils/positions";
 import { todayIso } from "../utils/format";
 import { sectionCodeForBox } from "../utils/positions";
+import { LocationSelect, type LocationValue } from "./LocationSelect";
 import { Modal } from "./Modal";
 import { OwnersPicker } from "./OwnersPicker";
 import { PositionPicker } from "./PositionPicker";
@@ -95,7 +96,19 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
   // Muestras guardadas desde que se abrió el formulario (docs/PLAN_FRONTEND.md, F1).
   const [batch, setBatch] = useState<{ location: string; position: string }[]>([]);
   const environIdRef = useRef<HTMLInputElement | null>(null);
-  const boxNameRef = useRef<HTMLInputElement | null>(null);
+  // Sección → Rack → Caja como listas (parte 3). El valor interno sigue siendo "A12":
+  // el resto del formulario (grilla, tanda, envío) no cambia.
+  const [locationDraft, setLocationDraft] = useState<LocationValue>({
+    sectionCode: initial?.sectionCode ?? "",
+    rackLetter: initial?.rackLetter ?? "",
+    boxNumber: initial?.boxNumber ?? null,
+  });
+  // Si el encargado ya se usó para sugerir una caja, no se vuelve a pisar lo que se eligió.
+  const ownerSuggestionDone = useRef(Boolean(initial?.rackLetter));
+
+  function focusBoxSelect() {
+    window.setTimeout(() => document.getElementById("mf-loc-box")?.focus(), 0);
+  }
 
   const occupied = useMemo(
     () => new Set(boxPositions.filter((entry) => entry.occupied).map((entry) => entry.position)),
@@ -126,6 +139,47 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
   // Sección se deduce del rack de "Nombre Caja": pedirla aparte solo permitía que no
   // coincidieran (docs/FORMULARIO.md, desviaciones).
   const sectionCode = useMemo(() => sectionCodeForBox(form.boxName, racks, sections), [form.boxName, racks, sections]);
+
+  // Cuando la caja cambia desde afuera (autocompletado), los desplegables la muestran.
+  useEffect(() => {
+    const parsed = parseBoxName(form.boxName);
+    if (!parsed || !sectionCode) return;
+    setLocationDraft((current) =>
+      current.rackLetter === parsed.rackLetter && current.boxNumber === parsed.boxNumber
+        ? current
+        : { sectionCode, rackLetter: parsed.rackLetter, boxNumber: parsed.boxNumber },
+    );
+  }, [form.boxName, sectionCode]);
+
+  // Precedencia del encargado: sin caja elegida todavía, se sugiere la última caja donde
+  // el encargado guardó muestras y su siguiente posición libre.
+  const firstOwner = form.ownerInitials[0] ?? "";
+  useEffect(() => {
+    if (!firstOwner || ownerSuggestionDone.current) return;
+    let cancelled = false;
+    api
+      .getAutocompleteSuggestions({ owner_initials: firstOwner })
+      .then((suggestion) => {
+        if (cancelled || !suggestion.rack_letter || !suggestion.box_number || !suggestion.next_free_position) return;
+        setForm((current) =>
+          current.boxName.trim()
+            ? current
+            : {
+                ...current,
+                boxName: `${suggestion.rack_letter}${suggestion.box_number}`,
+                position: suggestion.next_free_position ?? current.position,
+              },
+        );
+        setNotice(
+          `Sugerido: la última caja de ${firstOwner} (${suggestion.rack_letter}${suggestion.box_number}), posición ${suggestion.next_free_position}.`,
+        );
+        ownerSuggestionDone.current = true;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [firstOwner]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -218,7 +272,7 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
 
     const parsedBox = parseBoxName(form.boxName);
     if (!form.boxName.trim()) {
-      errors.boxName = "El nombre de la caja es obligatorio";
+      errors.boxName = "Elige la sección, el rack y la caja";
     } else if (!parsedBox) {
       errors.boxName = "Formato inválido: letra de rack + N° de caja (p. ej. A12)";
     } else {
@@ -313,7 +367,7 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
         } else {
           // No se salta de caja solo: elegir otra caja es una decisión de quien congela.
           setNotice(`Muestra guardada en ${form.position}. La caja ${form.boxName.trim().toUpperCase()} está llena: elige otra caja para seguir.`);
-          window.setTimeout(() => boxNameRef.current?.focus(), 0);
+          focusBoxSelect();
         }
       } else {
         close();
@@ -436,23 +490,18 @@ export function FreezeForm({ users, sessionInitials, initial, onClose, onSubmitt
             />
           </div>
 
-          <div className="field">
-            <label htmlFor="mf-box-name">Nombre Caja (Letra rack y N° de caja)</label>
-            <input
-              id="mf-box-name"
-              ref={boxNameRef}
-              value={form.boxName}
-              onChange={(event) => set("boxName", event.target.value)}
-              placeholder="p. ej. A12"
-            />
-            {fieldErrors.boxName && <p className="field-error">{fieldErrors.boxName}</p>}
-          </div>
-
-          <div className="field">
-            <label htmlFor="mf-section">Sección</label>
-            <input id="mf-section" value={sectionCode ?? ""} readOnly placeholder="Según el rack" />
-            <p className="field-hint">Se completa sola según la letra del rack.</p>
-          </div>
+          <LocationSelect
+            idPrefix="mf-loc"
+            mode="with-space"
+            value={locationDraft}
+            onChange={(next, box) => {
+              setLocationDraft(next);
+              ownerSuggestionDone.current = true;
+              const boxName = box ? `${box.rackLetter}${box.boxNumber}` : "";
+              setForm((current) => (current.boxName === boxName ? current : { ...current, boxName, position: "" }));
+            }}
+          />
+          {fieldErrors.boxName && <p className="field-error field--full">{fieldErrors.boxName}</p>}
 
           <div className="field">
             <label htmlFor="mf-box-type">Tipo de subcaja</label>

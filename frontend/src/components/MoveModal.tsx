@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
-import type { PositionConflict, RackRead, SampleWithLocation, SectionRead, UserRead } from "../api/types";
+import type { PositionConflict, RackRead, SampleWithLocation, UserRead } from "../api/types";
 import { useBoxResolution } from "../hooks/useBoxResolution";
 import { todayIso } from "../utils/format";
-import { parseBoxName, sectionCodeForBox } from "../utils/positions";
+import { parseBoxName } from "../utils/positions";
+import { EMPTY_LOCATION, LocationSelect, type LocationValue } from "./LocationSelect";
 import { Modal } from "./Modal";
 import { PositionPicker } from "./PositionPicker";
 import { UserOptions } from "./UserOptions";
@@ -26,8 +27,8 @@ export interface MoveModalProps {
  */
 export function MoveModal({ sample, users, sessionInitials, onClose, onMoved }: MoveModalProps) {
   const [racks, setRacks] = useState<RackRead[]>([]);
-  const [sections, setSections] = useState<SectionRead[]>([]);
   const [boxName, setBoxName] = useState("");
+  const [location, setLocation] = useState<LocationValue>(EMPTY_LOCATION);
   const [position, setPosition] = useState("");
   const [operatorInitials, setOperatorInitials] = useState(sessionInitials);
   const [date, setDate] = useState(todayIso);
@@ -38,7 +39,6 @@ export function MoveModal({ sample, users, sessionInitials, onClose, onMoved }: 
   const [saving, setSaving] = useState(false);
 
   const box = useBoxResolution(boxName, racks);
-  const sectionCode = sectionCodeForBox(boxName, racks, sections);
   // Sin una caja de destino válida la grilla mostraba 81 posiciones "libres" que no eran de
   // ninguna caja: se deshabilita hasta saber cuál es.
   const parsedDestination = parseBoxName(boxName);
@@ -47,7 +47,6 @@ export function MoveModal({ sample, users, sessionInitials, onClose, onMoved }: 
 
   useEffect(() => {
     api.listRacks().then(setRacks).catch(() => setRacks([]));
-    api.listSections().then(setSections).catch(() => setSections([]));
   }, []);
 
   function validate(): Record<string, string> {
@@ -57,7 +56,7 @@ export function MoveModal({ sample, users, sessionInitials, onClose, onMoved }: 
 
     const parsed = parseBoxName(boxName);
     if (!boxName.trim()) {
-      errors.boxName = "El nombre de la caja es obligatorio";
+      errors.boxName = "Elige la sección, el rack y la caja de destino";
     } else if (!parsed) {
       errors.boxName = "Formato inválido: letra de rack + N° de caja (p. ej. A12)";
     } else {
@@ -143,19 +142,19 @@ export function MoveModal({ sample, users, sessionInitials, onClose, onMoved }: 
           {fieldErrors.operatorInitials && <p className="field-error">{fieldErrors.operatorInitials}</p>}
         </div>
 
+        {/* Destino como listas (parte 3): solo cajas con espacio o lugares sin caja. */}
+        <LocationSelect
+          idPrefix="mv"
+          mode="with-space"
+          value={location}
+          onChange={(next, resolved) => {
+            setLocation(next);
+            setBoxName(resolved ? `${resolved.rackLetter}${resolved.boxNumber}` : "");
+            setPosition("");
+          }}
+        />
         <div className="field">
-          <label htmlFor="mv-box">Nombre Caja (Letra rack y N° de caja)</label>
-          <input
-            id="mv-box"
-            value={boxName}
-            onChange={(event) => {
-              setBoxName(event.target.value);
-              setPosition("");
-            }}
-            placeholder="p. ej. A12"
-          />
           {fieldErrors.boxName && <p className="field-error">{fieldErrors.boxName}</p>}
-          {sectionCode && <p className="field-hint">Sección {sectionCode}</p>}
           {!fieldErrors.boxName && boxName.trim() !== "" && (
             <p className="field-hint">
               {box.boxExists ? "Caja existente: se muestran sus posiciones." : "Caja nueva: se creará al mover."}
@@ -165,7 +164,7 @@ export function MoveModal({ sample, users, sessionInitials, onClose, onMoved }: 
 
         <div className="field field--full">
           <label>Posición de destino</label>
-          {!destinationReady && <p className="field-hint">Escribe la caja de destino para elegir la posición.</p>}
+          {!destinationReady && <p className="field-hint">Elige la caja de destino para ver sus posiciones.</p>}
           <PositionPicker
             boxType={box.boxType}
             occupied={box.occupied}

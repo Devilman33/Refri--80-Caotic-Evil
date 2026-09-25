@@ -13,6 +13,7 @@ vi.mock("../../api/client", async () => {
       listRacks: vi.fn(),
       listSections: vi.fn(),
       listBoxes: vi.fn(),
+      listBoxOccupancy: vi.fn(),
       getBoxPositions: vi.fn(),
       moveSample: vi.fn(),
     },
@@ -54,10 +55,21 @@ beforeEach(() => {
     { id: 1, rack_id: 1, number: 2, box_type: "carton_81", label: null, owner_id: null, is_full: null, active: true },
   ]);
   vi.mocked(api.getBoxPositions).mockResolvedValue([]);
+  vi.mocked(api.listBoxOccupancy).mockResolvedValue([
+    { box_id: 1, number: 2, rack_id: 1, rack_letter: "A", section_code: "I", box_type: "carton_81", is_full: false, active: 3, capacity: 81, percent: 3.7 },
+  ]);
 });
 
+/** Destino como listas (parte 3). */
+async function chooseBox(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByRole("option", { name: "I" });
+  await user.selectOptions(screen.getByLabelText(/^sección$/i), "I");
+  await user.selectOptions(screen.getByLabelText(/^rack$/i), "A");
+  await user.selectOptions(screen.getByLabelText(/^caja$/i), "2");
+}
+
 async function fillDestination(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText(/nombre caja/i), "A2");
+  await chooseBox(user);
   await waitFor(() => expect(api.getBoxPositions).toHaveBeenCalled());
   await user.click(screen.getByRole("button", { name: /^posición 3b,/i }));
 }
@@ -109,17 +121,18 @@ describe("MoveModal", () => {
     expect(screen.getByLabelText(/operador/i)).toHaveValue("MN");
     await user.click(screen.getByRole("button", { name: /^mover$/i }));
 
-    expect(await screen.findByText(/el nombre de la caja es obligatorio/i)).toBeInTheDocument();
+    expect(await screen.findByText(/elige la sección, el rack y la caja de destino/i)).toBeInTheDocument();
     expect(api.moveSample).not.toHaveBeenCalled();
   });
 
-  it("deduce la sección del rack", async () => {
+  it("el destino se elige de listas con las cajas que tienen espacio", async () => {
     const user = userEvent.setup();
     render(<MoveModal sample={sample} users={users} sessionInitials="MN" onClose={vi.fn()} onMoved={vi.fn()} />);
 
-    await user.type(screen.getByLabelText(/nombre caja/i), "A2");
+    await chooseBox(user);
 
-    expect(await screen.findByText("Sección I")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "A2 · 78 libres de 81" })).toBeInTheDocument();
+    expect(await screen.findByText(/caja existente: se muestran sus posiciones/i)).toBeInTheDocument();
   });
 
   it("ante un 409 ofrece la siguiente posición libre", async () => {
@@ -150,10 +163,10 @@ describe("MoveModal · grilla de destino", () => {
     const user = userEvent.setup();
     render(<MoveModal sample={sample} users={users} sessionInitials="MN" onClose={vi.fn()} onMoved={vi.fn()} />);
 
-    expect(screen.getByText(/escribe la caja de destino/i)).toBeInTheDocument();
+    expect(screen.getByText(/elige la caja de destino/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^posición 3b,/i })).toBeDisabled();
-    await user.type(screen.getByLabelText(/nombre caja/i), "A2");
+    await chooseBox(user);
     await waitFor(() => expect(screen.getByRole("button", { name: /^posición 3b,/i })).toBeEnabled());
-    expect(screen.queryByText(/escribe la caja de destino/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/elige la caja de destino para ver/i)).not.toBeInTheDocument();
   });
 });

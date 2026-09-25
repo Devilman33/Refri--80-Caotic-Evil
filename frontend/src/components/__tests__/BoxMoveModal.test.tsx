@@ -17,6 +17,7 @@ const { api, ApiError } = vi.hoisted(() => {
       listRacks: vi.fn(),
       listSections: vi.fn(),
       listBoxes: vi.fn(),
+      listBoxOccupancy: vi.fn(),
       getBoxPositions: vi.fn(),
       moveBox: vi.fn(),
     },
@@ -53,52 +54,46 @@ beforeEach(() => {
   api.listRacks.mockResolvedValue(racks);
   api.listSections.mockResolvedValue(sections);
   api.listBoxes.mockResolvedValue([]);
+  api.listBoxOccupancy.mockResolvedValue([]);
   api.getBoxPositions.mockResolvedValue([]);
 });
 
-describe("BoxMoveModal · destino en vivo (F4)", () => {
+function occupancy(box_id: number, rack_id: number, rack_letter: string, section_code: string, number: number, active: number) {
+  return { box_id, number, rack_id, rack_letter, section_code, box_type: "carton_81" as const, is_full: false, active, capacity: 81, percent: 0 };
+}
+
+/** Nuevo lugar como listas (parte 3). */
+async function choosePlace(user: ReturnType<typeof userEvent.setup>, section: string, rack: string, number: string) {
+  await screen.findByRole("option", { name: section });
+  await user.selectOptions(screen.getByLabelText(/^sección$/i), section);
+  await user.selectOptions(screen.getByLabelText(/^rack$/i), rack);
+  await user.selectOptions(screen.getByLabelText(/^caja$/i), number);
+}
+
+describe("BoxMoveModal · destino como listas (F4, parte 3)", () => {
+  it("solo ofrece lugares sin muestras: libres o con una caja vacía", async () => {
+    api.listBoxOccupancy.mockResolvedValue([
+      occupancy(5, 1, "A", "I", 3, 34),
+      occupancy(9, 4, "D", "II", 7, 2),
+      occupancy(10, 4, "D", "II", 8, 0),
+    ]);
+    const user = userEvent.setup();
+    renderModal();
+
+    await screen.findByRole("option", { name: "II" });
+    await user.selectOptions(screen.getByLabelText(/^sección$/i), "II");
+    await user.selectOptions(screen.getByLabelText(/^rack$/i), "D");
+
+    expect(screen.queryByRole("option", { name: /^D7 ·/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "D8 · caja vacía" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "D1 · lugar libre" })).toBeInTheDocument();
+  });
+
   it("dice que el destino está libre antes de confirmar", async () => {
     const user = userEvent.setup();
     renderModal();
-    await user.type(screen.getByLabelText(/nuevo lugar/i), "D7");
+    await choosePlace(user, "II", "D", "7");
     expect(await screen.findByText(/D7 está libre/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/sección/i)).toHaveValue("II");
-  });
-
-  it("avisa si en el destino ya hay una caja con muestras y no deja mover", async () => {
-    api.listBoxes.mockResolvedValue([
-      { id: 9, rack_id: 4, number: 7, box_type: "carton_81", label: null, owner_id: null, is_full: false, active: true },
-    ]);
-    api.getBoxPositions.mockResolvedValue([
-      { position: "1A", occupied: true, sample_id: 1, environ_id: "X", is_core: false, owners: [] },
-      { position: "1B", occupied: true, sample_id: 2, environ_id: "Y", is_core: false, owners: [] },
-    ]);
-    const user = userEvent.setup();
-    renderModal();
-    await user.type(screen.getByLabelText(/nuevo lugar/i), "D7");
-
-    expect(await screen.findByText(/en D7 ya hay una caja con 2 muestras/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^mover caja$/i }));
-    expect(api.moveBox).not.toHaveBeenCalled();
-  });
-
-  it("avisa si el rack no existe o la caja se pasa de la capacidad", async () => {
-    const user = userEvent.setup();
-    renderModal();
-    const input = screen.getByLabelText(/nuevo lugar/i);
-    await user.type(input, "G1");
-    expect(await screen.findByText(/no existe el rack 'G'/i)).toBeInTheDocument();
-    await user.clear(input);
-    await user.type(input, "A99");
-    expect(await screen.findByText(/el rack A tiene lugar para 28 cajas/i)).toBeInTheDocument();
-  });
-
-  it("mientras se escribe la primera letra no reclama el formato", async () => {
-    const user = userEvent.setup();
-    renderModal();
-    await user.type(screen.getByLabelText(/nuevo lugar/i), "D");
-    await waitFor(() => expect(api.listRacks).toHaveBeenCalled());
-    expect(screen.queryByText(/formato inválido/i)).not.toBeInTheDocument();
   });
 
   it("con un destino libre traslada la caja e informa de dónde a dónde", async () => {
@@ -106,7 +101,7 @@ describe("BoxMoveModal · destino en vivo (F4)", () => {
     const onMoved = vi.fn();
     const user = userEvent.setup();
     renderModal(onMoved);
-    await user.type(screen.getByLabelText(/nuevo lugar/i), "D7");
+    await choosePlace(user, "II", "D", "7");
     await screen.findByText(/D7 está libre/i);
     await user.click(screen.getByRole("button", { name: /^mover caja$/i }));
 

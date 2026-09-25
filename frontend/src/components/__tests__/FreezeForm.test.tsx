@@ -19,6 +19,7 @@ const { api, ApiError } = vi.hoisted(() => {
       listRacks: vi.fn(),
       listSections: vi.fn(),
       listBoxes: vi.fn(),
+      listBoxOccupancy: vi.fn(),
       getBoxPositions: vi.fn(),
       getAutocompleteSuggestions: vi.fn(),
       createMovement: vi.fn(),
@@ -75,10 +76,33 @@ function baseMovementResult(overrides: Partial<MovementResult["sample"]> = {}): 
   };
 }
 
+/** Sección → Rack → Caja como listas (parte 3). */
+async function chooseBox(user: ReturnType<typeof userEvent.setup>, number = "1") {
+  await screen.findByRole("option", { name: "I" });
+  await user.selectOptions(screen.getByLabelText(/^sección$/i), "I");
+  await user.selectOptions(screen.getByLabelText(/^rack$/i), "A");
+  await user.selectOptions(screen.getByLabelText(/^caja$/i), number);
+}
+
+function occupancy(box_id: number, number: number, active: number) {
+  return {
+    box_id,
+    number,
+    rack_id: 1,
+    rack_letter: "A",
+    section_code: "I",
+    box_type: "carton_81" as const,
+    is_full: false,
+    active,
+    capacity: 81,
+    percent: 0,
+  };
+}
+
 async function fillRequiredFreezeFields(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/id environ/i), "BP001");
   await user.selectOptions(screen.getByLabelText(/^tipo$/i), "vial_celulas");
-  await user.type(screen.getByLabelText(/nombre caja/i), "A1");
+  await chooseBox(user);
   await user.selectOptions(screen.getByLabelText(/núcleo environ/i), "true");
   await waitFor(() => expect(api.listBoxes).toHaveBeenCalled());
   await user.click(screen.getByRole("button", { name: /^posición 1a,/i }));
@@ -89,6 +113,7 @@ beforeEach(() => {
   api.listRacks.mockResolvedValue(racks);
   api.listSections.mockResolvedValue(sections);
   api.listBoxes.mockResolvedValue([]);
+  api.listBoxOccupancy.mockResolvedValue([]);
   api.getBoxPositions.mockResolvedValue([]);
   api.getAutocompleteSuggestions.mockResolvedValue({
     environ_id: null,
@@ -122,8 +147,9 @@ describe("FreezeForm", () => {
       /^tipo$/i,
       /operador/i,
       /pasaje/i,
-      /sección/i,
-      /nombre caja/i,
+      /^sección$/i,
+      /^rack$/i,
+      /^caja$/i,
       /núcleo environ/i,
       /encargados de la muestra/i,
     ]) {
@@ -208,14 +234,39 @@ describe("FreezeForm", () => {
     expect(api.createMovement).not.toHaveBeenCalled();
   });
 
-  it("la sección se completa sola según el rack de la caja", async () => {
+  it("sección, rack y caja se eligen de listas, con las cajas nuevas y las que tienen espacio", async () => {
+    api.listBoxOccupancy.mockResolvedValue([occupancy(5, 1, 80), occupancy(6, 2, 81)]);
     const user = userEvent.setup();
     renderForm();
 
-    expect(screen.getByLabelText(/sección/i)).toHaveValue("");
-    await user.type(screen.getByLabelText(/nombre caja/i), "A1");
+    await chooseBox(user);
 
-    await waitFor(() => expect(screen.getByLabelText(/sección/i)).toHaveValue("I"));
+    expect(screen.getByRole("option", { name: "A1 · 1 libres de 81" })).toBeInTheDocument();
+    // La caja llena no se ofrece; un lugar sin caja sí, como caja nueva.
+    expect(screen.queryByRole("option", { name: /^A2 ·/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "A3 · caja nueva" })).toBeInTheDocument();
+    await waitFor(() => expect(api.listBoxes).toHaveBeenCalled());
+  });
+
+  it("sugiere la última caja del encargado y su siguiente posición libre", async () => {
+    api.getAutocompleteSuggestions.mockImplementation(async (params: { owner_initials?: string }) => ({
+      environ_id: null,
+      description: null,
+      sample_type: null,
+      type_other: null,
+      passage: null,
+      is_core: null,
+      owner_initials: [],
+      rack_letter: params.owner_initials ? "A" : null,
+      box_number: params.owner_initials ? 1 : null,
+      box_id: 5,
+      next_free_position: params.owner_initials ? "2A" : null,
+    }));
+    renderForm();
+
+    await waitFor(() => expect(api.getAutocompleteSuggestions).toHaveBeenCalledWith({ owner_initials: "GC" }));
+    expect(await screen.findByText(/última caja de GC \(A1\), posición 2A/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/^caja$/i)).toHaveValue("1"));
   });
 
   it("autocompletado: sugiere los datos de otras muestras con el mismo ID Environ", async () => {
@@ -242,7 +293,8 @@ describe("FreezeForm", () => {
     expect(screen.getByLabelText(/^tipo$/i)).toHaveValue("rna");
     expect(screen.getByLabelText(/núcleo environ/i)).toHaveValue("false");
     expect(screen.getByRole("list", { name: /encargados elegidos/i })).toHaveTextContent("Daniela Bravo");
-    expect(screen.getByLabelText(/nombre caja/i)).toHaveValue("A1");
+    await waitFor(() => expect(screen.getByLabelText(/^caja$/i)).toHaveValue("1"));
+    expect(screen.getByLabelText(/^rack$/i)).toHaveValue("A");
   });
 
   it('"Guardar y siguiente" conserva los datos del set y avanza a la siguiente posición libre', async () => {
@@ -292,20 +344,21 @@ describe("FreezeForm", () => {
   it("prellena caja, sección y posición cuando viene de un clic en el visor 3D", async () => {
     renderForm({ initial: { sectionCode: "I", rackLetter: "A", boxNumber: 1, boxType: "carton_81", position: "1A" } });
 
-    expect(screen.getByLabelText(/nombre caja/i)).toHaveValue("A1");
-    await waitFor(() => expect(screen.getByLabelText(/sección/i)).toHaveValue("I"));
+    await waitFor(() => expect(screen.getByLabelText(/^sección$/i)).toHaveValue("I"));
+    await waitFor(() => expect(screen.getByLabelText(/^caja$/i)).toHaveValue("1"));
     await waitFor(() => expect(screen.getByRole("button", { name: /^posición 1a,/i })).toHaveAttribute("aria-pressed", "true"));
   });
 
   it("la grilla marca el núcleo y trae leyenda", async () => {
     api.listBoxes.mockResolvedValue([{ id: 5, rack_id: 1, number: 1, box_type: "carton_81", label: null, owner_id: null, is_full: null, active: true }]);
+    api.listBoxOccupancy.mockResolvedValue([occupancy(5, 1, 1)]);
     api.getBoxPositions.mockResolvedValue([
       { position: "1A", occupied: true, sample_id: 9, environ_id: "BP009", is_core: true },
     ]);
     const user = userEvent.setup();
     renderForm();
 
-    await user.type(screen.getByLabelText(/nombre caja/i), "A1");
+    await chooseBox(user);
     await waitFor(() => expect(api.getBoxPositions).toHaveBeenCalled());
 
     // Regla no negociable: el warning de Núcleo es visible en TODAS las vistas.
@@ -356,12 +409,13 @@ describe("FreezeForm · tanda del mismo set (F1)", () => {
     expect(onFinished).toHaveBeenCalledWith("2 muestras congeladas en I · A1 (1A, 1B).");
   });
 
-  it("si la caja se llena a mitad de tanda lo dice y lleva el foco a Nombre Caja, sin saltar de caja", async () => {
+  it("si la caja se llena a mitad de tanda lo dice y lleva el foco a la caja, sin saltar de caja", async () => {
     const allButLast = Array.from({ length: 9 }, (_, c) => "ABCDEFGHI".split("").map((r) => `${c + 1}${r}`))
       .flat()
       .filter((position) => position !== "9I")
       .map((position) => ({ position, occupied: true, sample_id: 1, environ_id: "X", is_core: false, owners: [] }));
     api.listBoxes.mockResolvedValue([{ id: 7, rack_id: 1, number: 1, box_type: "carton_81" }]);
+    api.listBoxOccupancy.mockResolvedValue([occupancy(7, 1, 80)]);
     api.getBoxPositions.mockResolvedValue(allButLast);
     api.createMovement.mockResolvedValue(baseMovementResult());
     const user = userEvent.setup();
@@ -369,7 +423,7 @@ describe("FreezeForm · tanda del mismo set (F1)", () => {
 
     await user.type(screen.getByLabelText(/id environ/i), "BP001");
     await user.selectOptions(screen.getByLabelText(/^tipo$/i), "vial_celulas");
-    await user.type(screen.getByLabelText(/nombre caja/i), "A1");
+    await chooseBox(user);
     await user.selectOptions(screen.getByLabelText(/núcleo environ/i), "true");
     // Las posiciones de la caja se cargan con debounce: esperar a que 1A figure ocupada.
     await screen.findByRole("button", { name: /^posición 1a, ocupada/i });
@@ -377,6 +431,6 @@ describe("FreezeForm · tanda del mismo set (F1)", () => {
     await user.click(screen.getByRole("button", { name: /guardar y siguiente/i }));
 
     expect(await screen.findByText(/la caja A1 está llena: elige otra caja/i)).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByLabelText(/nombre caja/i)).toHaveFocus());
+    await waitFor(() => expect(screen.getByLabelText(/^caja$/i)).toHaveFocus());
   });
 });

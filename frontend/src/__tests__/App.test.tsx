@@ -303,7 +303,7 @@ describe("App · detalle como panel (T4)", () => {
 
 describe("App · mover caja (F4)", () => {
   it("después de mover, el 3D enfoca la caja en su lugar nuevo y queda el aviso", async () => {
-    api.listRacks.mockResolvedValue([{ id: 4, section_id: 2, letter: "D", slot: "right", capacity: 28 }]);
+    api.listRacks.mockResolvedValue([{ id: 4, section_id: 2, letter: "D", slot: "right", capacity: 28, active: true }]);
     api.listSections.mockResolvedValue([{ id: 2, code: "II" }]);
     api.moveBox.mockResolvedValue({ moved: 34, from_label: "I · A3", to_label: "II · D7" });
     const user = userEvent.setup();
@@ -311,7 +311,10 @@ describe("App · mover caja (F4)", () => {
 
     await user.click(await screen.findByRole("button", { name: /mover caja a3/i }));
     const dialog = await screen.findByRole("dialog", { name: /mover caja/i });
-    await user.type(within(dialog).getByLabelText(/nuevo lugar/i), "D7");
+    await within(dialog).findByRole("option", { name: "II" });
+    await user.selectOptions(within(dialog).getByLabelText(/^sección$/i), "II");
+    await user.selectOptions(within(dialog).getByLabelText(/^rack$/i), "D");
+    await user.selectOptions(within(dialog).getByLabelText(/^caja$/i), "7");
     await within(dialog).findByText(/D7 está libre/i);
     await user.click(within(dialog).getByRole("button", { name: /^mover caja$/i }));
 

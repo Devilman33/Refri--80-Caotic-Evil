@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
-import type { RackRead, SectionRead, UserRead } from "../api/types";
+import type { RackRead, UserRead } from "../api/types";
 import { useBoxResolution } from "../hooks/useBoxResolution";
 import { todayIso } from "../utils/format";
-import { parseBoxName, sectionCodeForBox } from "../utils/positions";
+import { parseBoxName } from "../utils/positions";
+import { EMPTY_LOCATION, LocationSelect, type LocationValue } from "./LocationSelect";
 import { Modal } from "./Modal";
 import { UserOptions } from "./UserOptions";
 
@@ -29,22 +30,20 @@ export interface BoxMoveModalProps {
  */
 export function BoxMoveModal({ box, users, sessionInitials, onClose, onMoved }: BoxMoveModalProps) {
   const [racks, setRacks] = useState<RackRead[]>([]);
-  const [sections, setSections] = useState<SectionRead[]>([]);
   const [date, setDate] = useState(todayIso);
   const [operatorInitials, setOperatorInitials] = useState(sessionInitials);
   const [boxName, setBoxName] = useState("");
+  const [location, setLocation] = useState<LocationValue>(EMPTY_LOCATION);
   const [note, setNote] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const destination = useBoxResolution(boxName, racks);
-  const sectionCode = useMemo(() => sectionCodeForBox(boxName, racks, sections), [boxName, racks, sections]);
   const destinationBusy = destination.occupied.size > 0;
 
   useEffect(() => {
     api.listRacks().then(setRacks).catch(() => setRacks([]));
-    api.listSections().then(setSections).catch(() => setSections([]));
   }, []);
 
   /** Qué pasa con el destino escrito, en vivo (docs/PLAN_FRONTEND.md, F4): se sabe si está
@@ -136,28 +135,25 @@ export function BoxMoveModal({ box, users, sessionInitials, onClose, onMoved }: 
           </select>
           {fieldErrors.operatorInitials && <p className="field-error">{fieldErrors.operatorInitials}</p>}
         </div>
-        <div className="field">
-          <label htmlFor="bm-box">Nuevo lugar (Letra rack y N° de caja)</label>
-          <input
-            id="bm-box"
-            value={boxName}
-            onChange={(event) => {
-              setBoxName(event.target.value);
-              setFieldErrors((current) => ({ ...current, boxName: "" }));
-            }}
-            placeholder="p. ej. B7"
-            autoComplete="off"
-            aria-describedby="bm-box-status"
-            aria-invalid={Boolean(fieldErrors.boxName || liveProblem)}
-          />
-          <p id="bm-box-status" role="status" className={fieldErrors.boxName || liveProblem ? "field-error" : "field-notice"}>
-            {fieldErrors.boxName || liveProblem || liveOk}
-          </p>
-        </div>
-        <div className="field">
-          <label htmlFor="bm-section">Sección</label>
-          <input id="bm-section" value={sectionCode ?? ""} readOnly placeholder="Según el rack" />
-        </div>
+        {/* Nuevo lugar como listas (parte 3): solo lugares sin muestras. */}
+        <LocationSelect
+          idPrefix="bm"
+          mode="empty-place"
+          value={location}
+          excludeBoxId={box.boxId}
+          onChange={(next, resolved) => {
+            setLocation(next);
+            setBoxName(resolved ? `${resolved.rackLetter}${resolved.boxNumber}` : "");
+            setFieldErrors((current) => ({ ...current, boxName: "" }));
+          }}
+        />
+        <p
+          id="bm-box-status"
+          role="status"
+          className={`field--full ${fieldErrors.boxName || liveProblem ? "field-error" : "field-notice"}`}
+        >
+          {fieldErrors.boxName || liveProblem || liveOk}
+        </p>
         <div className="field field--full">
           <label htmlFor="bm-note">Motivo (opcional)</label>
           <input id="bm-note" value={note} maxLength={255} onChange={(event) => setNote(event.target.value)} />
