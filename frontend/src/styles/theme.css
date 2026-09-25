@@ -595,12 +595,6 @@ table.samples-table {
   gap: 12px;
 }
 
-.freezer-boxview .position-grid--carton {
-  grid-template-columns: repeat(9, 1fr);
-  grid-template-rows: none;
-  grid-auto-flow: row;
-}
-
 .freezer-boxview .position-grid--plastic {
   grid-template-columns: repeat(10, 1fr);
 }
