@@ -461,7 +461,9 @@ function Workspace({ theme, onToggleTheme, users, sessionUser, onUsersChanged, o
         )}
       </main>
 
-      {selected && !editing && (
+      {/* Un solo diálogo a la vez: dos aria-modal apilados se disputan el foco y Esc
+          cierra el de abajo. Al terminar de mover o editar, el detalle vuelve a abrirse. */}
+      {selected && !editing && !moving && (
         <SampleDetail
           sample={selected}
           users={users}
