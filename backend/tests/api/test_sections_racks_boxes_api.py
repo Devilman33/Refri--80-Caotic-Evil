@@ -1,4 +1,4 @@
-from .helpers import create_box, create_rack, create_section, create_user
+from .helpers import create_box, create_rack, create_sample, create_section, create_user
 
 
 def test_create_and_list_sections(client, db_session):
@@ -90,4 +90,15 @@ def test_delete_box_with_samples_conflicts(client, db_session):
     assert response.status_code == 201
 
     response = client.delete(f"/boxes/{box['id']}")
+    assert response.status_code == 409
+
+
+def test_change_box_type_with_samples_conflicts(client, db_session):
+    section = create_section(client, code="I")
+    rack = create_rack(client, section_id=section["id"], letter="A", slot="center")
+    box = create_box(client, rack_id=rack["id"], number=1, box_type="carton_81")
+    owner = create_user(client, initials="GC")
+    create_sample(client, owner_id=owner["id"], box_id=box["id"], position="1A")
+
+    response = client.patch(f"/boxes/{box['id']}", json={"box_type": "plastic_100"})
     assert response.status_code == 409

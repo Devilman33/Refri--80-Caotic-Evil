@@ -55,6 +55,11 @@ def update_box(box_id: int, payload: BoxUpdate, db: DbSession) -> Box:
         get_or_404(db, User, data["owner_id"], "Usuario propietario no encontrado")
     if data.get("box_type") is not None:
         data["box_type"] = data["box_type"].value
+        if data["box_type"] != box.box_type and db.query(Sample).filter(Sample.box_id == box.id).first() is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "No se puede cambiar el tipo de una caja que ya tiene muestras asociadas",
+            )
     for field, value in data.items():
         setattr(box, field, value)
     try:
