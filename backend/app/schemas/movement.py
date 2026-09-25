@@ -53,6 +53,22 @@ class MovementCreate(BaseModel):
         return self
 
 
+class SampleMoveCreate(BaseModel):
+    """Traslado de una muestra: se direcciona por `sample.id`, no por posición.
+
+    Es la diferencia con `POST /movements`, que identifica la muestra por dónde está
+    porque así funciona el Google Form. Acá ya sabemos cuál es, y `environ_id` NO sirve
+    para identificarla: un mismo ID cubre hasta cientos de tubos (docs/DATOS.md).
+    """
+
+    date: date
+    operator_initials: str = Field(min_length=1, max_length=10)
+    rack_letter: str = Field(min_length=1, max_length=1)
+    box_number: int = Field(gt=0)
+    position: str = Field(min_length=1, max_length=10)
+    note: str | None = Field(default=None, max_length=255)
+
+
 class MovementRead(BaseModel):
     """Un evento del historial.
 
@@ -72,6 +88,12 @@ class MovementRead(BaseModel):
     operator_initials: str | None = None
     box_id: int
     position: str
+    #: Ubicación legible del evento, p. ej. `III · F12 · 3B`.
+    location: str | None = None
+    #: Origen de un traslado. `None` en congelamientos y descongelamientos.
+    from_box_id: int | None = None
+    from_position: str | None = None
+    from_location: str | None = None
     note: str | None
     created_at: datetime
 

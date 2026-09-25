@@ -7,8 +7,9 @@ from app.config import get_settings
 from app.importer.cleaning import parse_posicion
 from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus, SampleType, Section, User
 from app.schemas.common import Page
-from app.schemas.movement import MovementRead
+from app.schemas.movement import MovementRead, MovementResult, PositionConflict, SampleMoveCreate
 from app.schemas.sample import (
+    IdLookupResult,
     SampleCreate,
     SampleRead,
     SampleUpdate,
@@ -17,6 +18,8 @@ from app.schemas.sample import (
 )
 from app.services import csv_export
 from app.services.location import sample_with_location
+from app.services.positions import next_free_position
+from app.services.racks import ensure_box_number_within_capacity
 from app.services.search import SampleFiltersDep, build_sample_query
 from app.services.users import NUCLEO_INITIALS, get_or_create_user
 
@@ -162,6 +165,40 @@ def search_samples(
     return Page[SampleWithLocation](items=items, total=total, page=page, page_size=page_size)
 
 
+@router.get("/by-ids", response_model=IdLookupResult)
+def lookup_by_ids(db: DbSession, filters: SampleFiltersDep) -> IdLookupResult:
+    """Busca una lista de IDs pegada o escaneada y dice cuáles NO están.
+
+    Con 40 tubos en la mano, la pregunta del laboratorio no es "cuáles encontraste" sino
+    "cuáles me faltan". Por eso devuelve `missing` y no pagina: la lista está acotada a 500
+    IDs, así que el resultado entero entra en una respuesta.
+
+    El diff se hace acá y no en el cliente a propósito. Contra una respuesta paginada, un
+    diff en el frontend reportaría como faltantes todos los que quedaron fuera de la
+    página, que es exactamente la respuesta equivocada a la única pregunta que importa.
+    """
+    if not filters.id_list:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Falta 'environ_id_exact' con la lista de IDs a buscar.",
+        )
+
+    samples = (
+        build_sample_query(db, filters)
+        .options(_LOCATION_LOAD)
+        .order_by(Section.code, Rack.letter, Box.number, Sample.position)
+        .all()
+    )
+    encontrados = {sample.environ_id for sample in samples if sample.environ_id}
+    faltantes = [environ_id for environ_id in filters.id_list if environ_id not in encontrados]
+
+    return IdLookupResult(
+        items=[sample_with_location(sample) for sample in samples],
+        total=len(samples),
+        missing=faltantes,
+    )
+
+
 # IMPORTANTE: esta ruta va ANTES de `/{sample_id}`. FastAPI resuelve por orden de
 # declaración, así que si estuviera después, `/samples/export` entraría por la ruta del id
 # e intentaría parsear "export" como entero: 422, y ningún test que llame a la función
@@ -255,6 +292,116 @@ def update_sample(sample_id: int, payload: SampleUpdate, db: DbSession) -> Sampl
     db.commit()
     db.refresh(sample)
     return sample
+
+
+@router.post(
+    "/{sample_id}/movements",
+    response_model=MovementResult,
+    status_code=status.HTTP_201_CREATED,
+    responses={status.HTTP_409_CONFLICT: {"model": PositionConflict}},
+)
+def move_sample(sample_id: int, payload: SampleMoveCreate, db: DbSession) -> MovementResult:
+    """Traslada una muestra y deja el evento con origen y destino.
+
+    Por qué esta ruta y no `POST /movements`: ese endpoint identifica la muestra por su
+    ubicación, porque replica el Google Form. Un traslado necesita saber CUÁL muestra se
+    mueve antes de saber a dónde, así que va direccionado por identidad. Es la misma
+    lección que hizo descartar el "reingreso por environ_id": nunca inferir de qué muestra
+    estamos hablando.
+
+    `POST /movements` sigue siendo el endpoint del formulario y rechaza 'move' con 422.
+    """
+    # FOR UPDATE sobre la fila de la muestra. El índice parcial
+    # `uq_samples_active_position` cubre que no queden dos activas en el mismo lugar, pero
+    # no ve la carrera que importa acá: descongelar y trasladar a la vez dejaría un evento
+    # de traslado fechado después del retiro, sobre una muestra retirada cuya ubicación
+    # apunta a donde nunca estuvo.
+    sample = db.query(Sample).filter(Sample.id == sample_id).with_for_update().one_or_none()
+    if sample is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Muestra no encontrada")
+    if sample.status != SampleStatus.ACTIVE.value:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "La muestra está retirada: no se puede trasladar algo que no está en el freezer",
+        )
+
+    rack = db.query(Rack).filter(Rack.letter == payload.rack_letter.strip().upper()).one_or_none()
+    if rack is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Rack '{payload.rack_letter}' no encontrado")
+
+    position, inferred_box_type, reason = parse_posicion(payload.position)
+    if reason:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Posición inválida: {reason}")
+
+    origin_box_id = sample.box_id
+    origin_position = sample.position
+
+    box = db.query(Box).filter(Box.rack_id == rack.id, Box.number == payload.box_number).one_or_none()
+    if box is None:
+        ensure_box_number_within_capacity(rack, payload.box_number)
+        box = Box(rack_id=rack.id, number=payload.box_number, box_type=inferred_box_type)
+        db.add(box)
+        db.flush()
+    elif box.box_type != inferred_box_type:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"La caja {rack.letter}{box.number} ya es de tipo '{box.box_type}'",
+        )
+
+    if box.id == origin_box_id and position == origin_position:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "La muestra ya está en esa posición",
+        )
+
+    # La propia muestra CUENTA como ocupante. Excluirla haría que la sugerencia de
+    # "siguiente posición libre" propusiera la posición donde ya está, que es justo lo que
+    # la guarda de arriba rechaza con 422: el endpoint sugeriría algo que él mismo niega.
+    # Para el chequeo de conflicto da igual, porque mover a la posición propia ya se cortó
+    # antes.
+    active_in_box = (
+        db.query(Sample)
+        .filter(Sample.box_id == box.id, Sample.status == SampleStatus.ACTIVE.value)
+        .all()
+    )
+    occupied = {other.position for other in active_in_box}
+    if position in occupied:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "message": f"La posición {position} ya está ocupada",
+                "next_free_position": next_free_position(box.box_type, occupied),
+            },
+        )
+
+    operator = get_or_create_user(db, payload.operator_initials)
+    sample.box_id = box.id
+    sample.position = position
+
+    movement = Movement(
+        sample_id=sample.id,
+        action=MovementAction.MOVE.value,
+        date=payload.date,
+        operator_id=operator.id,
+        box_id=box.id,
+        position=position,
+        from_box_id=origin_box_id,
+        from_position=origin_position,
+        note=payload.note,
+    )
+    db.add(movement)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # Otro traslado llegó primero a la misma posición entre el chequeo y el commit.
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "La posición ya está ocupada por una muestra activa"
+        ) from exc
+
+    db.refresh(sample)
+    db.refresh(movement)
+    return MovementResult(sample=sample_with_location(sample), movement=MovementRead.model_validate(movement))
 
 
 @router.get("/{sample_id}/movements", response_model=list[MovementRead])

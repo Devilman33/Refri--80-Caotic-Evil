@@ -34,5 +34,11 @@ class Box(Base):
     owner: Mapped["User | None"] = relationship(foreign_keys=[owner_id])
     samples: Mapped[list["Sample"]] = relationship(back_populates="box")
 
+    @property
+    def location_label(self) -> str:  # pragma: no cover - usado solo para armar textos
+        """`III · F12`. NO se llama `label` porque esa ya es una columna: el nombre
+        histórico de la caja que traía el Excel ("Caja origen")."""
+        return f"{self.rack.section.code} · {self.rack.letter}{self.number}"
+
     def __repr__(self) -> str:  # pragma: no cover
         return f"Box(id={self.id!r}, rack_id={self.rack_id!r}, number={self.number!r})"

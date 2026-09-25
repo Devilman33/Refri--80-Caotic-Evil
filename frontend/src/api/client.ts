@@ -1,6 +1,10 @@
 import type {
   AlertsRead,
+  AnomalyGroup,
+  AnomalyResolveRequest,
   AutocompleteSuggestion,
+  IdLookupResult,
+  ImportRunRead,
   BoxPositionStatus,
   BoxOccupancy,
   BoxRead,
@@ -12,6 +16,7 @@ import type {
   PositionConflict,
   RackOccupancy,
   RackRead,
+  SampleMoveCreate,
   SampleSearchFilters,
   SampleUpdate,
   SampleWithLocation,
@@ -129,6 +134,25 @@ export const api = {
     const disposition = res.headers.get("content-disposition") ?? "";
     const match = /filename="?([^"]+)"?/.exec(disposition);
     return { blob: await res.blob(), filename: match?.[1] ?? "muestras.csv" };
+  },
+  lookupByIds(environIdExact: string): Promise<IdLookupResult> {
+    return request(`/samples/by-ids${buildQuery({ environ_id_exact: environIdExact })}`);
+  },
+  moveSample(id: number, payload: SampleMoveCreate): Promise<MovementResult> {
+    return post(`/samples/${id}/movements`, payload);
+  },
+  listImportRuns(): Promise<ImportRunRead[]> {
+    return request(`/imports`);
+  },
+  listAnomalyGroups(runId: number): Promise<AnomalyGroup[]> {
+    return request(`/imports/${runId}/anomalies/groups`);
+  },
+  resolveAnomalies(runId: number, payload: AnomalyResolveRequest): Promise<{ updated: number }> {
+    return request(`/imports/${runId}/anomalies`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
   },
   getAlerts(): Promise<AlertsRead> {
     return request(`/alerts`);

@@ -5,13 +5,35 @@ import type { BoxFilter } from "../utils/occupancy";
 
 export type AlertDestination =
   | { kind: "unassigned" }
-  | { kind: "boxes"; filter: BoxFilter };
+  | { kind: "boxes"; filter: BoxFilter }
+  | { kind: "anomalies" };
 
 export interface AlertsPanelProps {
   /** Se incrementa cuando algo pudo cambiar (un movimiento, una edición) para refrescar. */
   reloadToken: number;
   onNavigate: (destination: AlertDestination) => void;
   onCountChange: (total: number) => void;
+}
+
+/** Anomalías pendientes de la última importación. Es una fila más del panel y no una
+ * pestaña: corregir datos del Excel es la misma clase de tarea que asignar un encargado. */
+function useAnomalyCount(reloadToken: number): number {
+  const [pending, setPending] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listImportRuns()
+      .then(async (runs) => {
+        if (cancelled || runs.length === 0) return;
+        const groups = await api.listAnomalyGroups(runs[0].id);
+        if (!cancelled) setPending(groups.reduce((total, group) => total + group.pending, 0));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
+  return pending;
 }
 
 interface Row {
@@ -54,6 +76,7 @@ const ROWS: Row[] = [
 export function AlertsPanel({ reloadToken, onNavigate, onCountChange }: AlertsPanelProps) {
   const [alerts, setAlerts] = useState<AlertsRead | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const pendingAnomalies = useAnomalyCount(reloadToken);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,10 +108,21 @@ export function AlertsPanel({ reloadToken, onNavigate, onCountChange }: AlertsPa
   if (!alerts) return <div className="alerts-empty">Revisando…</div>;
 
   const visible = ROWS.filter((row) => row.count(alerts) > 0);
+  const extra: { key: string; label: string; destination: AlertDestination; count: number }[] =
+    pendingAnomalies > 0
+      ? [
+          {
+            key: "anomalies",
+            label: `${pendingAnomalies} ${pendingAnomalies === 1 ? "anomalía sin revisar" : "anomalías sin revisar"}`,
+            destination: { kind: "anomalies" },
+            count: pendingAnomalies,
+          },
+        ]
+      : [];
 
   // El estado vacío es una feature: "nada que revisar" es información que el laboratorio
   // quiere, no un placeholder. Cuatro ceros en fila no dicen lo mismo.
-  if (visible.length === 0) {
+  if (visible.length === 0 && extra.length === 0) {
     return <div className="alerts-empty">Nada que revisar. El inventario está consistente.</div>;
   }
 
@@ -103,6 +137,12 @@ export function AlertsPanel({ reloadToken, onNavigate, onCountChange }: AlertsPa
           </button>
         );
       })}
+      {extra.map((row) => (
+        <button key={row.key} type="button" onClick={() => onNavigate(row.destination)}>
+          <span>{row.label}</span>
+          <span className="badge badge-warn">{row.count}</span>
+        </button>
+      ))}
     </div>
   );
 }

@@ -63,7 +63,25 @@ class SampleRead(SampleBase):
     updated_at: datetime
 
 
+class IdLookupResult(BaseModel):
+    """Resultado de buscar una lista de IDs pegada o escaneada.
+
+    `missing` lo calcula el SERVIDOR, no el cliente. Si el diff se hiciera en el frontend
+    contra la página recibida, pegar 400 IDs existentes devolvería como máximo `page_size`
+    resultados (200) y la UI reportaría ~200 "no encontrados" fantasma — justo la pregunta
+    que esta feature existe para responder, contestada mal.
+    """
+
+    items: list["SampleWithLocation"]
+    total: int
+    #: Los IDs pedidos que no tienen ninguna muestra, en el orden en que se pegaron.
+    missing: list[str]
+
+
 class SampleWithLocation(SampleRead):
     """`SampleRead` más la ubicación legible, p. ej. `III · F12 · 3B`."""
 
     location: str
+
+
+IdLookupResult.model_rebuild()

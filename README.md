@@ -8,6 +8,8 @@ y porcentaje de ocupación.
 - Formulario de movimientos (igual al Google Form del laboratorio): [`docs/FORMULARIO.md`](docs/FORMULARIO.md)
 - Datos de origen e importación: [`docs/DATOS.md`](docs/DATOS.md)
 - Visor 3D de referencia: [`demo.html`](demo.html) (ábrelo en el navegador)
+- Mejoras pendientes y por qué se difirieron: [`docs/QOL.md`](docs/QOL.md)
+- Decisiones de arquitectura: [`docs/adr/`](docs/adr/)
 
 ## Desarrollo con agentes
 

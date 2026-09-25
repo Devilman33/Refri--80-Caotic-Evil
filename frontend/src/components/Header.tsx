@@ -1,4 +1,4 @@
-export type HeaderViewMode = "table" | "3d" | "usage";
+export type HeaderViewMode = "table" | "3d" | "usage" | "anomalies";
 
 /** El subtítulo describe la vista activa. Antes decía "Vista tabla / lista" fijo, así que
  * mentía con el visor 3D o el % de uso en pantalla. */
@@ -6,6 +6,7 @@ const VIEW_SUBTITLES: Record<HeaderViewMode, string> = {
   table: "Vista tabla / lista",
   "3d": "Visor 3D del freezer",
   usage: "% de uso por sección, rack y subcaja",
+  anomalies: "Anomalías del importador",
 };
 
 export interface HeaderProps {

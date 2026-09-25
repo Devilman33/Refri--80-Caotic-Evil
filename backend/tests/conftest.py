@@ -14,7 +14,10 @@ from sqlalchemy.orm import sessionmaker
 
 BACKEND_DIR = pathlib.Path(__file__).resolve().parent.parent
 
-_TABLES = "movements, samples, boxes, racks, sections, users"
+# Las tablas de importación NO tienen FK hacia este conjunto, así que el CASCADE del
+# TRUNCATE no las alcanza: si no se listan explícitamente, las corridas y sus
+# anomalías se filtran de un test al siguiente.
+_TABLES = "import_anomalies, import_runs, movements, samples, boxes, racks, sections, users"
 
 # Nombre exacto documentado en README.md y .github/workflows/ci.yml. Un simple
 # substring ("test" in nombre) también aceptaría bases como "contest" o
