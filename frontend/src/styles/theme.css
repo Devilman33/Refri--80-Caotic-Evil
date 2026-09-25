@@ -4,6 +4,9 @@
   --ink: #14202a;
   --muted: #5a6873;
   --line: #d1dae0;
+  /* Borde de controles (inputs, selects): >=3:1 contra la superficie (WCAG 1.4.11).
+     --line queda para divisores decorativos. */
+  --field-border: #7d8b95;
   --chip: #ecf0f2;
   --chip-hover: #e0e7eb;
   /* Turquesa de la marca Environ (logo: #0c6575). */
@@ -11,7 +14,7 @@
   --accent: #0c6575;
   --accent-ink: #ffffff;
   --accent-soft: #d2e7eb;
-  --warn: #b4531a;
+  --warn: #9a4413;
   --warn-soft: #f3ddce;
   --danger: #b3261e;
   --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
@@ -42,6 +45,7 @@
     --ink: #e2e9ed;
     --muted: #8d9ba6;
     --line: #25313a;
+    --field-border: #5f707b;
     --chip: #1b252c;
     --chip-hover: #223039;
     --brand: #45b3c4;
@@ -73,6 +77,7 @@
   --ink: #e2e9ed;
   --muted: #8d9ba6;
   --line: #25313a;
+  --field-border: #5f707b;
   --chip: #1b252c;
   --chip-hover: #223039;
   --brand: #45b3c4;
@@ -167,6 +172,14 @@ a {
 
 /* El logo es turquesa oscuro: sobre el fondo oscuro se le da una placa clara para que
    se lea, en vez de mantener una segunda versión del archivo. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app-brand img {
+    background: #e8f1f3;
+    border-radius: 8px;
+    padding: 3px 5px;
+  }
+}
+
 :root[data-theme="dark"] .app-brand img {
   background: #e8f1f3;
   border-radius: 8px;
@@ -261,7 +274,7 @@ a {
 .field input,
 .field select {
   background: var(--chip);
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-border);
   border-radius: 6px;
   padding: 7px 8px;
   font-size: 13px;
@@ -298,7 +311,7 @@ table.samples-table {
   padding: 0;
   color: var(--muted);
   font-weight: 600;
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   background: var(--chip);
@@ -351,7 +364,7 @@ table.samples-table {
   gap: 4px;
   border-radius: 999px;
   padding: 3px 9px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -960,7 +973,7 @@ table.samples-table {
   font-variant-numeric: tabular-nums;
 }
 .fv-cells .ax {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   display: flex;
   align-items: center;
@@ -996,7 +1009,7 @@ table.samples-table {
 .fv-axis-note {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin: 6px 0 0 32px;
 }
@@ -1093,7 +1106,7 @@ table.samples-table {
 }
 .bv-ax {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--ink);
   opacity: 0.7;
   display: flex;
@@ -1127,16 +1140,19 @@ table.samples-table {
   cursor: progress;
   opacity: 0.6;
 }
+/* Mismo código que la grilla del formulario (DESIGN.md › Estados de una posición):
+   libre = hueca, ocupada = rellena. Los --led-* son colores de emisión para la escena;
+   como texto o borde en 2D no llegan a 3:1. */
 .bv-grid .bv-slot--free {
-  background: color-mix(in srgb, var(--led-off) 22%, var(--slot));
-  border-color: var(--led-off);
-  color: var(--ink);
+  background: transparent;
+  border-color: var(--free-ink);
+  color: var(--free-ink);
 }
 .bv-grid .bv-slot--occupied,
 .bv-grid .bv-slot--core {
-  background: var(--led-on);
-  border-color: var(--led-on);
-  color: #fff;
+  background: var(--occupied-soft);
+  border-color: var(--occupied-ink);
+  color: var(--occupied-ink);
   font-weight: 600;
 }
 .bv-grid .bv-slot--core {
@@ -1153,7 +1169,7 @@ table.samples-table {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 6px;
 }
@@ -1166,10 +1182,11 @@ table.samples-table {
   margin-left: 4px;
 }
 .bv-dot--occupied {
-  background: var(--led-on);
+  background: var(--occupied-ink);
 }
 .bv-dot--free {
-  background: var(--led-off);
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--free-ink);
 }
 .bv-foot {
   border-top: 1px solid var(--line);
@@ -1221,7 +1238,7 @@ table.samples-table {
 
 
 .eyebrow {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
