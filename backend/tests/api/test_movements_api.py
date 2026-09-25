@@ -14,6 +14,17 @@ def test_freeze_creates_sample_and_movement(client, db_session):
     assert body["movement"]["action"] == "freeze"
 
 
+def test_freeze_without_environ_id_is_rejected(client, db_session):
+    _, rack, box = make_freezer(client)
+
+    response = client.post(
+        "/movements",
+        json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A", environ_id=None),
+    )
+
+    assert response.status_code == 422
+
+
 def test_freeze_on_occupied_position_returns_409_with_next_free(client, db_session):
     _, rack, box = make_freezer(client)
     client.post("/movements", json=freeze_payload(rack_letter=rack["letter"], box_number=box["number"], position="1A"))

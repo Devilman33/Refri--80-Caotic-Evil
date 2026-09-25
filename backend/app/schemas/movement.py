@@ -38,6 +38,8 @@ class MovementCreate(BaseModel):
     def _check_required_for_freeze(self) -> "MovementCreate":
         if self.action != MovementAction.FREEZE:
             return self
+        if not self.environ_id or not self.environ_id.strip():
+            raise ValueError("environ_id es obligatorio para un congelamiento")
         if self.sample_type is None:
             raise ValueError("sample_type es obligatorio para un congelamiento")
         if self.sample_type == SampleType.OTROS and not self.type_other:
