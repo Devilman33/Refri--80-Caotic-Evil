@@ -29,9 +29,9 @@ La decisión se toma **sin llamar a Claude**: el workflow lee el resumen de la r
 | Sin hallazgos abiertos | Espera la CI y mergea | No |
 | Primera review con High **o** Medium/Low | Claude corrige todos los High reales y, de los Medium/Low, **los que considere necesarios** (bugs, datos, trazabilidad, seguridad, arreglos cortos). El resto lo marca como *diferido*. Máx. 80 turnos; si se acaba, se sube lo avanzado (commiteado o no) y Copilot vuelve a revisar | Sí, una ronda |
 | Reviews siguientes sin High | Mergea. Los Medium/Low se triagean una sola vez por PR | No |
-| Reviews siguientes con High, quedan rondas (`MAX_ITERACIONES`, 3) | Otra ronda de Claude | Sí |
+| Segunda review con High (`MAX_ITERACIONES`, 2) | Última ronda de Claude y se mergea **sin pedir otra review** (con la CI en verde), con `bucle:revisar-despues` | Sí |
 | Claude concluye que no hay nada que cambiar | No hace commits: se mergea | — |
-| Con High tras 3 rondas | `AL_LIMITE: mergear` → mergea y etiqueta `bucle:revisar-despues`. `AL_LIMITE: detener` → se detiene con `bucle:requiere-humano` | No |
+| Con High tras las rondas máximas (caso raro, p. ej. al relanzar a mano) | `AL_LIMITE: mergear` → mergea y etiqueta `bucle:revisar-despues`. `AL_LIMITE: detener` → se detiene con `bucle:requiere-humano` | No |
 | CI en rojo | Nunca se mergea: `bucle:requiere-humano` y la cadena se detiene | No |
 
 **Nada se pierde:** al mergear, el workflow comenta en el issue de revisión final
@@ -42,8 +42,10 @@ archivo:línea, más lo que Claude difirió y su motivo. El parser está en
 cadena llega al #8, Claude los ve en los comentarios del issue y los resuelve en esa revisión final.
 Esto no gasta tokens: lo publica el propio workflow.
 
-En el peor caso, un issue cuesta 1 implementación + 3 rondas de corrección. Las reviews las hace
-Copilot (se cobran de sus premium requests, no de Claude).
+En el peor caso, un issue cuesta 1 implementación + 2 rondas de corrección de Claude y **2 reviews
+de Copilot** (la del PR nuevo y la que se pide tras la 1ª ronda). Las reviews se cobran en los
+créditos de IA de GitHub, no en la suscripción de Claude. Cada PR de configuración también gasta
+una review, así que conviene agruparlos.
 
 El Bucle B **no** escucha el evento de la review de Copilot: GitHub deja esas ejecuciones en
 *action_required* (hay que pulsar *Approve and run* a mano) porque las dispara un bot. En su lugar,
@@ -128,8 +130,9 @@ en vez de como el dueño del token.
 ### 4. Copilot code review automático (Bucle B)
 *Settings → Rules → Rulesets → New branch ruleset* sobre `main`:
 - Activa **Automatically request Copilot code review**.
-- Activa también **Review new pushes**, para que Copilot vuelva a revisar después de cada corrección de Claude.
-  Sin esto el Bucle B espera 30 min la segunda review y se detiene con `bucle:requiere-humano`.
+- Deja **apagado** *Review new pushes*: el Bucle B pide la segunda review él mismo, solo cuando
+  hace falta. Con la opción encendida, Copilot revisaría cada push y gastaría créditos de GitHub
+  de más (también en el último push, que se mergea sin esperar review).
 - Si activas *Require a pull request before merging*, deja **Required approvals en 0**: la review
   de Copilot es solo un comentario y nunca cuenta como aprobación, así que el merge automático fallaría.
 - Si quieres, marca `backend` y `frontend` (jobs de `ci.yml`) como *Required status checks*.
