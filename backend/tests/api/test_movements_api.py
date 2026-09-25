@@ -1,4 +1,4 @@
-from .helpers import freeze_payload, make_freezer, thaw_payload
+from .helpers import create_rack, create_section, freeze_payload, make_freezer, thaw_payload
 
 
 def test_freeze_creates_sample_and_movement(client, db_session):
@@ -33,6 +33,17 @@ def test_freeze_on_occupied_position_returns_409_with_next_free(client, db_sessi
 
     assert response.status_code == 409
     assert response.json()["detail"]["next_free_position"] == "1B"
+
+
+def test_freeze_rejects_auto_created_box_over_rack_capacity(client, db_session):
+    section = create_section(client, code="I")
+    rack = create_rack(client, section_id=section["id"], letter="A", slot="center", capacity=2)
+
+    response = client.post(
+        "/movements", json=freeze_payload(rack_letter=rack["letter"], box_number=7, position="1")
+    )
+
+    assert response.status_code == 422
 
 
 def test_freeze_creates_box_automatically_when_missing(client, db_session):

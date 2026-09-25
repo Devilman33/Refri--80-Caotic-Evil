@@ -8,6 +8,7 @@ from app.models import Box, Movement, MovementAction, Rack, Sample, SampleStatus
 from app.schemas.movement import MovementCreate, MovementRead, MovementResult, PositionConflict
 from app.services.location import sample_with_location
 from app.services.positions import next_free_position
+from app.services.racks import ensure_box_number_within_capacity
 from app.services.users import NUCLEO_INITIALS, get_or_create_user
 
 router = APIRouter(prefix="/movements", tags=["movimientos"])
@@ -79,6 +80,7 @@ def _freeze(
     payload: MovementCreate,
 ) -> MovementResult:
     if box is None:
+        ensure_box_number_within_capacity(rack, payload.box_number)
         box = Box(rack_id=rack.id, number=payload.box_number, box_type=box_type)
         db.add(box)
         db.flush()

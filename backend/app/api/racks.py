@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import DbSession, get_or_404
 from app.models import Box, Rack, Sample, Section
 from app.schemas.rack import RackCreate, RackRead, RackUpdate
+from app.services.racks import max_box_number
 
 router = APIRouter(prefix="/racks", tags=["racks"])
 
@@ -52,6 +53,13 @@ def update_rack(rack_id: int, payload: RackUpdate, db: DbSession) -> Rack:
         data["slot"] = data["slot"].value
     if data.get("letter") is not None:
         data["letter"] = data["letter"].strip().upper()
+    if data.get("capacity") is not None and data["capacity"] < rack.capacity:
+        highest = max_box_number(db, rack.id)
+        if highest is not None and data["capacity"] < highest:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"No se puede bajar la capacidad por debajo de la caja más alta existente ({highest})",
+            )
     changes_location = (
         data.get("section_id") is not None and data["section_id"] != rack.section_id
     ) or (data.get("letter") is not None and data["letter"] != rack.letter)

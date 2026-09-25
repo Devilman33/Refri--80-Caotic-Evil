@@ -5,6 +5,7 @@ from app.api.deps import DbSession, get_or_404
 from app.models import Box, Rack, Sample, SampleStatus, User
 from app.schemas.box import BoxCreate, BoxPositionStatus, BoxRead, BoxUpdate
 from app.services.positions import position_order
+from app.services.racks import ensure_box_number_within_capacity
 
 router = APIRouter(prefix="/boxes", tags=["cajas"])
 
@@ -13,7 +14,8 @@ _DUPLICATE_MESSAGE = "Ya existe una caja con ese número en el rack"
 
 @router.post("", response_model=BoxRead, status_code=status.HTTP_201_CREATED)
 def create_box(payload: BoxCreate, db: DbSession) -> Box:
-    get_or_404(db, Rack, payload.rack_id, "Rack no encontrado")
+    rack = get_or_404(db, Rack, payload.rack_id, "Rack no encontrado")
+    ensure_box_number_within_capacity(rack, payload.number)
     if payload.owner_id is not None:
         get_or_404(db, User, payload.owner_id, "Usuario propietario no encontrado")
     box = Box(

@@ -82,6 +82,23 @@ def test_duplicate_box_number_in_rack_conflicts(client, db_session):
     assert response.status_code == 409
 
 
+def test_create_box_rejects_number_over_rack_capacity(client, db_session):
+    section = create_section(client, code="I")
+    rack = create_rack(client, section_id=section["id"], letter="A", slot="center", capacity=2)
+
+    response = client.post("/boxes", json={"rack_id": rack["id"], "number": 3, "box_type": "carton_81"})
+    assert response.status_code == 422
+
+
+def test_reduce_rack_capacity_below_existing_box_conflicts(client, db_session):
+    section = create_section(client, code="I")
+    rack = create_rack(client, section_id=section["id"], letter="A", slot="center", capacity=30)
+    create_box(client, rack_id=rack["id"], number=5, box_type="carton_81")
+
+    response = client.patch(f"/racks/{rack['id']}", json={"capacity": 2})
+    assert response.status_code == 409
+
+
 def test_delete_box_with_samples_conflicts(client, db_session):
     section = create_section(client, code="I")
     rack = create_rack(client, section_id=section["id"], letter="A", slot="center")
