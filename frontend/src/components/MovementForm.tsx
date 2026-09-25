@@ -341,9 +341,15 @@ export function MovementForm({ users, initial, onClose, onSubmitted }: MovementF
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal--wide" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="modal modal--wide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mf-title"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="modal-header">
-          <h2>Nuevo movimiento</h2>
+          <h2 id="mf-title">Nuevo movimiento</h2>
           <button className="btn-ghost" onClick={onClose} aria-label="Cerrar">
             Cerrar
           </button>

@@ -16,7 +16,7 @@ class RackBase(BaseModel):
     section_id: int
     letter: str = Field(min_length=1, max_length=1)
     slot: RackSlot
-    capacity: int = Field(default=30, gt=0)
+    capacity: int = Field(default=20, gt=0)
 
     @field_validator("letter")
     @classmethod

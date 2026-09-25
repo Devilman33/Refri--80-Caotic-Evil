@@ -27,7 +27,7 @@ class Rack(Base):
     section_id: Mapped[int] = mapped_column(ForeignKey("sections.id"), nullable=False)
     letter: Mapped[str] = mapped_column(String(1), unique=True)
     slot: Mapped[str] = mapped_column(String(10), nullable=False)
-    capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
 
     section: Mapped["Section"] = relationship(back_populates="racks")
     boxes: Mapped[list["Box"]] = relationship(back_populates="rack")

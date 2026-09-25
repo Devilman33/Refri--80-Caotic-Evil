@@ -8,40 +8,40 @@
 # crear racks duplicados cuando el Excel trae una sección inconsistente para un rack
 # que ya está acá.
 #
-# `capacity` es la cantidad de subcajas que caben en el rack. Por defecto usamos 30
-# (el máximo número de caja que menciona docs/DATOS.md); ajustar cuando se confirme
-# la capacidad real de cada rack con el laboratorio.
+# `capacity` es la cantidad de subcajas que caben en el rack: 20 = 5 pisos × 4 cajas de
+# 2 in, según la tabla de racks del manual serie J del Haier DW-86L388J (el mismo modelo
+# que dibuja demo.html). Ajustar si el laboratorio confirma otra capacidad.
 
 racks:
   - letter: A
     section: I
     slot: center
-    capacity: 30
+    capacity: 20
   - letter: B
     section: I
     slot: right
-    capacity: 30
+    capacity: 20
   - letter: C
     section: II
     slot: center
-    capacity: 30
+    capacity: 20
   - letter: D
     section: II
     slot: right
-    capacity: 30
+    capacity: 20
   - letter: E
     section: III
     slot: center
-    capacity: 30
+    capacity: 20
   - letter: F
     section: III
     slot: right
-    capacity: 30
+    capacity: 20
   - letter: G
     section: IV
     slot: center
-    capacity: 30
+    capacity: 20
   - letter: H
     section: IV
     slot: right
-    capacity: 30
+    capacity: 20
