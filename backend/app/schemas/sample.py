@@ -80,9 +80,18 @@ class IdLookupResult(BaseModel):
 
 
 class SampleWithLocation(SampleRead):
-    """`SampleRead` más la ubicación legible, p. ej. `III · F12 · 3B`."""
+    """`SampleRead` más la ubicación: legible (`III · F12 · 3B`) y por partes.
+
+    Las partes existen para que el cliente no tenga que parsear el texto: prellenar un
+    retiro o enfocar el visor con una regex sobre `location` se rompe en silencio el día
+    que cambie el formato.
+    """
 
     location: str
+    section_code: str
+    rack_letter: str
+    box_number: int
+    box_type: str
 
 
 IdLookupResult.model_rebuild()

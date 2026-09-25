@@ -170,3 +170,14 @@ def test_search_q_blank_is_ignored(client, db_session):
 def test_search_q_rejects_exact_id_list(client, db_session):
     response = client.get("/samples/search", params={"q": "BP", "environ_id_exact": "BP001"})
     assert response.status_code == 422
+
+
+def test_search_returns_location_parts(client, db_session):
+    """Además del texto, la ubicación viene por partes para que el cliente no la parsee."""
+    _, rack, box = make_freezer(client, section_code="III", rack_letter="F", box_number=12)
+    _freeze(client, rack, box, position="3B")
+
+    item = client.get("/samples/search").json()["items"][0]
+    assert item["location"] == "III · F12 · 3B"
+    assert (item["section_code"], item["rack_letter"], item["box_number"], item["position"]) == ("III", "F", 12, "3B")
+    assert item["box_type"] == box["box_type"]

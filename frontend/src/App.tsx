@@ -52,11 +52,17 @@ function readSessionId(): number | null {
   return Number.isInteger(stored) && stored > 0 ? stored : null;
 }
 
-/** `III · F12 · 3B` → la caja y posición, para abrir el retiro de una muestra ya elegida. */
+/** La caja y posición de una muestra ya elegida, para abrir su retiro prellenado. Sin las
+ * partes de la ubicación (backend anterior) el formulario abre vacío en vez de adivinar. */
 function locationPrefill(sample: SampleWithLocation): LocationPrefill | undefined {
-  const match = /^(\S+) · ([A-H])(\d+) · (.+)$/.exec(sample.location);
-  if (!match) return undefined;
-  return { sectionCode: match[1], rackLetter: match[2], boxNumber: Number(match[3]), position: match[4] };
+  if (!sample.section_code || !sample.rack_letter || sample.box_number === undefined) return undefined;
+  return {
+    sectionCode: sample.section_code,
+    rackLetter: sample.rack_letter,
+    boxNumber: sample.box_number,
+    boxType: sample.box_type,
+    position: sample.position,
+  };
 }
 
 export default function App() {
