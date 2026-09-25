@@ -60,26 +60,23 @@ jobs:
             exit 0
           fi
 
-          # 2. Siguiente issue de la serie [n/m] que la cadena no haya lanzado aún.
+          # 2. El siguiente issue es el abierto de número más bajo de la serie [n/m]. Si ya fue
+          #    lanzado (tiene la marca), sigue en curso: la cadena espera y no se salta al siguiente,
+          #    así la serie se implementa en orden aunque un issue se tome a mano.
           pendientes=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --limit 100 \
                          --json number,title \
                          --jq '[.[] | select(.title | test("^\\[[0-9]+/[0-9]+\\]"))]
                                | sort_by(.number) | .[].number')
 
-          siguiente=""
-          for n in $pendientes; do
-            cuerpos=$(gh issue view "$n" -R "$GITHUB_REPOSITORY" \
-                        --json comments --jq '.comments[].body' || true)
-            if printf '%s' "$cuerpos" | grep -qF "$MARCA"; then
-              echo "Issue #$n ya fue lanzado por la cadena; se omite."
-              continue
-            fi
-            siguiente="$n"
-            break
-          done
-
+          siguiente=$(head -n1 <<<"$pendientes")
           if [ -z "$siguiente" ]; then
             echo "::notice::No quedan issues pendientes. Cadena terminada."
+            exit 0
+          fi
+          cuerpos=$(gh issue view "$siguiente" -R "$GITHUB_REPOSITORY" \
+                      --json comments --jq '.comments[].body' || true)
+          if printf '%s' "$cuerpos" | grep -qF "$MARCA"; then
+            echo "::notice::El issue #$siguiente ya está en curso; la cadena sigue cuando se mergee su PR."
             exit 0
           fi
 
