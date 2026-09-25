@@ -3,6 +3,7 @@ import { api, ApiError } from "./api/client";
 import { UNASSIGNED_INITIALS } from "./api/types";
 import type { BoxOccupancy, Page, SampleSearchFilters, SampleWithLocation, UserRead } from "./api/types";
 import { AlertsPanel, type AlertDestination } from "./components/AlertsPanel";
+import { AnomaliesView } from "./components/AnomaliesView";
 import { FiltersBar } from "./components/FiltersBar";
 import { IdListSearch } from "./components/IdListSearch";
 import { MoveModal } from "./components/MoveModal";
@@ -26,7 +27,10 @@ const MY_INITIALS_KEY = "refri:mis-iniciales";
 const DEFAULT_PAGE_SIZE = 25;
 
 type Theme = "light" | "dark";
-type ViewMode = "table" | "3d" | "usage";
+// "anomalies" es una vista pero NO una pestaña: el control segmentado se queda en tres,
+// que son las tres formas de VER el inventario. Corregir datos es otra tarea, y se llega
+// desde el panel de alertas con un breadcrumb para volver.
+type ViewMode = "table" | "3d" | "usage" | "anomalies";
 
 function readTheme(): Theme {
   const stored = localStorage.getItem(THEME_KEY);
@@ -202,6 +206,10 @@ export default function App() {
       setFilters((current) => ({ ...current, owner_initials: UNASSIGNED_INITIALS, page: 1 }));
       return;
     }
+    if (destination.kind === "anomalies") {
+      setViewMode("anomalies");
+      return;
+    }
     setBoxFilter(destination.filter);
     setViewMode("usage");
   }
@@ -320,6 +328,16 @@ export default function App() {
 
         {viewMode === "usage" && (
           <OccupancyView key={freezerKey} onViewBox={handleViewBoxInFreezer} initialFilter={boxFilter} />
+        )}
+
+        {viewMode === "anomalies" && (
+          <AnomaliesView
+            onBack={() => {
+              setViewMode("table");
+              setShowAlerts(true);
+            }}
+            operatorInitials={myInitials.trim().toUpperCase()}
+          />
         )}
         {notice && (
           <p className="field-notice" role="status">

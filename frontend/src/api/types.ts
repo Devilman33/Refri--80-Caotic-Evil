@@ -26,11 +26,17 @@ export const SAMPLE_STATUS_LABELS: Record<SampleStatus, string> = {
   withdrawn: "Retirada",
 };
 
-export type MovementAction = "freeze" | "thaw";
+export type MovementAction = "freeze" | "thaw" | "move";
 
+/** OJO: este mapa TIENE que crecer con cada acción para que el historial la renderice,
+ * pero el desplegable del formulario NO se deriva de él (ver ACTION_OPTIONS en
+ * MovementForm): `POST /movements` solo implementa congelamiento y descongelamiento, y
+ * derivar el desplegable de acá hacía aparecer en la UI acciones que ese endpoint
+ * rechaza. */
 export const MOVEMENT_ACTION_LABELS: Record<MovementAction, string> = {
   freeze: "Congelamiento",
   thaw: "Descongelamiento",
+  move: "Traslado",
 };
 
 export type BoxType = "carton_81" | "plastic_100";
@@ -272,6 +278,39 @@ export interface AutocompleteSuggestion {
   box_number: number | null;
   box_id: number | null;
   next_free_position: string | null;
+}
+
+// Importaciones y sus anomalías (issue #8). Los contadores de cada corrida son la serie
+// de calidad de datos: dos seguidas dicen si el Excel mejoró.
+export interface ImportRunRead {
+  id: number;
+  source_name: string;
+  started_at: string;
+  total_rows: number;
+  imported: number;
+  withdrawn: number;
+  skipped_already_imported: number;
+  skipped_invalid: number;
+  conflicts_resolved: number;
+  anomalies_count: number;
+}
+
+export type AnomalyStatus = "pending" | "resolved" | "accepted";
+
+/** Anomalías de un mismo motivo y columna: la unidad con la que el laboratorio corrige. */
+export interface AnomalyGroup {
+  reason: string;
+  column: string;
+  total: number;
+  pending: number;
+}
+
+export interface AnomalyResolveRequest {
+  operator_initials: string;
+  status?: AnomalyStatus;
+  reason?: string;
+  column?: string;
+  ids?: number[];
 }
 
 export interface SampleSearchFilters {

@@ -123,8 +123,12 @@ export function SampleDetail({ sample, ownerLabel, onClose, onThaw, onEdit, onMo
               <li key={movement.id}>
                 <span>
                   <strong>{MOVEMENT_ACTION_LABELS[movement.action]}</strong> · {formatDate(movement.date)} ·{" "}
-                  posición {movement.position} ·{" "}
-                  {movement.operator_initials ?? "importado"}
+                  {/* En un traslado se muestra de dónde a dónde; en los demás, solo dónde
+                      ocurrió. El origen viene en la misma fila del evento. */}
+                  {movement.from_location
+                    ? `${movement.from_location} → ${movement.location ?? movement.position}`
+                    : `posición ${movement.position}`}{" "}
+                  · {movement.operator_initials ?? "importado"}
                   {movement.note ? ` · ${movement.note}` : ""}
                 </span>
               </li>
